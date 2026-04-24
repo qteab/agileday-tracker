@@ -1,0 +1,39 @@
+import { Timer } from "./components/Timer";
+import { TimeEntryList } from "./components/TimeEntryList";
+import { useApp } from "./store/context";
+
+export function App() {
+  const { state, dispatch } = useApp();
+
+  return (
+    <div className="flex flex-col h-screen bg-bg">
+      {/* Header */}
+      <div className="flex items-center justify-center px-4 py-2 border-b border-border bg-white/40">
+        <span className="text-xs font-semibold tracking-wide text-primary uppercase">
+          QTE Time Tracker
+        </span>
+      </div>
+
+      {/* Error banner */}
+      {state.error && (
+        <div className="flex items-center justify-between px-4 py-2 bg-danger/10 text-danger text-xs">
+          <span>{state.error}</span>
+          <button
+            onClick={() => dispatch({ type: "SET_ERROR", payload: null })}
+            className="hover:text-danger/70"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* Timer */}
+      <Timer />
+
+      {/* Entry list */}
+      <TimeEntryList />
+    </div>
+  );
+}
