@@ -43,5 +43,11 @@
       "signingIdentity": null
     }
   },
-  "plugins": {}
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["qte-tracker"]
+      }
+    }
+  }
 }
