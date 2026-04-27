@@ -1,3 +1,5 @@
+use std::io::{BufRead, BufReader, Write};
+use std::net::TcpListener;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
     tray::TrayIconBuilder,
@@ -13,6 +15,77 @@ fn set_dock_visible(app: &tauri::AppHandle, visible: bool) {
     }
 }
 
+/// Start a one-shot HTTP server on localhost:19847 to capture the OAuth callback.
+/// Returns the code and state from the redirect URL.
+#[tauri::command]
+async fn wait_for_oauth_callback() -> Result<(String, String), String> {
+    // Run the blocking TCP listener in a separate thread
+    let result = tokio::task::spawn_blocking(|| {
+        let listener = TcpListener::bind("127.0.0.1:19847")
+            .map_err(|e| format!("Failed to bind port 19847: {}", e))?;
+
+        // Accept one connection
+        let (mut stream, _) = listener
+            .accept()
+            .map_err(|e| format!("Failed to accept connection: {}", e))?;
+
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        let mut request_line = String::new();
+        reader
+            .read_line(&mut request_line)
+            .map_err(|e| format!("Failed to read request: {}", e))?;
+
+        // Parse query params from: GET /auth/callback?code=X&state=Y HTTP/1.1
+        let path = request_line
+            .split_whitespace()
+            .nth(1)
+            .unwrap_or("")
+            .to_string();
+
+        let query = path.split('?').nth(1).unwrap_or("");
+        let params: std::collections::HashMap<&str, &str> = query
+            .split('&')
+            .filter_map(|p| {
+                let mut kv = p.splitn(2, '=');
+                Some((kv.next()?, kv.next()?))
+            })
+            .collect();
+
+        let code = params
+            .get("code")
+            .ok_or("Missing 'code' parameter")?
+            .to_string();
+        let state = params
+            .get("state")
+            .ok_or("Missing 'state' parameter")?
+            .to_string();
+
+        // Respond with a success page that auto-closes
+        let html = r#"<!DOCTYPE html>
+<html><head><title>QTE Time Tracker</title></head>
+<body style="font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#F0EDEB;color:#241143;">
+<div style="text-align:center">
+<h2 style="color:#7A59FC">Signed in!</h2>
+<p>You can close this tab and return to the app.</p>
+</div>
+</body></html>"#;
+
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            html.len(),
+            html
+        );
+        let _ = stream.write_all(response.as_bytes());
+        let _ = stream.flush();
+
+        Ok((code, state))
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?;
+
+    result
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -21,6 +94,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .invoke_handler(tauri::generate_handler![wait_for_oauth_callback])
         .setup(move |app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -30,7 +104,6 @@ pub fn run() {
                 )?;
             }
 
-            // Start hidden from Dock and Cmd+Tab
             #[cfg(target_os = "macos")]
             {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);

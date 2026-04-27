@@ -15,8 +15,6 @@ import {
   loadAuthState,
   saveAuthState,
   clearAuth,
-  listenForAuthCallback,
-  completeLogin,
   buildAuthConfig,
   buildApiBaseUrl,
   DEFAULT_CONNECTION,
@@ -72,7 +70,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "SET_EMPLOYEE", payload: null as never });
   }
 
-  // On mount: check for existing auth + listen for deep link callbacks
+  // On mount: check for saved auth state
   useEffect(() => {
     loadAuthState().then((saved) => {
       if (saved) {
@@ -80,19 +78,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setIsConnected(true);
       }
       setIsAuthLoading(false);
-    });
-
-    listenForAuthCallback(async (code, returnedState) => {
-      try {
-        const auth = await completeLogin(code, returnedState);
-        setAuthState(auth);
-        setIsConnected(true);
-      } catch (err) {
-        dispatch({
-          type: "SET_ERROR",
-          payload: err instanceof Error ? err.message : "Login failed",
-        });
-      }
     });
   }, []);
 
