@@ -41,7 +41,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   authStateRef.current = authState;
 
-  // Build AgileDay provider only when authenticated
   const api: ApiProvider | null =
     isConnected && authState
       ? createAgileDayProvider(
@@ -52,71 +51,97 @@ export function AppProvider({ children }: { children: ReactNode }) {
           () => authStateRef.current,
           (newState: AuthState) => {
             setAuthState(newState);
-            saveAuthState(newState);
+            saveAuthState(newState).catch(() => {
+              // Store save failed — token is in memory but won't persist across restarts
+            });
           },
           () => {
             setAuthState(null);
             setIsConnected(false);
-            clearAuth();
+            dispatch({ type: "SET_ERROR", payload: "Session expired — please sign in again" });
+            clearAuth().catch(() => {});
           }
         )
       : null;
 
   function onLogin(auth: AuthState) {
+    dispatch({ type: "SET_ERROR", payload: null });
     setAuthState(auth);
     setIsConnected(true);
   }
 
   async function logout() {
-    await clearAuth();
+    try {
+      await clearAuth();
+    } catch {
+      // Best effort — clear local state regardless
+    }
     setAuthState(null);
     setIsConnected(false);
     dispatch({ type: "SET_ENTRIES", payload: [] });
     dispatch({ type: "SET_PROJECTS", payload: [] });
     dispatch({ type: "SET_ERROR", payload: null });
+    dispatch({ type: "SET_LOADING", payload: false });
   }
 
   // On mount: check for saved auth state
   useEffect(() => {
-    loadAuthState().then((saved) => {
-      if (saved && saved.expiresAt > Date.now()) {
-        setAuthState(saved);
-        setIsConnected(true);
-      } else if (saved) {
-        // Token expired — clear it
-        clearAuth();
-      }
-      setIsAuthLoading(false);
-    });
+    loadAuthState()
+      .then((saved) => {
+        if (saved && saved.expiresAt > Date.now()) {
+          setAuthState(saved);
+          setIsConnected(true);
+        } else if (saved) {
+          clearAuth().catch(() => {});
+        }
+      })
+      .catch(() => {
+        // Store read failed — treat as not authenticated
+      })
+      .finally(() => {
+        setIsAuthLoading(false);
+      });
   }, []);
 
   // Load data when connected
   useEffect(() => {
     if (!api || !isConnected) return;
 
+    let cancelled = false;
+
     async function init() {
       dispatch({ type: "SET_LOADING", payload: true });
+      dispatch({ type: "SET_ERROR", payload: null });
+
       try {
-        const [employee, projects] = await Promise.all([
-          api!.getCurrentEmployee(),
-          api!.getProjects(),
-        ]);
+        const employee = await api!.getCurrentEmployee();
+        if (cancelled) return;
         dispatch({ type: "SET_EMPLOYEE", payload: employee });
+
+        const projects = await api!.getProjects();
+        if (cancelled) return;
         dispatch({ type: "SET_PROJECTS", payload: projects });
 
         const endDate = new Date().toISOString().split("T")[0];
         const startDate = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
         const entries = await api!.getTimeEntries(employee.id, startDate, endDate);
+        if (cancelled) return;
         dispatch({ type: "SET_ENTRIES", payload: entries });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Failed to load data";
+        if (cancelled) return;
+        const msg = err instanceof Error ? err.message : "Failed to connect to AgileDay";
         dispatch({ type: "SET_ERROR", payload: msg });
-        // Don't clear auth on data load failure — stay connected so user can see the error
       } finally {
-        dispatch({ type: "SET_LOADING", payload: false });
+        if (!cancelled) {
+          dispatch({ type: "SET_LOADING", payload: false });
+        }
       }
     }
+
     init();
+    return () => {
+      cancelled = true;
+    };
   }, [isConnected]);
 
   return (
@@ -134,7 +159,6 @@ export function useApp() {
   return ctx;
 }
 
-/** Use in components that are only rendered when authenticated */
 export function useApi(): ApiProvider {
   const { api } = useApp();
   if (!api) throw new Error("useApi called without authentication");

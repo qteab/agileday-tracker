@@ -39,23 +39,24 @@ export function useTimer() {
   const stop = useCallback(async () => {
     if (!timer.isRunning || !timer.startTime || !employee) return;
 
-    const startTime = timer.startTime;
+    // Capture timer state before resetting
+    const { description, projectId, taskId, startTime } = timer;
     const endTime = new Date().toISOString();
     const startMs = new Date(startTime).getTime();
     const endMs = new Date(endTime).getTime();
     const minutes = Math.max(1, Math.round((endMs - startMs) / 60000));
     const date = new Date(startMs).toISOString().split("T")[0];
+    const project = state.projects.find((p) => p.id === projectId);
 
-    const project = state.projects.find((p) => p.id === timer.projectId);
-
+    // Reset timer immediately so user can start a new one
     dispatch({ type: "RESET_TIMER" });
 
     try {
       const entry = await api.createTimeEntry(employee.id, {
-        description: timer.description,
-        projectId: timer.projectId!,
+        description,
+        projectId: projectId!,
         projectName: project?.name,
-        taskId: timer.taskId ?? undefined,
+        taskId: taskId ?? undefined,
         date,
         startTime,
         endTime,
@@ -63,14 +64,14 @@ export function useTimer() {
         status: "SAVED",
       });
       dispatch({ type: "ADD_ENTRY", payload: entry });
-    } catch {
-      // Save as unsaved entry for manual retry
+    } catch (err) {
+      // Save locally as unsaved for manual retry
       const unsavedEntry = {
         id: crypto.randomUUID(),
-        description: timer.description,
-        projectId: timer.projectId!,
+        description,
+        projectId: projectId!,
         projectName: project?.name,
-        taskId: timer.taskId ?? undefined,
+        taskId: taskId ?? undefined,
         date,
         startTime,
         endTime,
@@ -79,9 +80,10 @@ export function useTimer() {
         syncStatus: "unsaved" as const,
       };
       dispatch({ type: "ADD_ENTRY", payload: unsavedEntry });
+      const reason = err instanceof Error ? err.message : "Unknown error";
       dispatch({
         type: "SET_ERROR",
-        payload: "Failed to save — entry marked as unsaved",
+        payload: `Failed to save time entry: ${reason}. Entry saved locally — use retry to sync.`,
       });
     }
   }, [timer, employee, state.projects, dispatch, api]);

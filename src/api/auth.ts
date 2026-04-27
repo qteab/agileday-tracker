@@ -103,11 +103,15 @@ export async function exchangeCodeForTokens(
   });
 
   if (!response.ok) {
-    const error = await response.text();
+    const error = await response.text().catch(() => "Unknown error");
     throw new Error(`Token exchange failed (${response.status}): ${error}`);
   }
 
-  return response.json();
+  try {
+    return await response.json();
+  } catch {
+    throw new Error("Token exchange returned invalid response — expected JSON");
+  }
 }
 
 export async function refreshAccessToken(
@@ -126,11 +130,15 @@ export async function refreshAccessToken(
   });
 
   if (!response.ok) {
-    const error = await response.text();
+    const error = await response.text().catch(() => "Unknown error");
     throw new Error(`Token refresh failed (${response.status}): ${error}`);
   }
 
-  return response.json();
+  try {
+    return await response.json();
+  } catch {
+    throw new Error("Token refresh returned invalid response — expected JSON");
+  }
 }
 
 export function tokenResponseToAuthState(tokens: TokenResponse): AuthState {
