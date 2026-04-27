@@ -1,3 +1,4 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Timer } from "./components/Timer";
 import { TimeEntryList } from "./components/TimeEntryList";
 import { useApp } from "./store/context";
@@ -7,9 +8,17 @@ export function App() {
 
   return (
     <div className="flex flex-col h-screen bg-bg">
-      {/* Header */}
-      <div className="flex items-center justify-center px-4 py-2 border-b border-border bg-white/40">
-        <span className="text-xs font-semibold tracking-wide text-primary uppercase">
+      {/* Draggable title bar — traffic lights sit here on macOS */}
+      <div
+        onMouseDown={(e) => {
+          if (e.button === 0 && e.detail === 1) {
+            e.preventDefault();
+            getCurrentWindow().startDragging();
+          }
+        }}
+        className="flex items-center justify-center px-4 pt-5 pb-2 border-b border-border bg-white/40 cursor-default"
+      >
+        <span className="text-xs font-semibold tracking-wide text-primary uppercase pointer-events-none">
           QTE Time Tracker
         </span>
       </div>

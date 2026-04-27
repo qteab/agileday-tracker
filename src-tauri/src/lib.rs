@@ -1,15 +1,14 @@
 use tauri::{
-    tray::{TrayIconBuilder, TrayIconEvent},
+    menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
+    tray::TrayIconBuilder,
     Manager,
-    WebviewUrl,
-    WebviewWindowBuilder,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::default().build())
-        .setup(|app| {
+        .setup(move |app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -18,58 +17,75 @@ pub fn run() {
                 )?;
             }
 
-            // Hide from dock on macOS — menu bar only
             #[cfg(target_os = "macos")]
             {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
 
+            // Start with window hidden
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.hide();
+            }
+
             let app_handle = app.handle().clone();
 
-            // Build system tray icon
+            // Status items (disabled, just for display)
+            let app_name = MenuItemBuilder::with_id("app_name", "QTE Time Tracker")
+                .enabled(false)
+                .build(app)?;
+            let timer_status = MenuItemBuilder::with_id("timer_status", "Timer is not running")
+                .enabled(false)
+                .build(app)?;
+
+            // Action items
+            let new_item = MenuItemBuilder::with_id("new", "New")
+                .accelerator("CmdOrCtrl+N")
+                .build(app)?;
+            let stop_item = MenuItemBuilder::with_id("stop", "Stop")
+                .accelerator("CmdOrCtrl+S")
+                .enabled(false)
+                .build(app)?;
+
+            let show_item = MenuItemBuilder::with_id("show", "Show")
+                .accelerator("CmdOrCtrl+T")
+                .build(app)?;
+
+            let quit_item = MenuItemBuilder::with_id("quit", "Quit")
+                .accelerator("CmdOrCtrl+Q")
+                .build(app)?;
+
+            let sep = PredefinedMenuItem::separator(app)?;
+            let sep2 = PredefinedMenuItem::separator(app)?;
+            let sep3 = PredefinedMenuItem::separator(app)?;
+
+            let menu = MenuBuilder::new(app)
+                .item(&app_name)
+                .item(&timer_status)
+                .item(&sep)
+                .item(&new_item)
+                .item(&stop_item)
+                .item(&sep2)
+                .item(&show_item)
+                .item(&sep3)
+                .item(&quit_item)
+                .build()?;
+
             TrayIconBuilder::new()
                 .tooltip("QTE Time Tracker")
-                .icon_as_template(true)
+                .icon_as_template(false)
                 .icon(app.default_window_icon().unwrap().clone())
-                .on_tray_icon_event(move |tray, event| {
-                    match event {
-                        TrayIconEvent::Click { .. } => {
-                            let app = tray.app_handle();
+                .menu(&menu)
+                .menu_on_left_click(true)
+                .on_menu_event(|app, event| {
+                    match event.id().as_ref() {
+                        "new" | "show" => {
                             if let Some(window) = app.get_webview_window("main") {
-                                if window.is_visible().unwrap_or(false) {
-                                    let _ = window.hide();
-                                } else {
-                                    // Position window near tray icon
-                                    if let Some(rect) = tray.rect().ok().flatten() {
-                                        let (px, py) = match rect.position {
-                                            tauri::Position::Physical(p) => (p.x as f64, p.y as f64),
-                                            tauri::Position::Logical(p) => (p.x, p.y),
-                                        };
-                                        let sh = match rect.size {
-                                            tauri::Size::Physical(s) => s.height as f64,
-                                            tauri::Size::Logical(s) => s.height,
-                                        };
-                                        let _ = window.set_position(tauri::Position::Logical(
-                                            tauri::LogicalPosition::new(px - 200.0, py + sh),
-                                        ));
-                                    }
-                                    let _ = window.show();
-                                    let _ = window.set_focus();
-                                }
-                            } else {
-                                let _ = WebviewWindowBuilder::new(
-                                    app,
-                                    "main",
-                                    WebviewUrl::default(),
-                                )
-                                .title("QTE Time Tracker")
-                                .inner_size(400.0, 600.0)
-                                .decorations(false)
-                                .resizable(false)
-                                .always_on_top(true)
-                                .skip_taskbar(true)
-                                .build();
+                                let _ = window.show();
+                                let _ = window.set_focus();
                             }
+                        }
+                        "quit" => {
+                            app.exit(0);
                         }
                         _ => {}
                     }
@@ -79,8 +95,9 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Hide window when it loses focus (like Toggl)
-            if let tauri::WindowEvent::Focused(false) = event {
+            // Close button hides the window instead of quitting (menu bar app)
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
                 let _ = window.hide();
             }
         })

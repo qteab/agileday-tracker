@@ -18,17 +18,13 @@
         "width": 400,
         "height": 600,
         "resizable": false,
-        "decorations": false,
+        "decorations": true,
         "visible": false,
-        "skipTaskbar": true,
-        "alwaysOnTop": true
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay",
+        "skipTaskbar": true
       }
     ],
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": true,
-      "tooltip": "QTE Time Tracker"
-    },
     "security": {
       "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'"
     }
@@ -47,7 +43,5 @@
       "signingIdentity": null
     }
   },
-  "plugins": {
-    "store": {}
-  }
+  "plugins": {}
 }
