@@ -48,6 +48,12 @@
       "desktop": {
         "schemes": ["qte-tracker"]
       }
+    },
+    "updater": {
+      "endpoints": [
+        "https://github.com/Kaijonsson/agileday-tracker/releases/latest/download/latest.json"
+      ],
+      "pubkey": "RWQ37tcMFx+p3u2kZQc37QqCEqS4KJ0bV4EdrpfPB9ETr82rz6SbH70l"
     }
   }
 }

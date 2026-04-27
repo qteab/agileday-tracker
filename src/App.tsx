@@ -5,6 +5,7 @@ import { TabSwitcher } from "./components/TabSwitcher";
 import { TimeEntryList } from "./components/TimeEntryList";
 import { AllocationView } from "./components/AllocationView";
 import { Settings } from "./components/Settings";
+import { UpdateChecker } from "./components/UpdateChecker";
 import { useApp } from "./store/context";
 import type { TimeEntry } from "./api/types";
 
@@ -56,6 +57,9 @@ export function App() {
           </svg>
         </button>
       </div>
+
+      {/* Update banner */}
+      <UpdateChecker />
 
       {/* Error banner */}
       {state.error && (
