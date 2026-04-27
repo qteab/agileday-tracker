@@ -17,7 +17,7 @@ export function Timer() {
   } = useTimer();
 
   return (
-    <div className="border-b border-border">
+    <div>
       {/* Timer row */}
       <div className="flex items-center gap-3 px-4 py-3">
         <input
@@ -43,7 +43,7 @@ export function Timer() {
               ? "bg-danger hover:bg-danger/90"
               : projectId
                 ? "bg-primary hover:bg-primary-dark"
-                : "bg-primary/40 cursor-not-allowed"
+                : "bg-primary/30 cursor-not-allowed"
           }`}
         >
           {isRunning ? (
@@ -59,7 +59,7 @@ export function Timer() {
       </div>
 
       {/* Project & task row */}
-      <div className="flex items-center gap-1 px-3 pb-2">
+      <div className="flex items-center gap-1 px-3 pb-3">
         <ProjectPicker selectedId={projectId} onSelect={setProject} />
         <TaskPicker projectId={projectId} selectedId={taskId} onSelect={setTask} />
       </div>

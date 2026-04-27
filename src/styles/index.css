@@ -4,11 +4,13 @@
   --color-primary: #7A59FC;
   --color-primary-dark: #5519D5;
   --color-primary-light: #AEA7FF;
-  --color-bg: #FAF5F5;
+  --color-bg: #F0EDEB;
+  --color-bg-card: #FFFFFF;
   --color-bg-dark: #170E23;
   --color-text: #241143;
   --color-text-muted: #5F5273;
-  --color-border: #E8E0E0;
+  --color-border: #E5E0DE;
+  --color-divider: #EEEBE9;
   --color-danger: #E5484D;
 }
 
@@ -23,7 +25,11 @@ body {
   -webkit-user-select: none;
 }
 
-/* Scrollbar styling */
+input, textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
 }

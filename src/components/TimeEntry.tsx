@@ -18,7 +18,7 @@ export function TimeEntry({ entry, onContinue }: TimeEntryProps) {
     <>
       <div
         onClick={() => setEditing(true)}
-        className="group flex items-center gap-3 px-4 py-3 hover:bg-white/50 transition-colors cursor-pointer border-b border-border/50 last:border-b-0"
+        className="group flex items-center gap-3 px-3 py-3 hover:bg-bg/40 transition-colors cursor-pointer"
       >
         <div className="flex-1 min-w-0">
           <p className="text-sm text-text truncate">

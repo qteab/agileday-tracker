@@ -28,13 +28,9 @@ function formatDate(dateStr: string): string {
 }
 
 interface GroupedEntry {
-  /** The representative entry (most recent) */
   entry: TimeEntryType;
-  /** All individual sessions in this group */
   sessions: TimeEntryType[];
-  /** Total minutes across all sessions */
   totalMinutes: number;
-  /** Number of sessions with same description+project */
   count: number;
 }
 
@@ -67,28 +63,32 @@ function groupEntries(entries: TimeEntryType[]): GroupedEntry[] {
 function GroupedEntryRow({
   group,
   onContinue,
+  isLast,
 }: {
   group: GroupedEntry;
   onContinue: (entry: TimeEntryType) => void;
+  isLast: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
     <div>
       {/* Main grouped row */}
-      <div className="flex items-center">
-        {/* Counter on the far left — clickable to expand */}
+      <div className={`flex items-center ${!isLast && !expanded ? "border-b border-divider" : ""}`}>
+        {/* Counter on the far left */}
         {group.count > 1 ? (
           <button
             onClick={() => setExpanded(!expanded)}
             className={`w-10 shrink-0 flex items-center justify-center self-stretch transition-colors ${
               expanded
-                ? "bg-primary/10 text-primary"
-                : "hover:bg-white/50 text-text-muted"
+                ? "text-primary"
+                : "text-text-muted hover:text-primary"
             }`}
-            title={`${group.count} sessions — click to expand`}
+            title={`${group.count} sessions`}
           >
-            <span className="w-6 h-6 rounded border border-current text-xs flex items-center justify-center">
+            <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center border ${
+              expanded ? "border-primary bg-primary/10" : "border-text-muted/30"
+            }`}>
               {group.count}
             </span>
           </button>
@@ -96,26 +96,26 @@ function GroupedEntryRow({
           <div className="w-10 shrink-0" />
         )}
 
-        {/* Entry content */}
         <div className="flex-1 min-w-0">
-          <TimeEntry
-            entry={group.entry}
-            onContinue={onContinue}
-          />
+          <TimeEntry entry={group.entry} onContinue={onContinue} />
         </div>
       </div>
 
       {/* Expanded individual sessions */}
       {expanded && (
-        <div className="bg-white/20 border-l-2 border-primary/30 ml-5">
-          {group.sessions.map((session) => (
-            <div key={session.id} className="flex items-center">
-              <div className="w-5 shrink-0" />
+        <div className={`bg-bg/50 ${!isLast ? "border-b border-divider" : ""}`}>
+          {group.sessions.map((session, i) => (
+            <div
+              key={session.id}
+              className={`flex items-center ${
+                i < group.sessions.length - 1 ? "border-b border-divider" : ""
+              }`}
+            >
+              <div className="w-10 shrink-0 flex items-center justify-center self-stretch">
+                <div className="w-px h-full bg-primary/20" />
+              </div>
               <div className="flex-1 min-w-0">
-                <TimeEntry
-                  entry={session}
-                  onContinue={onContinue}
-                />
+                <TimeEntry entry={session} onContinue={onContinue} />
               </div>
             </div>
           ))}
@@ -130,9 +130,9 @@ export function DayGroup({ date, entries, onContinue }: DayGroupProps) {
   const grouped = groupEntries(entries);
 
   return (
-    <div>
+    <div className="mb-3">
       {/* Day header */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-white/30">
+      <div className="flex items-center justify-between px-4 py-2">
         <span className="text-sm font-semibold text-text">
           {formatDate(date)}
         </span>
@@ -141,13 +141,14 @@ export function DayGroup({ date, entries, onContinue }: DayGroupProps) {
         </span>
       </div>
 
-      {/* Entries */}
-      <div>
-        {grouped.map((g) => (
+      {/* White card with entries */}
+      <div className="mx-2 bg-bg-card rounded-xl shadow-sm overflow-hidden">
+        {grouped.map((g, i) => (
           <GroupedEntryRow
             key={g.entry.id}
             group={g}
             onContinue={onContinue}
+            isLast={i === grouped.length - 1}
           />
         ))}
       </div>

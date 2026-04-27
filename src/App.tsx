@@ -10,7 +10,6 @@ export function App() {
 
   const handleContinue = useCallback(
     (entry: TimeEntry) => {
-      // Start a new timer with the same description and project
       dispatch({
         type: "SET_TIMER",
         payload: {
@@ -35,7 +34,7 @@ export function App() {
             getCurrentWindow().startDragging();
           }
         }}
-        className="flex items-center justify-center px-4 pt-5 pb-2 border-b border-border bg-white/40 cursor-default"
+        className="flex items-center justify-center px-4 pt-5 pb-2 bg-bg-card border-b border-border cursor-default"
       >
         <span className="text-xs font-semibold tracking-wide text-primary uppercase pointer-events-none">
           QTE Time Tracker
@@ -57,8 +56,10 @@ export function App() {
         </div>
       )}
 
-      {/* Timer */}
-      <Timer />
+      {/* Timer — white card */}
+      <div className="bg-bg-card border-b border-border">
+        <Timer />
+      </div>
 
       {/* Entry list */}
       <TimeEntryList onContinue={handleContinue} />
