@@ -28,9 +28,7 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
   const [startTimeStr, setStartTimeStr] = useState(
     entry.startTime ? timeFromISO(entry.startTime) : ""
   );
-  const [endTimeStr, setEndTimeStr] = useState(
-    entry.endTime ? timeFromISO(entry.endTime) : ""
-  );
+  const [endTimeStr, setEndTimeStr] = useState(entry.endTime ? timeFromISO(entry.endTime) : "");
   const [duration, setDuration] = useState(formatDuration(entry.minutes));
 
   async function handleSave() {
@@ -38,9 +36,7 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
 
     // Parse duration back to minutes
     const parts = duration.split(":");
-    const mins =
-      parseInt(parts[0] || "0") * 60 +
-      parseInt(parts[1] || "0");
+    const mins = parseInt(parts[0] || "0") * 60 + parseInt(parts[1] || "0");
 
     try {
       await api.updateTimeEntry(state.employee.id, entry.id, {
@@ -88,13 +84,16 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
           className="absolute top-4 right-4 text-text-muted hover:text-text"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M6 18L18 6M6 6l12 12"
+            />
           </svg>
         </button>
 
-        <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide">
-          Details
-        </h3>
+        <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide">Details</h3>
 
         {/* Description */}
         <input

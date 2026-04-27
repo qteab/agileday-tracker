@@ -1,17 +1,17 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #7A59FC;
-  --color-primary-dark: #5519D5;
-  --color-primary-light: #AEA7FF;
-  --color-bg: #F0EDEB;
-  --color-bg-card: #FFFFFF;
-  --color-bg-dark: #170E23;
+  --color-primary: #7a59fc;
+  --color-primary-dark: #5519d5;
+  --color-primary-light: #aea7ff;
+  --color-bg: #f0edeb;
+  --color-bg-card: #ffffff;
+  --color-bg-dark: #170e23;
   --color-text: #241143;
-  --color-text-muted: #5F5273;
-  --color-border: #E5E0DE;
-  --color-divider: #EEEBE9;
-  --color-danger: #E5484D;
+  --color-text-muted: #5f5273;
+  --color-border: #e5e0de;
+  --color-divider: #eeebe9;
+  --color-danger: #e5484d;
 }
 
 body {
@@ -25,7 +25,8 @@ body {
   -webkit-user-select: none;
 }
 
-input, textarea {
+input,
+textarea {
   user-select: text;
   -webkit-user-select: text;
 }

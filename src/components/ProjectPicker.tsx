@@ -35,14 +35,17 @@ export function ProjectPicker({ selectedId, onSelect }: ProjectPickerProps) {
               className="w-2.5 h-2.5 rounded-full shrink-0"
               style={{ backgroundColor: selected.color }}
             />
-            <span className="text-text truncate max-w-[200px]">
-              {selected.name}
-            </span>
+            <span className="text-text truncate max-w-[200px]">{selected.name}</span>
           </>
         ) : (
           <span className="text-text-muted">Select project</span>
         )}
-        <svg className="w-3 h-3 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg
+          className="w-3 h-3 text-text-muted"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>

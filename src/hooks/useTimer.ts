@@ -62,7 +62,7 @@ export function useTimer() {
         status: "SAVED",
       });
       dispatch({ type: "ADD_ENTRY", payload: entry });
-    } catch (err) {
+    } catch {
       // Save as unsaved entry for manual retry
       const unsavedEntry = {
         id: crypto.randomUUID(),

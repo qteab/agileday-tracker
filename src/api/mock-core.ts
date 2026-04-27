@@ -23,12 +23,8 @@ export const MOCK_TASKS: Record<string, Task[]> = {
     { id: "t6", projectId: "p3", name: "Development", billable: true, active: true },
     { id: "t7", projectId: "p3", name: "Planning", billable: false, active: true },
   ],
-  p4: [
-    { id: "t8", projectId: "p4", name: "Operations", billable: true, active: true },
-  ],
-  p5: [
-    { id: "t9", projectId: "p5", name: "Internal", billable: false, active: true },
-  ],
+  p4: [{ id: "t8", projectId: "p4", name: "Operations", billable: true, active: true }],
+  p5: [{ id: "t9", projectId: "p5", name: "Internal", billable: false, active: true }],
 };
 
 export const MOCK_EMPLOYEE: Employee = {
@@ -93,11 +89,7 @@ export function createMockProvider(
       return tasks[projectId] ?? [];
     },
 
-    async getTimeEntries(
-      _employeeId: string,
-      startDate: string,
-      endDate: string
-    ) {
+    async getTimeEntries(_employeeId: string, startDate: string, endDate: string) {
       const entries = await store.getEntries();
       return entries.filter((e) => e.date >= startDate && e.date <= endDate);
     },

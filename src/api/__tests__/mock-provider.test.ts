@@ -239,11 +239,14 @@ describe("updateTimeEntry", () => {
   });
 
   it("preserves fields not included in the update", async () => {
-    const created = await provider.createTimeEntry("emp1", makeEntry({
-      description: "original",
-      projectId: "p1",
-      minutes: 60,
-    }));
+    const created = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({
+        description: "original",
+        projectId: "p1",
+        minutes: 60,
+      })
+    );
 
     const updated = await provider.updateTimeEntry("emp1", created.id, {
       description: "changed",
@@ -338,9 +341,7 @@ describe("data isolation", () => {
 
 describe("error handling", () => {
   it("updateTimeEntry throws on missing entry", async () => {
-    await expect(
-      provider.updateTimeEntry("emp1", "bad-id", {})
-    ).rejects.toThrow();
+    await expect(provider.updateTimeEntry("emp1", "bad-id", {})).rejects.toThrow();
   });
 
   it("updateTimeEntry error does not corrupt store", async () => {
@@ -367,16 +368,11 @@ describe("error handling", () => {
         throw new Error("Store write failed");
       },
     };
-    const failProvider = createMockProvider(
-      failingStore,
-      MOCK_PROJECTS,
-      MOCK_TASKS,
-      MOCK_EMPLOYEE
-    );
+    const failProvider = createMockProvider(failingStore, MOCK_PROJECTS, MOCK_TASKS, MOCK_EMPLOYEE);
 
-    await expect(
-      failProvider.createTimeEntry("emp1", makeEntry())
-    ).rejects.toThrow("Store write failed");
+    await expect(failProvider.createTimeEntry("emp1", makeEntry())).rejects.toThrow(
+      "Store write failed"
+    );
   });
 
   it("deleteTimeEntry with store failure propagates error", async () => {
@@ -388,15 +384,8 @@ describe("error handling", () => {
         throw new Error("Store write failed");
       },
     };
-    const failProvider = createMockProvider(
-      failingStore,
-      MOCK_PROJECTS,
-      MOCK_TASKS,
-      MOCK_EMPLOYEE
-    );
+    const failProvider = createMockProvider(failingStore, MOCK_PROJECTS, MOCK_TASKS, MOCK_EMPLOYEE);
 
-    await expect(failProvider.deleteTimeEntry(["any-id"])).rejects.toThrow(
-      "Store write failed"
-    );
+    await expect(failProvider.deleteTimeEntry(["any-id"])).rejects.toThrow("Store write failed");
   });
 });

@@ -22,9 +22,7 @@ export function TimeEntry({ entry, onContinue }: TimeEntryProps) {
       >
         <div className="flex-1 min-w-0">
           <p className="text-sm text-text truncate">
-            {entry.description || (
-              <span className="text-text-muted">+ Add description</span>
-            )}
+            {entry.description || <span className="text-text-muted">+ Add description</span>}
           </p>
           <div className="flex items-center gap-1.5 mt-0.5">
             {project && (
@@ -33,18 +31,14 @@ export function TimeEntry({ entry, onContinue }: TimeEntryProps) {
                   className="w-2 h-2 rounded-full shrink-0"
                   style={{ backgroundColor: project.color }}
                 />
-                <span className="text-xs text-text-muted truncate">
-                  {project.name}
-                </span>
+                <span className="text-xs text-text-muted truncate">{project.name}</span>
               </>
             )}
           </div>
         </div>
 
         {entry.syncStatus === "unsaved" && (
-          <span className="text-xs text-danger font-medium shrink-0">
-            Unsaved
-          </span>
+          <span className="text-xs text-danger font-medium shrink-0">Unsaved</span>
         )}
 
         <span className="text-sm text-text-muted tabular-nums shrink-0">
@@ -66,9 +60,7 @@ export function TimeEntry({ entry, onContinue }: TimeEntryProps) {
         </button>
       </div>
 
-      {editing && (
-        <EntryEditModal entry={entry} onClose={() => setEditing(false)} />
-      )}
+      {editing && <EntryEditModal entry={entry} onClose={() => setEditing(false)} />}
     </>
   );
 }

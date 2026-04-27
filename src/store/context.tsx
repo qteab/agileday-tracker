@@ -42,24 +42,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   authStateRef.current = authState;
 
   // Build the appropriate API provider
-  const api: ApiProvider = isConnected && authState
-    ? createAgileDayProvider(
-        {
-          apiBaseUrl: buildApiBaseUrl(DEFAULT_CONNECTION),
-          authConfig: buildAuthConfig(DEFAULT_CONNECTION),
-        } as AgileDayConfig,
-        () => authStateRef.current,
-        (newState: AuthState) => {
-          setAuthState(newState);
-          saveAuthState(newState);
-        },
-        () => {
-          setAuthState(null);
-          setIsConnected(false);
-          clearAuth();
-        }
-      )
-    : mockProvider;
+  const api: ApiProvider =
+    isConnected && authState
+      ? createAgileDayProvider(
+          {
+            apiBaseUrl: buildApiBaseUrl(DEFAULT_CONNECTION),
+            authConfig: buildAuthConfig(DEFAULT_CONNECTION),
+          } as AgileDayConfig,
+          () => authStateRef.current,
+          (newState: AuthState) => {
+            setAuthState(newState);
+            saveAuthState(newState);
+          },
+          () => {
+            setAuthState(null);
+            setIsConnected(false);
+            clearAuth();
+          }
+        )
+      : mockProvider;
 
   // On mount: check for existing auth + listen for deep link callbacks
   useEffect(() => {
@@ -97,9 +98,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "SET_PROJECTS", payload: projects });
 
         const endDate = new Date().toISOString().split("T")[0];
-        const startDate = new Date(Date.now() - 30 * 86400000)
-          .toISOString()
-          .split("T")[0];
+        const startDate = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
         const entries = await api.getTimeEntries(employee.id, startDate, endDate);
         dispatch({ type: "SET_ENTRIES", payload: entries });
       } catch (err) {

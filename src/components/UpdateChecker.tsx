@@ -42,23 +42,13 @@ export function UpdateChecker() {
 
   return (
     <div className="flex items-center justify-between px-4 py-2 bg-primary/10 text-primary text-xs">
-      <span>
-        {installing
-          ? "Installing update..."
-          : `Version ${version} available`}
-      </span>
+      <span>{installing ? "Installing update..." : `Version ${version} available`}</span>
       {!installing && (
         <div className="flex gap-2">
-          <button
-            onClick={() => setDismissed(true)}
-            className="text-text-muted hover:text-text"
-          >
+          <button onClick={() => setDismissed(true)} className="text-text-muted hover:text-text">
             Later
           </button>
-          <button
-            onClick={handleUpdate}
-            className="font-medium hover:text-primary-dark"
-          >
+          <button onClick={handleUpdate} className="font-medium hover:text-primary-dark">
             Update
           </button>
         </div>

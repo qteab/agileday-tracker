@@ -13,9 +13,7 @@ function formatDate(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00");
   const now = new Date();
   const today = now.toISOString().split("T")[0];
-  const yesterday = new Date(now.getTime() - 86400000)
-    .toISOString()
-    .split("T")[0];
+  const yesterday = new Date(now.getTime() - 86400000).toISOString().split("T")[0];
 
   if (dateStr === today) return "Today";
   if (dateStr === yesterday) return "Yesterday";
@@ -80,15 +78,15 @@ function GroupedEntryRow({
           <button
             onClick={() => setExpanded(!expanded)}
             className={`w-10 shrink-0 flex items-center justify-center self-stretch transition-colors ${
-              expanded
-                ? "text-primary"
-                : "text-text-muted hover:text-primary"
+              expanded ? "text-primary" : "text-text-muted hover:text-primary"
             }`}
             title={`${group.count} sessions`}
           >
-            <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center border ${
-              expanded ? "border-primary bg-primary/10" : "border-text-muted/30"
-            }`}>
+            <span
+              className={`w-6 h-6 rounded-full text-xs flex items-center justify-center border ${
+                expanded ? "border-primary bg-primary/10" : "border-text-muted/30"
+              }`}
+            >
               {group.count}
             </span>
           </button>
@@ -133,9 +131,7 @@ export function DayGroup({ date, entries, onContinue }: DayGroupProps) {
     <div className="mb-3">
       {/* Day header */}
       <div className="flex items-center justify-between px-4 py-2">
-        <span className="text-sm font-semibold text-text">
-          {formatDate(date)}
-        </span>
+        <span className="text-sm font-semibold text-text">{formatDate(date)}</span>
         <span className="text-sm font-semibold text-text tabular-nums">
           {formatMinutes(totalMinutes)}
         </span>

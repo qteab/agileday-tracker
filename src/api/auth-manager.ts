@@ -70,9 +70,7 @@ export async function clearAuth(): Promise<void> {
  * Start the OAuth PKCE login flow.
  * Returns the authorize URL to open in the browser.
  */
-export async function startLogin(
-  conn: ConnectionConfig = DEFAULT_CONNECTION
-): Promise<string> {
+export async function startLogin(conn: ConnectionConfig = DEFAULT_CONNECTION): Promise<string> {
   const authConfig = buildAuthConfig(conn);
   const { codeVerifier, codeChallenge } = await generatePKCE();
   const state = crypto.randomUUID();
@@ -118,9 +116,7 @@ export async function completeLogin(
  * Listen for the OAuth callback deep link.
  * Call this once on app startup.
  */
-export function listenForAuthCallback(
-  onCallback: (code: string, state: string) => void
-): void {
+export function listenForAuthCallback(onCallback: (code: string, state: string) => void): void {
   onOpenUrl((urls) => {
     for (const url of urls) {
       if (url.startsWith("qte-tracker://auth/callback")) {

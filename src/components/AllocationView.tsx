@@ -72,7 +72,7 @@ function getMonthWeeks(ref: Date): { startDate: string; endDate: string; label: 
   const lastDay = new Date(year, month + 1, 0);
   const weeks: { startDate: string; endDate: string; label: string }[] = [];
 
-  let current = new Date(year, month, 1);
+  const current = new Date(year, month, 1);
   let weekNum = 1;
   while (current <= lastDay) {
     const weekStart = new Date(current);
@@ -214,9 +214,13 @@ export function AllocationView() {
             </div>
             <div className="text-right">
               <p className="text-[10px] text-text-muted uppercase tracking-wide">Tracked</p>
-              <p className={`text-lg font-semibold ${
-                totalTracked > totalAllocated && totalAllocated > 0 ? "text-danger" : "text-primary"
-              }`}>
+              <p
+                className={`text-lg font-semibold ${
+                  totalTracked > totalAllocated && totalAllocated > 0
+                    ? "text-danger"
+                    : "text-primary"
+                }`}
+              >
                 {formatHours(totalTracked)}
               </p>
             </div>
@@ -258,9 +262,7 @@ export function AllocationView() {
             const tracked = state.entries
               .filter(
                 (e) =>
-                  e.projectId === alloc.projectId &&
-                  e.date >= range.start &&
-                  e.date <= range.end
+                  e.projectId === alloc.projectId && e.date >= range.start && e.date <= range.end
               )
               .reduce((s, e) => s + e.minutes, 0);
             const project = state.projects.find((p) => p.id === alloc.projectId);

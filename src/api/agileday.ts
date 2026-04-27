@@ -5,9 +5,21 @@ import { isTokenExpired, refreshAccessToken, tokenResponseToAuthState } from "./
 
 // Color palette for projects (AgileDay doesn't return colors)
 const PROJECT_COLORS = [
-  "#7A59FC", "#E5B80B", "#AEA7FF", "#D946EF", "#374151",
-  "#0EA5E9", "#F97316", "#10B981", "#EF4444", "#8B5CF6",
-  "#EC4899", "#14B8A6", "#F59E0B", "#6366F1", "#84CC16",
+  "#7A59FC",
+  "#E5B80B",
+  "#AEA7FF",
+  "#D946EF",
+  "#374151",
+  "#0EA5E9",
+  "#F97316",
+  "#10B981",
+  "#EF4444",
+  "#8B5CF6",
+  "#EC4899",
+  "#14B8A6",
+  "#F59E0B",
+  "#6366F1",
+  "#84CC16",
 ];
 
 function assignProjectColor(index: number): string {
@@ -86,13 +98,15 @@ export function createAgileDayProvider(
       // Fetch employee list — the authenticated user should be identifiable
       // via the token. For now, fetch all and we'll need to identify "me".
       // TODO: Verify how AgileDay identifies the current user from the token.
-      const employees = await apiFetch<Array<{
-        id: string;
-        firstName: string;
-        lastName: string;
-        name: string;
-        email: string;
-      }>>("/v1/employee?limit=1");
+      const employees = await apiFetch<
+        Array<{
+          id: string;
+          firstName: string;
+          lastName: string;
+          name: string;
+          email: string;
+        }>
+      >("/v1/employee?limit=1");
 
       if (employees.length === 0) throw new Error("No employee found");
       const emp = employees[0];
@@ -100,11 +114,13 @@ export function createAgileDayProvider(
     },
 
     async getProjects(): Promise<Project[]> {
-      const projects = await apiFetch<Array<{
-        id: string;
-        name: string;
-        customer?: { name: string };
-      }>>("/v1/project?projectStage=ACTIVE&sortBy=name&sortDirection=asc");
+      const projects = await apiFetch<
+        Array<{
+          id: string;
+          name: string;
+          customer?: { name: string };
+        }>
+      >("/v1/project?projectStage=ACTIVE&sortBy=name&sortDirection=asc");
 
       return projects.map((p, i) => ({
         id: p.id,
@@ -115,13 +131,15 @@ export function createAgileDayProvider(
     },
 
     async getTasks(projectId: string): Promise<Task[]> {
-      const tasks = await apiFetch<Array<{
-        id: string;
-        name: string;
-        projectId: string;
-        billable: boolean;
-        active: boolean;
-      }>>(`/v1/project/id/${projectId}/task`);
+      const tasks = await apiFetch<
+        Array<{
+          id: string;
+          name: string;
+          projectId: string;
+          billable: boolean;
+          active: boolean;
+        }>
+      >(`/v1/project/id/${projectId}/task`);
 
       return tasks
         .filter((t) => t.active)
@@ -139,16 +157,18 @@ export function createAgileDayProvider(
       startDate: string,
       endDate: string
     ): Promise<TimeEntry[]> {
-      const entries = await apiFetch<Array<{
-        id: string;
-        description: string;
-        projectId: string;
-        projectName: string;
-        taskId?: string;
-        date: string;
-        minutes: number;
-        status: string;
-      }>>(`/v1/time_entry/employee/id/${employeeId}?startDate=${startDate}&endDate=${endDate}`);
+      const entries = await apiFetch<
+        Array<{
+          id: string;
+          description: string;
+          projectId: string;
+          projectName: string;
+          taskId?: string;
+          date: string;
+          minutes: number;
+          status: string;
+        }>
+      >(`/v1/time_entry/employee/id/${employeeId}?startDate=${startDate}&endDate=${endDate}`);
 
       return entries.map((e) => ({
         id: e.id,
@@ -179,15 +199,17 @@ export function createAgileDayProvider(
         },
       ];
 
-      const results = await apiFetch<Array<{
-        id: string;
-        date: string;
-        minutes: number;
-        status: string;
-        description?: string;
-        projectId: string;
-        taskId?: string;
-      }>>(`/v1/time_entry/employee/id/${employeeId}`, {
+      const results = await apiFetch<
+        Array<{
+          id: string;
+          date: string;
+          minutes: number;
+          status: string;
+          description?: string;
+          projectId: string;
+          taskId?: string;
+        }>
+      >(`/v1/time_entry/employee/id/${employeeId}`, {
         method: "POST",
         body: JSON.stringify(body),
       });
@@ -227,15 +249,17 @@ export function createAgileDayProvider(
         },
       ];
 
-      const results = await apiFetch<Array<{
-        id: string;
-        date: string;
-        minutes: number;
-        status: string;
-        description?: string;
-        projectId: string;
-        taskId?: string;
-      }>>(`/v1/time_entry/employee/id/${employeeId}`, {
+      const results = await apiFetch<
+        Array<{
+          id: string;
+          date: string;
+          minutes: number;
+          status: string;
+          description?: string;
+          projectId: string;
+          taskId?: string;
+        }>
+      >(`/v1/time_entry/employee/id/${employeeId}`, {
         method: "PATCH",
         body: JSON.stringify(body),
       });

@@ -1,17 +1,28 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 jobs:
-  build-and-release:
+  release:
     runs-on: macos-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -21,14 +32,55 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
-        run: npm test
+      - name: Run checks
+        run: npm run check
+
+      - name: Calculate next version
+        id: version
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          case "${{ inputs.bump }}" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+          NEXT="${MAJOR}.${MINOR}.${PATCH}"
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "tag=v${NEXT}" >> "$GITHUB_OUTPUT"
+          echo "Bumping $CURRENT → $NEXT (${{ inputs.bump }})"
+
+      - name: Bump version in files
+        run: |
+          VERSION=${{ steps.version.outputs.next }}
+          # package.json
+          node -e "
+            const pkg = require('./package.json');
+            pkg.version = '$VERSION';
+            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          # tauri.conf.json
+          node -e "
+            const conf = require('./src-tauri/tauri.conf.json');
+            conf.version = '$VERSION';
+            require('fs').writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(conf, null, 2) + '\n');
+          "
+          # Cargo.toml
+          sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
+          git commit -m "release: v${{ steps.version.outputs.next }}"
+          git tag ${{ steps.version.outputs.tag }}
+          git push origin main --tags
 
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
@@ -37,8 +89,14 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'QTE Time Tracker ${{ github.ref_name }}'
-          releaseBody: 'Download the .dmg file for your Mac below.'
+          tagName: ${{ steps.version.outputs.tag }}
+          releaseName: 'QTE Time Tracker ${{ steps.version.outputs.tag }}'
+          releaseBody: |
+            ## QTE Time Tracker ${{ steps.version.outputs.tag }}
+
+            Download the `.dmg` file below and drag to Applications.
+
+            **First install:** Right-click the app → Open → confirm (one time only).
+            **Updates:** The app checks for updates automatically.
           releaseDraft: false
           prerelease: false

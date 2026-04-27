@@ -13,12 +13,7 @@ export interface Task {
   active: boolean;
 }
 
-export type TimeEntryStatus =
-  | "NEW"
-  | "SAVED"
-  | "CHANGE_REQUESTED"
-  | "SUBMITTED"
-  | "APPROVED";
+export type TimeEntryStatus = "NEW" | "SAVED" | "CHANGE_REQUESTED" | "SUBMITTED" | "APPROVED";
 
 export type SyncStatus = "synced" | "unsaved" | "pending";
 
