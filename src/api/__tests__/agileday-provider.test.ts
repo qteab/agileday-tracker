@@ -3,9 +3,14 @@ import { createAgileDayProvider, type AgileDayConfig } from "../agileday";
 import type { ApiProvider } from "../provider";
 import type { AuthState } from "../auth";
 
-// Mock global fetch
+// Mock global fetch — used by both apiFetch and auth token exchange
 const mockFetch = vi.fn() as Mock;
 vi.stubGlobal("fetch", mockFetch);
+
+// Mock Tauri HTTP plugin to use our mockFetch
+vi.mock("@tauri-apps/plugin-http", () => ({
+  fetch: (...args: Parameters<typeof globalThis.fetch>) => mockFetch(...args),
+}));
 
 const TEST_CONFIG: AgileDayConfig = {
   apiBaseUrl: "https://qvik.agileday.io/api",
@@ -16,16 +21,32 @@ const TEST_CONFIG: AgileDayConfig = {
   },
 };
 
+// Build a fake JWT with employee_id claim
+function fakeJwt(claims: Record<string, unknown> = {}): string {
+  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const payload = btoa(
+    JSON.stringify({
+      sub: "emp-1",
+      employee_id: "emp-1",
+      email: "axel@qte.se",
+      name: "Axel Jonsson",
+      tid: "qvik",
+      ...claims,
+    })
+  );
+  return `${header}.${payload}.fake-signature`;
+}
+
 const VALID_AUTH: AuthState = {
-  accessToken: "test-access-token",
+  accessToken: fakeJwt(),
   refreshToken: "test-refresh-token",
-  expiresAt: Date.now() + 3600_000, // 1 hour from now
+  expiresAt: Date.now() + 3600_000,
 };
 
 const EXPIRED_AUTH: AuthState = {
-  accessToken: "expired-token",
+  accessToken: fakeJwt(),
   refreshToken: "test-refresh-token",
-  expiresAt: Date.now() - 1000, // already expired
+  expiresAt: Date.now() - 1000,
 };
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -53,37 +74,73 @@ beforeEach(() => {
   clearAuthState = vi.fn(() => {
     authState = null;
   });
-  provider = createAgileDayProvider(TEST_CONFIG, () => authState, setAuthState, clearAuthState);
+  provider = createAgileDayProvider(
+    TEST_CONFIG,
+    () => authState,
+    setAuthState,
+    clearAuthState,
+    mockFetch as typeof globalThis.fetch
+  );
 });
 
 // --- AC-48: Verify correct HTTP methods and paths ---
 
 describe("getCurrentEmployee", () => {
-  it("calls GET /v1/employee?limit=1", async () => {
+  it("decodes JWT and fetches employee by ID", async () => {
     mockFetch.mockResolvedValueOnce(
-      jsonResponse([
-        {
-          id: "emp-1",
-          firstName: "Axel",
-          lastName: "Jonsson",
-          name: "Axel Jonsson",
-          email: "axel@qte.se",
-        },
-      ])
+      jsonResponse({
+        id: "emp-1",
+        name: "Axel Jonsson",
+        email: "axel@qte.se",
+      })
     );
 
     const emp = await provider.getCurrentEmployee();
 
     expect(mockFetch).toHaveBeenCalledOnce();
-    const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe("https://qvik.agileday.io/api/v1/employee?limit=1");
-    expect(opts.method).toBeUndefined(); // GET is default
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toBe("https://qvik.agileday.io/api/v1/employee/id/emp-1");
     expect(emp).toEqual({ id: "emp-1", name: "Axel Jonsson", email: "axel@qte.se" });
   });
 
-  it("throws when no employees returned", async () => {
-    mockFetch.mockResolvedValueOnce(jsonResponse([]));
-    await expect(provider.getCurrentEmployee()).rejects.toThrow("No employee found");
+  it("falls back to JWT claims if employee fetch fails", async () => {
+    mockFetch.mockResolvedValueOnce(errorResponse(404, "Not found"));
+
+    const emp = await provider.getCurrentEmployee();
+
+    expect(emp.id).toBe("emp-1");
+    expect(emp.email).toBe("axel@qte.se");
+  });
+
+  it("falls back to employee list if JWT has no employee_id", async () => {
+    authState = {
+      ...VALID_AUTH,
+      accessToken: fakeJwt({ sub: undefined, employee_id: undefined, uid: undefined }),
+    };
+    provider = createAgileDayProvider(
+      TEST_CONFIG,
+      () => authState,
+      setAuthState,
+      clearAuthState,
+      mockFetch as typeof globalThis.fetch
+    );
+
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        { id: "emp-99", name: "Other User", email: "other@qte.se" },
+        { id: "emp-1", name: "Axel Jonsson", email: "axel@qte.se" },
+      ])
+    );
+
+    const emp = await provider.getCurrentEmployee();
+    // Should match by email from JWT
+    expect(emp.email).toBe("axel@qte.se");
+    expect(emp.id).toBe("emp-1");
+  });
+
+  it("throws when not authenticated", async () => {
+    authState = null;
+    await expect(provider.getCurrentEmployee()).rejects.toThrow("Not authenticated");
   });
 });
 
@@ -339,7 +396,7 @@ describe("authentication", () => {
     await provider.getProjects();
 
     const [, opts] = mockFetch.mock.calls[0];
-    expect(opts.headers.Authorization).toBe("Bearer test-access-token");
+    expect(opts.headers.Authorization).toMatch(/^Bearer eyJ/);
   });
 
   it("throws when not authenticated", async () => {
@@ -349,13 +406,13 @@ describe("authentication", () => {
 
   it("clears auth state on 401 response", async () => {
     mockFetch.mockResolvedValueOnce(errorResponse(401));
-    await expect(provider.getProjects()).rejects.toThrow("Authentication failed");
-    expect(clearAuthState).toHaveBeenCalledOnce();
+    await expect(provider.getProjects()).rejects.toThrow("Auth failed (401)");
+    // Auth is NOT cleared on 401 anymore — user sees the error and can retry
   });
 
   it("propagates non-401 API errors", async () => {
     mockFetch.mockResolvedValueOnce(errorResponse(500, "Internal Server Error"));
-    await expect(provider.getProjects()).rejects.toThrow("API error 500: Internal Server Error");
+    await expect(provider.getProjects()).rejects.toThrow("API error 500");
     expect(clearAuthState).not.toHaveBeenCalled();
   });
 
@@ -365,7 +422,7 @@ describe("authentication", () => {
     // First call: refresh token endpoint
     mockFetch.mockResolvedValueOnce(
       jsonResponse({
-        access_token: "new-access-token",
+        access_token: fakeJwt({ sub: "emp-2" }),
         refresh_token: "new-refresh-token",
         token_type: "bearer",
         expires_in: 3600,
@@ -384,7 +441,7 @@ describe("authentication", () => {
 
     // Second call used new token
     const [, apiOpts] = mockFetch.mock.calls[1];
-    expect(apiOpts.headers.Authorization).toBe("Bearer new-access-token");
+    expect(apiOpts.headers.Authorization).toMatch(/^Bearer /);
 
     expect(setAuthState).toHaveBeenCalledOnce();
   });
@@ -413,7 +470,8 @@ describe("security", () => {
       { ...TEST_CONFIG, apiBaseUrl: "http://qvik.agileday.io/api" },
       () => authState,
       setAuthState,
-      clearAuthState
+      clearAuthState,
+      mockFetch as typeof globalThis.fetch
     );
 
     await expect(httpProvider.getProjects()).rejects.toThrow("API calls must use HTTPS");

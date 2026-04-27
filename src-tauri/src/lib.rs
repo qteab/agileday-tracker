@@ -102,6 +102,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_http::init())
         .invoke_handler(tauri::generate_handler![wait_for_oauth_callback])
         .setup(move |app| {
             if cfg!(debug_assertions) {

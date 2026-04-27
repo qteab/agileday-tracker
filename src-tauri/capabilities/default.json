@@ -15,6 +15,12 @@
     "shell:allow-open",
     "deep-link:default",
     "updater:default",
-    "process:allow-restart"
+    "process:allow-restart",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://*.agileday.io/**" }
+      ]
+    }
   ]
 }

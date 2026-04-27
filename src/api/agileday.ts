@@ -36,7 +36,9 @@ export function createAgileDayProvider(
   config: AgileDayConfig,
   getAuthState: () => AuthState | null,
   setAuthState: (state: AuthState) => void,
-  clearAuthState: () => void
+  clearAuthState: () => void,
+  /** Override fetch for testing — defaults to Tauri HTTP plugin */
+  fetchOverride?: typeof globalThis.fetch
 ): ApiProvider {
   async function getValidToken(): Promise<string> {
     const auth = getAuthState();
@@ -61,6 +63,20 @@ export function createAgileDayProvider(
     return auth.accessToken;
   }
 
+  let resolvedFetch: typeof globalThis.fetch | null = fetchOverride ?? null;
+
+  async function getResolvedFetch() {
+    if (!resolvedFetch) {
+      try {
+        const mod = await import("@tauri-apps/plugin-http");
+        resolvedFetch = mod.fetch;
+      } catch {
+        resolvedFetch = globalThis.fetch;
+      }
+    }
+    return resolvedFetch;
+  }
+
   async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
     const token = await getValidToken();
     const url = `${config.apiBaseUrl}${path}`;
@@ -70,7 +86,8 @@ export function createAgileDayProvider(
       throw new Error("API calls must use HTTPS");
     }
 
-    const response = await fetch(url, {
+    const doFetch = await getResolvedFetch();
+    const response = await doFetch(url, {
       ...options,
       headers: {
         "Content-Type": "application/json",
@@ -80,13 +97,13 @@ export function createAgileDayProvider(
     });
 
     if (response.status === 401) {
-      clearAuthState();
-      throw new Error("Authentication failed — please log in again");
+      const body = await response.text().catch(() => "");
+      throw new Error(`Auth failed (401) at ${url}: ${body}`);
     }
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "Unknown error");
-      throw new Error(`API error ${response.status}: ${errorText}`);
+      throw new Error(`API error ${response.status} at ${url}: ${errorText}`);
     }
 
     if (response.status === 204) return undefined as T;
@@ -95,20 +112,67 @@ export function createAgileDayProvider(
 
   return {
     async getCurrentEmployee(): Promise<Employee> {
-      // Fetch employee list — the authenticated user should be identifiable
-      // via the token. For now, fetch all and we'll need to identify "me".
-      // TODO: Verify how AgileDay identifies the current user from the token.
+      // Try to get employee info from the JWT token first
+      const auth = getAuthState();
+      if (auth?.accessToken) {
+        try {
+          const payload = JSON.parse(
+            atob(auth.accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))
+          );
+          // Look for common JWT claims that identify the user
+          const employeeId = payload.sub || payload.employee_id || payload.uid;
+          const email = payload.email;
+          const name = payload.name || payload.preferred_username || email || "Unknown";
+
+          if (employeeId) {
+            // Try to fetch the full employee record by ID
+            try {
+              const emp = await apiFetch<{
+                id: string;
+                name: string;
+                email: string;
+              }>(`/v1/employee/id/${employeeId}`);
+              return { id: emp.id, name: emp.name, email: emp.email };
+            } catch {
+              // If that fails, return what we have from the JWT
+              return { id: employeeId, name, email: email || "" };
+            }
+          }
+        } catch {
+          // JWT decode failed — fall through to employee list
+        }
+      }
+
+      // Fallback: fetch employee list and find by email from token
       const employees = await apiFetch<
         Array<{
           id: string;
-          firstName: string;
-          lastName: string;
           name: string;
           email: string;
         }>
-      >("/v1/employee?limit=1");
+      >("/v1/employee?limit=100");
 
       if (employees.length === 0) throw new Error("No employee found");
+
+      // Try to match by email from JWT
+      const auth2 = getAuthState();
+      if (auth2?.accessToken) {
+        try {
+          const payload = JSON.parse(
+            atob(auth2.accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))
+          );
+          if (payload.email) {
+            const match = employees.find(
+              (e) => e.email?.toLowerCase() === payload.email.toLowerCase()
+            );
+            if (match) return { id: match.id, name: match.name, email: match.email };
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // Last resort: return first employee
       const emp = employees[0];
       return { id: emp.id, name: emp.name, email: emp.email };
     },

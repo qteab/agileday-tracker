@@ -10,7 +10,7 @@ import { useApp } from "./store/context";
 import type { TimeEntry } from "./api/types";
 
 export function App() {
-  const { isConnected, isAuthLoading } = useApp();
+  const { isConnected, isAuthLoading, onLogin } = useApp();
 
   // Show nothing while checking saved auth
   if (isAuthLoading) {
@@ -23,7 +23,7 @@ export function App() {
 
   // Not authenticated → login screen
   if (!isConnected) {
-    return <LoginScreen />;
+    return <LoginScreen onLoginSuccess={onLogin} />;
   }
 
   return <AuthenticatedApp />;

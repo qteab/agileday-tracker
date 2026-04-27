@@ -27,6 +27,7 @@ interface AppContextValue {
   isConnected: boolean;
   isAuthLoading: boolean;
   logout: () => Promise<void>;
+  onLogin: (auth: AuthState) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -61,21 +62,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
         )
       : null;
 
+  function onLogin(auth: AuthState) {
+    setAuthState(auth);
+    setIsConnected(true);
+  }
+
   async function logout() {
     await clearAuth();
     setAuthState(null);
     setIsConnected(false);
     dispatch({ type: "SET_ENTRIES", payload: [] });
     dispatch({ type: "SET_PROJECTS", payload: [] });
-    dispatch({ type: "SET_EMPLOYEE", payload: null as never });
+    dispatch({ type: "SET_ERROR", payload: null });
   }
 
   // On mount: check for saved auth state
   useEffect(() => {
     loadAuthState().then((saved) => {
-      if (saved) {
+      if (saved && saved.expiresAt > Date.now()) {
         setAuthState(saved);
         setIsConnected(true);
+      } else if (saved) {
+        // Token expired — clear it
+        clearAuth();
       }
       setIsAuthLoading(false);
     });
@@ -100,10 +109,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const entries = await api!.getTimeEntries(employee.id, startDate, endDate);
         dispatch({ type: "SET_ENTRIES", payload: entries });
       } catch (err) {
-        dispatch({
-          type: "SET_ERROR",
-          payload: err instanceof Error ? err.message : "Failed to load data",
-        });
+        const msg = err instanceof Error ? err.message : "Failed to load data";
+        dispatch({ type: "SET_ERROR", payload: msg });
+        // Don't clear auth on data load failure — stay connected so user can see the error
       } finally {
         dispatch({ type: "SET_LOADING", payload: false });
       }
@@ -112,7 +120,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [isConnected]);
 
   return (
-    <AppContext.Provider value={{ state, dispatch, api, isConnected, isAuthLoading, logout }}>
+    <AppContext.Provider
+      value={{ state, dispatch, api, isConnected, isAuthLoading, logout, onLogin }}
+    >
       {children}
     </AppContext.Provider>
   );

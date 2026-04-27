@@ -21,6 +21,9 @@ import {
 
 const AUTH_STORE_FILE = "auth.json";
 
+// Cache the store instance to avoid multiple handles
+let storeInstance: Awaited<ReturnType<typeof load>> | null = null;
+
 const REDIRECT_URI = "http://localhost:19847/auth/callback";
 
 // Hardcoded defaults — same for all QTE employees
@@ -50,7 +53,10 @@ export function buildApiBaseUrl(conn: ConnectionConfig): string {
 }
 
 async function getAuthStore() {
-  return await load(AUTH_STORE_FILE, { autoSave: true, defaults: {} });
+  if (!storeInstance) {
+    storeInstance = await load(AUTH_STORE_FILE, { autoSave: true, defaults: {} });
+  }
+  return storeInstance;
 }
 
 export async function loadAuthState(): Promise<AuthState | null> {
@@ -61,6 +67,7 @@ export async function loadAuthState(): Promise<AuthState | null> {
 export async function saveAuthState(state: AuthState): Promise<void> {
   const store = await getAuthStore();
   await store.set("authState", state);
+  await store.save();
 }
 
 export async function clearAuth(): Promise<void> {
@@ -79,32 +86,24 @@ export async function clearAuth(): Promise<void> {
  */
 export async function login(conn: ConnectionConfig = DEFAULT_CONNECTION): Promise<AuthState> {
   const authConfig = buildAuthConfig(conn);
+
   const { codeVerifier, codeChallenge } = await generatePKCE();
   const state = crypto.randomUUID();
-
   const authorizeUrl = buildAuthorizeUrl(authConfig, codeChallenge, state);
 
-  // Start the callback server BEFORE opening the browser.
-  // This returns a promise that resolves when the callback is received.
   const callbackPromise = invoke<[string, string]>("wait_for_oauth_callback");
 
-  // Open browser (caller handles this — we return the URL)
-  // Actually, let's handle it here for simplicity
   const { open } = await import("@tauri-apps/plugin-shell");
   await open(authorizeUrl);
 
-  // Wait for the OAuth callback
   const [code, returnedState] = await callbackPromise;
 
-  // Validate CSRF state
   if (returnedState !== state) {
     throw new Error("Invalid OAuth state — possible CSRF attack");
   }
 
-  // Exchange code for tokens
   const tokens = await exchangeCodeForTokens(authConfig, code, codeVerifier);
   const authState = tokenResponseToAuthState(tokens);
-
   await saveAuthState(authState);
   return authState;
 }

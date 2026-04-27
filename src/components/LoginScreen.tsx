@@ -1,8 +1,13 @@
 import { useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { login } from "../api/auth-manager";
+import type { AuthState } from "../api/auth";
 
-export function LoginScreen() {
+interface LoginScreenProps {
+  onLoginSuccess: (auth: AuthState) => void;
+}
+
+export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -10,12 +15,11 @@ export function LoginScreen() {
     setLoading(true);
     setError("");
     try {
-      await login();
-      // Auth state is saved — trigger a re-render by dispatching
-      // The context will pick up the new auth state
-      window.location.reload();
+      const auth = await login();
+      onLoginSuccess(auth);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      const msg = err instanceof Error ? err.message : JSON.stringify(err);
+      setError(msg);
       setLoading(false);
     }
   }
@@ -60,7 +64,7 @@ export function LoginScreen() {
           </p>
         )}
 
-        {error && <p className="text-xs text-danger text-center">{error}</p>}
+        {error && <p className="text-xs text-danger text-center max-w-[300px]">{error}</p>}
       </div>
     </div>
   );

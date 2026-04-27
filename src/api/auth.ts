@@ -89,7 +89,8 @@ export async function exchangeCodeForTokens(
   code: string,
   codeVerifier: string
 ): Promise<TokenResponse> {
-  const response = await fetch(`${config.oauthBaseUrl}/token`, {
+  const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
+  const response = await tauriFetch(`${config.oauthBaseUrl}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -113,7 +114,8 @@ export async function refreshAccessToken(
   config: AuthConfig,
   refreshToken: string
 ): Promise<TokenResponse> {
-  const response = await fetch(`${config.oauthBaseUrl}/token`, {
+  const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
+  const response = await tauriFetch(`${config.oauthBaseUrl}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
