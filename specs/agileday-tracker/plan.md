@@ -18,6 +18,7 @@ The UI follows QTE's brand: purple primary (#7A59FC), dark purple accents (#5519
 | State | React Context + useReducer (lightweight, no Redux) |
 | Storage | Tauri's `@tauri-apps/plugin-store` (JSON file on disk) |
 | API layer | TypeScript interface with mock + AgileDay implementations (OpenAPI spec included) |
+| Testing | Vitest (32 tests passing) |
 
 ## No Backend Needed
 
@@ -34,11 +35,12 @@ AgileDay is the database. The app is a thin client:
 | `--color-primary` | `#7A59FC` | Buttons, active states, play icon |
 | `--color-primary-dark` | `#5519D5` | Hover states, gradients |
 | `--color-primary-light` | `#AEA7FF` | Tags, project dots |
-| `--color-bg-light` | `#FAF5F5` | Main background |
+| `--color-bg` | `#F0EDEB` | Main background (grey) |
+| `--color-bg-card` | `#FFFFFF` | Card backgrounds |
 | `--color-bg-dark` | `#170E23` | Dark mode (future) |
 | `--color-text` | `#241143` | Primary text |
 | `--color-text-muted` | `#5F5273` | Secondary text |
-| Logo | Purple teddy bear | Tray icon + header |
+| Logo | Purple teddy bear | Tray icon + app icon |
 
 ## File Structure
 
@@ -48,24 +50,30 @@ agileday-tracker/
 │   ├── Cargo.toml
 │   ├── tauri.conf.json         # Window config, tray, permissions
 │   ├── src/
-│   │   └── lib.rs              # Tray setup, popover window
-│   └── icons/                  # App icons (from teddy bear logo)
+│   │   └── lib.rs              # Tray menu, window management, Dock visibility
+│   └── icons/                  # App icons (teddy bear logo)
 ├── src/                        # React frontend
 │   ├── main.tsx                # Entry point
-│   ├── App.tsx                 # Root component
+│   ├── App.tsx                 # Root component + tab switcher
 │   ├── components/
 │   │   ├── Timer.tsx           # "What are you working on?" + timer + play/stop
 │   │   ├── ProjectPicker.tsx   # Dropdown to select AgileDay project
 │   │   ├── TaskPicker.tsx      # Dropdown to select task within project
+│   │   ├── TabSwitcher.tsx     # List / Allocation pill tabs
 │   │   ├── TimeEntryList.tsx   # Grouped-by-day list of entries
-│   │   ├── DayGroup.tsx        # Collapsible day row (date + total)
-│   │   └── TimeEntry.tsx       # Single session row
+│   │   ├── DayGroup.tsx        # Day card with grouped entries
+│   │   ├── TimeEntry.tsx       # Single entry row with hover play + click to edit
+│   │   ├── EntryEditModal.tsx  # Edit modal (description, project, duration, time, date)
+│   │   └── AllocationView.tsx  # Allocation chart + per-project progress
 │   ├── api/
-│   │   ├── types.ts            # Project, Task, TimeEntry interfaces
+│   │   ├── types.ts            # Project, Task, TimeEntry, Allocation interfaces
 │   │   ├── provider.ts         # ApiProvider interface
-│   │   ├── mock.ts             # Mock implementation (local storage)
+│   │   ├── mock-core.ts        # Core mock logic (testable, injectable store)
+│   │   ├── mock.ts             # Mock implementation (Tauri store)
 │   │   ├── agileday.ts         # Real AgileDay API client (Phase 4)
 │   │   └── auth.ts             # OAuth 2.1 PKCE flow (Phase 4)
+│   ├── api/__tests__/
+│   │   └── mock-provider.test.ts  # 32 tests covering all ApiProvider methods
 │   ├── store/
 │   │   ├── context.tsx         # React context for app state
 │   │   └── reducer.ts          # State reducer (entries, timer, projects)
@@ -75,7 +83,6 @@ agileday-tracker/
 │       └── index.css           # Tailwind + QTE brand tokens
 ├── index.html
 ├── package.json
-├── tailwind.config.ts
 ├── tsconfig.json
 └── vite.config.ts
 ```
@@ -125,19 +132,23 @@ interface Employee {
   email: string;
 }
 
-interface ApiProvider {
-  // Auth
-  getCurrentEmployee(): Promise<Employee>;
+interface Allocation {
+  projectId: string;
+  projectName: string;
+  allocatedMinutes: number; // total for the period
+  startDate: string;
+  endDate: string;
+}
 
-  // Projects & tasks
+interface ApiProvider {
+  getCurrentEmployee(): Promise<Employee>;
   getProjects(): Promise<Project[]>;
   getTasks(projectId: string): Promise<Task[]>;
-
-  // Time entries — AgileDay scopes these by employee ID
   getTimeEntries(employeeId: string, startDate: string, endDate: string): Promise<TimeEntry[]>;
   createTimeEntry(employeeId: string, entry: Omit<TimeEntry, 'id'>): Promise<TimeEntry>;
   updateTimeEntry(employeeId: string, id: string, updates: Partial<TimeEntry>): Promise<TimeEntry>;
   deleteTimeEntry(ids: string[]): Promise<void>;
+  getAllocations(employeeId: string): Promise<Allocation[]>;
 }
 ```
 
@@ -160,81 +171,47 @@ interface ApiProvider {
 
 ### Phase 0: Project Setup
 
-- [ ] 1. **Install Rust toolchain**
-  - Run `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-  - Prerequisite for everything else
-
-- [ ] 2. **Scaffold Tauri v2 + React + TypeScript project**
-  - Run `npm create tauri-app@latest` in the qte folder
-  - Select: React, TypeScript, Vite
-  - Name: `agileday-tracker`
-
-- [ ] 3. **Initialize git repo**
-  - `git init`, initial commit, `.gitignore`
-
-- [ ] 4. **Configure Tauri for menu bar app**
-  - Set up system tray with icon
-  - Configure popover window (no dock icon, no title bar)
-  - Set window size ~400x600 (like Toggl)
-  - Files: `src-tauri/tauri.conf.json`, `src-tauri/src/lib.rs`
-
-- [ ] 5. **Set up Tailwind + QTE brand tokens**
-  - Install Tailwind CSS 4
-  - Define color tokens from QTE brand
-  - Files: `tailwind.config.ts`, `src/styles/index.css`
+- [x] 1. **Install Rust toolchain** ✓
+- [x] 2. **Scaffold Tauri v2 + React + TypeScript project** ✓
+- [x] 3. **Initialize git repo** ✓
+- [x] 4. **Configure Tauri for menu bar app** ✓
+  - System tray with teddy bear icon
+  - Native dropdown menu (Toggl-style: app name, timer status, New, Stop, Show, Quit)
+  - Window shows in Dock + Cmd+Tab when visible, hides when closed
+  - Close button hides (not quits)
+  - Draggable title bar with overlay traffic lights
+- [x] 5. **Set up Tailwind + QTE brand tokens** ✓
+  - Card-based UI with grey background, white cards, dividers
 
 ### Phase 1: Core Data Layer
 
-- [ ] 6. **Define TypeScript types and API interface**
-  - Files: `src/api/types.ts`, `src/api/provider.ts`
-
-- [ ] 7. **Build mock API provider with local storage**
-  - Seed with sample projects (Fokus, DHL-PIL, maverick, KBV, QTE-möten)
-  - CRUD operations backed by Tauri store plugin
-  - Files: `src/api/mock.ts`
-
-- [ ] 8. **Create app state context and reducer**
-  - State: entries, projects, tasks, active timer, selected project
-  - Files: `src/store/context.tsx`, `src/store/reducer.ts`
+- [x] 6. **Define TypeScript types and API interface** ✓
+  - Includes Allocation type and getAllocations method
+- [x] 7. **Build mock API provider with local storage** ✓
+  - Refactored into mock-core.ts (injectable store) + mock.ts (Tauri store)
+  - 32 unit tests covering all methods (AC-38 through AC-47)
+- [x] 8. **Create app state context and reducer** ✓
 
 ### Phase 2: UI Components
 
-- [ ] 9. **Timer component**
-  - "What are you working on?" text input
-  - Running timer display (0:00:00)
-  - Play/stop button (purple)
-  - Files: `src/components/Timer.tsx`, `src/hooks/useTimer.ts`
-
-- [ ] 10. **Project picker dropdown**
-  - Select from available projects
-  - Colored dot per project
-  - Files: `src/components/ProjectPicker.tsx`
-
-- [ ] 11. **Task picker dropdown**
-  - Select task within chosen project (optional)
-  - Files: `src/components/TaskPicker.tsx`
-
-- [ ] 12. **Time entry list with day grouping**
-  - Group entries by date
-  - Day header: "Mon, 20 Apr" + total time
-  - Collapsed by default, expandable to show individual sessions
-  - Files: `src/components/TimeEntryList.tsx`, `src/components/DayGroup.tsx`, `src/components/TimeEntry.tsx`
-
-- [ ] 13. **Wire up App.tsx — full layout**
-  - Compose all components into the Toggl-like layout
-  - Files: `src/App.tsx`, `src/main.tsx`
+- [x] 9. **Timer component** ✓
+- [x] 10. **Project picker dropdown** ✓
+- [x] 11. **Task picker dropdown** ✓
+- [x] 12. **Time entry list with day grouping** ✓
+  - Toggl-style: white cards per day, entries always visible
+  - Same description+project grouped with count badge (far left)
+  - Click count to expand individual sessions
+  - Hover shows play button to continue (always starts as today)
+  - Click entry opens edit modal
+- [x] 13. **Wire up App.tsx — full layout** ✓
+  - List / Allocation tab switcher (pill-shaped, Toggl-style)
 
 ### Phase 3: Polish
 
-- [ ] 14. **App icon from teddy bear logo**
-  - Generate tray icon (template image for macOS) and app icon
-  - Files: `src-tauri/icons/`
-
-- [ ] 15. **Edit/delete time entries**
-  - Click entry to edit description/project/duration
-  - Delete option
-  - Inline editing or small modal
-
+- [x] 14. **App icon from teddy bear logo** ✓
+  - Generated all icon sizes + .icns from the webp
+- [x] 15. **Edit/delete time entries** ✓
+  - EntryEditModal with description, project, duration, start/end time, date, Delete/Save
 - [ ] 16. **Persist timer state across app restarts**
   - Save running timer to Tauri store, restore on launch
 
