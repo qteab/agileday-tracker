@@ -11,6 +11,7 @@ import { appReducer, initialState, type AppState, type AppAction } from "./reduc
 import type { ApiProvider } from "../api/provider";
 import { createAgileDayProvider, type AgileDayConfig } from "../api/agileday";
 import type { AuthState } from "../api/auth";
+import { isTokenExpired, refreshAccessToken, tokenResponseToAuthState } from "../api/auth";
 import {
   loadAuthState,
   saveAuthState,
@@ -102,6 +103,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setIsAuthLoading(false);
       });
   }, []);
+
+  // Background token refresh — check every 30 seconds, refresh when < 1 min to expiry
+  useEffect(() => {
+    if (!isConnected || !authState?.refreshToken) return;
+
+    const REFRESH_CHECK_INTERVAL = 30_000; // 30 seconds
+    const REFRESH_BUFFER = 60_000; // refresh when < 1 minute left
+
+    const interval = setInterval(async () => {
+      const current = authStateRef.current;
+      if (!current?.refreshToken) return;
+
+      if (isTokenExpired(current, REFRESH_BUFFER)) {
+        try {
+          const authConfig = buildAuthConfig(DEFAULT_CONNECTION);
+          const tokens = await refreshAccessToken(authConfig, current.refreshToken);
+          const newState = tokenResponseToAuthState(tokens);
+          setAuthState(newState);
+          await saveAuthState(newState).catch(() => {});
+        } catch {
+          // Refresh failed — token will expire and user will see session expired message
+          // Don't clear auth here — let the next API call handle it
+        }
+      }
+    }, REFRESH_CHECK_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, [isConnected, authState?.refreshToken]);
 
   // Load data when connected
   useEffect(() => {
