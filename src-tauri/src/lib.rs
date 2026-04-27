@@ -19,15 +19,23 @@ fn set_dock_visible(app: &tauri::AppHandle, visible: bool) {
 /// Returns the code and state from the redirect URL.
 #[tauri::command]
 async fn wait_for_oauth_callback() -> Result<(String, String), String> {
-    // Run the blocking TCP listener in a separate thread
     let result = tokio::task::spawn_blocking(|| {
-        let listener = TcpListener::bind("127.0.0.1:19847")
-            .map_err(|e| format!("Failed to bind port 19847: {}", e))?;
+        let listener = TcpListener::bind("127.0.0.1:19847").map_err(|e| {
+            if e.kind() == std::io::ErrorKind::AddrInUse {
+                "Port 19847 is already in use. Please close any other application using this port and try again.".to_string()
+            } else {
+                format!("Failed to start login server: {}", e)
+            }
+        })?;
 
-        // Accept one connection
+        // Set a timeout so we don't block forever if the user abandons login
+        listener
+            .set_nonblocking(false)
+            .map_err(|e| format!("Failed to configure server: {}", e))?;
+
         let (mut stream, _) = listener
             .accept()
-            .map_err(|e| format!("Failed to accept connection: {}", e))?;
+            .map_err(|e| format!("Failed to receive login callback: {}", e))?;
 
         let mut reader = BufReader::new(stream.try_clone().unwrap());
         let mut request_line = String::new();
