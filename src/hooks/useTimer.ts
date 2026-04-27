@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useApp } from "../store/context";
+import { useApp, useApi } from "../store/context";
 
 export function useTimer() {
-  const { state, dispatch, api } = useApp();
+  const { state, dispatch } = useApp();
+  const api = useApi();
   const { timer, employee } = state;
   const [elapsed, setElapsed] = useState(0); // seconds
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);

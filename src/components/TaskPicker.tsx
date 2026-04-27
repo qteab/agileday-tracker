@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useApp } from "../store/context";
+import { useApp, useApi } from "../store/context";
 
 interface TaskPickerProps {
   projectId: string | null;
@@ -8,7 +8,8 @@ interface TaskPickerProps {
 }
 
 export function TaskPicker({ projectId, selectedId, onSelect }: TaskPickerProps) {
-  const { state, api, dispatch } = useApp();
+  const { state, dispatch } = useApp();
+  const api = useApi();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 

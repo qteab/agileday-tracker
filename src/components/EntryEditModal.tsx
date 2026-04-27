@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useApp } from "../store/context";
+import { useApp, useApi } from "../store/context";
 import { ProjectPicker } from "./ProjectPicker";
 import type { TimeEntry } from "../api/types";
 
@@ -21,7 +21,8 @@ function formatDuration(minutes: number): string {
 }
 
 export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
-  const { state, api, dispatch } = useApp();
+  const { state, dispatch } = useApp();
+  const api = useApi();
   const [description, setDescription] = useState(entry.description);
   const [projectId, setProjectId] = useState(entry.projectId);
   const [date, setDate] = useState(entry.date);

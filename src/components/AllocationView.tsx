@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useApp } from "../store/context";
+import { useApp, useApi } from "../store/context";
 import type { Allocation } from "../api/types";
 
 type Period = "week" | "month";
@@ -132,7 +132,8 @@ function Bar({ data, maxMinutes }: { data: BarData; maxMinutes: number }) {
 }
 
 export function AllocationView() {
-  const { state, api } = useApp();
+  const { state } = useApp();
+  const api = useApi();
   const [period, setPeriod] = useState<Period>("week");
   const [allocations, setAllocations] = useState<Allocation[]>([]);
 
