@@ -1,14 +1,33 @@
+import { useCallback } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Timer } from "./components/Timer";
 import { TimeEntryList } from "./components/TimeEntryList";
 import { useApp } from "./store/context";
+import type { TimeEntry } from "./api/types";
 
 export function App() {
   const { state, dispatch } = useApp();
 
+  const handleContinue = useCallback(
+    (entry: TimeEntry) => {
+      // Start a new timer with the same description and project
+      dispatch({
+        type: "SET_TIMER",
+        payload: {
+          description: entry.description,
+          projectId: entry.projectId,
+          taskId: entry.taskId ?? null,
+          isRunning: true,
+          startTime: new Date().toISOString(),
+        },
+      });
+    },
+    [dispatch]
+  );
+
   return (
     <div className="flex flex-col h-screen bg-bg">
-      {/* Draggable title bar — traffic lights sit here on macOS */}
+      {/* Draggable title bar */}
       <div
         onMouseDown={(e) => {
           if (e.button === 0 && e.detail === 1) {
@@ -42,7 +61,7 @@ export function App() {
       <Timer />
 
       {/* Entry list */}
-      <TimeEntryList />
+      <TimeEntryList onContinue={handleContinue} />
     </div>
   );
 }

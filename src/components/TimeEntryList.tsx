@@ -3,7 +3,11 @@ import { useApp } from "../store/context";
 import { DayGroup } from "./DayGroup";
 import type { TimeEntry } from "../api/types";
 
-export function TimeEntryList() {
+interface TimeEntryListProps {
+  onContinue: (entry: TimeEntry) => void;
+}
+
+export function TimeEntryList({ onContinue }: TimeEntryListProps) {
   const { state } = useApp();
 
   const groupedByDay = useMemo(() => {
@@ -16,7 +20,6 @@ export function TimeEntryList() {
         groups.set(entry.date, [entry]);
       }
     }
-    // Sort days descending (newest first)
     return [...groups.entries()].sort(([a], [b]) => b.localeCompare(a));
   }, [state.entries]);
 
@@ -40,7 +43,12 @@ export function TimeEntryList() {
   return (
     <div className="flex-1 overflow-y-auto">
       {groupedByDay.map(([date, entries]) => (
-        <DayGroup key={date} date={date} entries={entries} />
+        <DayGroup
+          key={date}
+          date={date}
+          entries={entries}
+          onContinue={onContinue}
+        />
       ))}
     </div>
   );
