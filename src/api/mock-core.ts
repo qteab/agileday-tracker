@@ -1,5 +1,5 @@
 import type { ApiProvider } from "./provider";
-import type { Employee, Project, Task, TimeEntry } from "./types";
+import type { Allocation, Employee, Project, Task, TimeEntry } from "./types";
 
 export const MOCK_PROJECTS: Project[] = [
   { id: "p1", name: "Fokus", customerName: "QTE", color: "#E5B80B" },
@@ -42,11 +42,43 @@ export interface EntryStore {
   setEntries(entries: TimeEntry[]): Promise<void>;
 }
 
+export const MOCK_ALLOCATIONS: Allocation[] = [
+  {
+    projectId: "p1",
+    projectName: "Fokus",
+    allocatedMinutes: 4800, // 80h for April
+    startDate: "2026-04-01",
+    endDate: "2026-04-30",
+  },
+  {
+    projectId: "p2",
+    projectName: "DHL - PIL",
+    allocatedMinutes: 2400, // 40h for April
+    startDate: "2026-04-01",
+    endDate: "2026-04-30",
+  },
+  {
+    projectId: "p3",
+    projectName: "maverick",
+    allocatedMinutes: 600, // 10h for April
+    startDate: "2026-04-14",
+    endDate: "2026-04-30",
+  },
+  {
+    projectId: "p5",
+    projectName: "QTE - möten",
+    allocatedMinutes: 480, // 8h for April
+    startDate: "2026-04-01",
+    endDate: "2026-04-30",
+  },
+];
+
 export function createMockProvider(
   store: EntryStore,
   projects: Project[],
   tasks: Record<string, Task[]>,
-  employee: Employee
+  employee: Employee,
+  allocations: Allocation[] = MOCK_ALLOCATIONS
 ): ApiProvider {
   return {
     async getCurrentEmployee() {
@@ -94,6 +126,10 @@ export function createMockProvider(
     async deleteTimeEntry(ids: string[]) {
       const entries = await store.getEntries();
       await store.setEntries(entries.filter((e) => !ids.includes(e.id)));
+    },
+
+    async getAllocations(_employeeId: string) {
+      return allocations;
     },
   };
 }

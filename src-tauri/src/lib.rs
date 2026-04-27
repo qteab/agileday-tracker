@@ -4,6 +4,15 @@ use tauri::{
     Manager,
 };
 
+#[cfg(target_os = "macos")]
+fn set_dock_visible(app: &tauri::AppHandle, visible: bool) {
+    if visible {
+        app.set_activation_policy(tauri::ActivationPolicy::Regular);
+    } else {
+        app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -17,19 +26,18 @@ pub fn run() {
                 )?;
             }
 
+            // Start hidden from Dock and Cmd+Tab
             #[cfg(target_os = "macos")]
             {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
 
-            // Start with window hidden
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.hide();
             }
 
             let app_handle = app.handle().clone();
 
-            // Status items (disabled, just for display)
             let app_name = MenuItemBuilder::with_id("app_name", "QTE Time Tracker")
                 .enabled(false)
                 .build(app)?;
@@ -37,7 +45,6 @@ pub fn run() {
                 .enabled(false)
                 .build(app)?;
 
-            // Action items
             let new_item = MenuItemBuilder::with_id("new", "New")
                 .accelerator("CmdOrCtrl+N")
                 .build(app)?;
@@ -82,6 +89,8 @@ pub fn run() {
                             if let Some(window) = app.get_webview_window("main") {
                                 let _ = window.show();
                                 let _ = window.set_focus();
+                                #[cfg(target_os = "macos")]
+                                set_dock_visible(app, true);
                             }
                         }
                         "quit" => {
@@ -95,10 +104,11 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Close button hides the window instead of quitting (menu bar app)
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window.hide();
+                #[cfg(target_os = "macos")]
+                set_dock_visible(window.app_handle(), false);
             }
         })
         .run(tauri::generate_context!())

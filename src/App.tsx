@@ -1,12 +1,15 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Timer } from "./components/Timer";
+import { TabSwitcher } from "./components/TabSwitcher";
 import { TimeEntryList } from "./components/TimeEntryList";
+import { AllocationView } from "./components/AllocationView";
 import { useApp } from "./store/context";
 import type { TimeEntry } from "./api/types";
 
 export function App() {
   const { state, dispatch } = useApp();
+  const [activeTab, setActiveTab] = useState<"list" | "allocation">("list");
 
   const handleContinue = useCallback(
     (entry: TimeEntry) => {
@@ -56,13 +59,20 @@ export function App() {
         </div>
       )}
 
-      {/* Timer — white card */}
+      {/* Timer */}
       <div className="bg-bg-card border-b border-border">
         <Timer />
       </div>
 
-      {/* Entry list */}
-      <TimeEntryList onContinue={handleContinue} />
+      {/* Tab switcher */}
+      <TabSwitcher active={activeTab} onChange={setActiveTab} />
+
+      {/* Tab content */}
+      {activeTab === "list" ? (
+        <TimeEntryList onContinue={handleContinue} />
+      ) : (
+        <AllocationView />
+      )}
     </div>
   );
 }

@@ -257,6 +257,62 @@ interface ApiProvider {
   - Store/refresh tokens via Tauri secure store
   - Files: `src/api/auth.ts`
 
+### Phase 5: Release & Distribution
+
+Two options depending on how seriously we want to distribute.
+
+#### Option A: Lightweight (free, internal/team use)
+
+- [ ] 20. **GitHub Actions CI — build on tag**
+  - Workflow triggers on `v*` tags
+  - Builds macOS `.dmg` (aarch64 + x86_64 universal binary)
+  - Uploads artifacts to GitHub Release automatically
+  - Files: `.github/workflows/release.yml`
+
+- [ ] 21. **Tauri updater plugin — auto-update from GitHub Releases**
+  - Install `@tauri-apps/plugin-updater`
+  - Configure update endpoint pointing to GitHub Releases
+  - App checks for updates on launch, prompts user to install
+  - Users download DMG once, self-updates after that
+  - Files: `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `src/components/UpdateChecker.tsx`
+
+- [ ] 22. **Versioning strategy**
+  - Semver: `MAJOR.MINOR.PATCH`
+  - Bump version in `package.json` + `src-tauri/tauri.conf.json` + `src-tauri/Cargo.toml`
+  - Tag with `git tag v0.2.0` → push → CI builds and publishes
+  - Changelog in GitHub Release notes
+
+- [ ] 23. **README with install instructions**
+  - Download link to latest GitHub Release
+  - "Right-click → Open" workaround for unsigned app
+  - Files: `README.md`
+
+**Trade-offs:** No code signing — users get "unidentified developer" warning on first open. Fine for internal/team use where you can tell people to right-click → Open.
+
+#### Option B: Production (paid, company-wide distribution)
+
+Everything in Option A, plus:
+
+- [ ] 24. **Apple Developer Program ($99/year)**
+  - Enroll at developer.apple.com
+  - Get Developer ID certificate for code signing
+  - Get notarization credentials
+
+- [ ] 25. **Code signing in CI**
+  - Store signing certificate + notarization credentials in GitHub Secrets
+  - CI signs the `.app` and `.dmg` with Developer ID
+  - CI submits to Apple for notarization (staples the ticket)
+  - No "unidentified developer" warning — clean install experience
+  - Files: `.github/workflows/release.yml` (update signing config)
+
+- [ ] 26. **Homebrew Cask (optional)**
+  - Create a Homebrew tap repo (`homebrew-qte`)
+  - Users install with `brew install --cask qte/qte/time-tracker`
+  - Auto-updated via Homebrew
+  - Files: separate repo `qte/homebrew-qte`
+
+**Trade-offs:** $99/year for Apple Developer, CI secrets management for signing certs, notarization adds ~2min to CI builds.
+
 ### Future (not in v1)
 
 - Dark mode

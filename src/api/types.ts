@@ -41,3 +41,12 @@ export interface Employee {
   name: string;
   email: string;
 }
+
+export interface Allocation {
+  projectId: string;
+  projectName: string;
+  /** Total allocated minutes for this period */
+  allocatedMinutes: number;
+  startDate: string;
+  endDate: string;
+}
