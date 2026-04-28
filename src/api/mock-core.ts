@@ -42,30 +42,22 @@ export const MOCK_ALLOCATIONS: Allocation[] = [
   {
     projectId: "p1",
     projectName: "Fokus",
-    allocatedMinutes: 4800, // 80h for April
     startDate: "2026-04-01",
-    endDate: "2026-04-30",
+    endDate: "2026-06-30",
+    percentage: 50,
+    hours: 400,
+    allocationMode: "allocation",
+    periods: [{ percentage: 50, startDate: "2026-04-01" }],
   },
   {
     projectId: "p2",
     projectName: "DHL - PIL",
-    allocatedMinutes: 2400, // 40h for April
     startDate: "2026-04-01",
     endDate: "2026-04-30",
-  },
-  {
-    projectId: "p3",
-    projectName: "maverick",
-    allocatedMinutes: 600, // 10h for April
-    startDate: "2026-04-14",
-    endDate: "2026-04-30",
-  },
-  {
-    projectId: "p5",
-    projectName: "QTE - möten",
-    allocatedMinutes: 480, // 8h for April
-    startDate: "2026-04-01",
-    endDate: "2026-04-30",
+    percentage: 25,
+    hours: 160,
+    allocationMode: "allocation",
+    periods: [{ percentage: 25, startDate: "2026-04-01" }],
   },
 ];
 

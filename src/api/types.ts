@@ -37,11 +37,23 @@ export interface Employee {
   email: string;
 }
 
+export interface AllocationPeriod {
+  /** Allocation percentage (0-100) for this period */
+  percentage: number;
+  startDate: string;
+}
+
 export interface Allocation {
   projectId: string;
   projectName: string;
-  /** Total allocated minutes for this period */
-  allocatedMinutes: number;
   startDate: string;
   endDate: string;
+  /** Overall allocation percentage */
+  percentage: number;
+  /** Total hours for this opening */
+  hours: number;
+  /** Allocation mode: "allocation" (percentage) or "hours" */
+  allocationMode: string;
+  /** Allocation periods with changing percentages */
+  periods: AllocationPeriod[];
 }

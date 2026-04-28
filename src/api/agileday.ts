@@ -411,9 +411,34 @@ export function createAgileDayProvider(
       await apiFetch(`/v1/time_entry?ids=${idsParam}`, { method: "DELETE" });
     },
 
-    async getAllocations(_employeeId: string): Promise<Allocation[]> {
-      // TODO: Parse allocation data from openings for the allocation chart
-      return [];
+    async getAllocations(employeeId: string): Promise<Allocation[]> {
+      const filter = JSON.stringify({ candidate: { in: [employeeId] } });
+      const data = await apiFetch<{
+        openings: Array<{
+          projectlikeId: string;
+          projectlikeName: string;
+          allocation: number;
+          allocationMode: string;
+          allocations: Array<{ allocation: number; startDate: string }>;
+          startDate: string;
+          endDate: string;
+          hours: number;
+        }>;
+      }>(`/v2/opening?limit=100&filter=${encodeURIComponent(filter)}`);
+
+      return data.openings.map((o) => ({
+        projectId: o.projectlikeId,
+        projectName: o.projectlikeName,
+        startDate: o.startDate,
+        endDate: o.endDate,
+        percentage: o.allocation,
+        hours: o.hours,
+        allocationMode: o.allocationMode,
+        periods: o.allocations.map((a) => ({
+          percentage: a.allocation,
+          startDate: a.startDate,
+        })),
+      }));
     },
 
     async getMyProjectIds(employeeId: string): Promise<string[]> {
