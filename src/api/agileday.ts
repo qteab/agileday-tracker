@@ -193,31 +193,50 @@ export function createAgileDayProvider(
       startDate: string,
       endDate: string
     ): Promise<TimeEntry[]> {
-      const entries = await apiFetch<
-        Array<{
-          id: string;
-          description: string;
-          projectId: string;
-          projectName: string;
-          taskId?: string;
-          date: string;
-          minutes: number;
-          status: string;
-        }>
-      >(`/v1/time_entry/employee/id/${employeeId}?startDate=${startDate}&endDate=${endDate}`);
+      // Use timesheets summary endpoint — returns all statuses including unsaved
+      // Fetch each month in the range
+      const startMonth = startDate.substring(0, 7) + "-01";
+      const endMonth = endDate.substring(0, 7) + "-01";
 
-      return entries.map((e) => ({
-        id: e.id,
-        description: e.description ?? "",
-        projectId: e.projectId,
-        projectName: e.projectName,
-        taskId: e.taskId,
-        date: e.date,
-        startTime: `${e.date}T09:00:00.000Z`, // AgileDay doesn't store start/end times
-        minutes: e.minutes,
-        status: e.status as TimeEntry["status"],
-        syncStatus: "synced" as const,
-      }));
+      type SummaryEntry = {
+        date: string;
+        project: string;
+        projectId: string;
+        customer: string;
+        minutes: number;
+        status: string;
+        employeeId: string;
+      };
+
+      const fetchMonth = (month: string) =>
+        apiFetch<{ entries: SummaryEntry[] }>(
+          `/v1/timesheets/${employeeId}/summary?date=${month}&intervalType=day&month=${month}`
+        ).then((d) => d.entries);
+
+      // Collect unique months to fetch
+      const months = new Set<string>();
+      months.add(startMonth);
+      months.add(endMonth);
+
+      const allEntries: SummaryEntry[] = [];
+      for (const month of months) {
+        const entries = await fetchMonth(month);
+        allEntries.push(...entries);
+      }
+
+      return allEntries
+        .filter((e) => e.minutes > 0 && e.date >= startDate && e.date <= endDate)
+        .map((e, i) => ({
+          id: `${e.projectId}-${e.date}-${i}`,
+          description: "",
+          projectId: e.projectId,
+          projectName: e.project,
+          date: e.date,
+          startTime: `${e.date}T09:00:00.000Z`,
+          minutes: e.minutes,
+          status: e.status as TimeEntry["status"],
+          syncStatus: "synced" as const,
+        }));
     },
 
     async createTimeEntry(
