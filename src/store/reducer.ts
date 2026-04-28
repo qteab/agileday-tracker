@@ -11,6 +11,7 @@ export interface TimerState {
 export interface AppState {
   employee: Employee | null;
   projects: Project[];
+  myProjectIds: string[];
   tasks: Task[];
   entries: TimeEntry[];
   timer: TimerState;
@@ -21,6 +22,7 @@ export interface AppState {
 export const initialState: AppState = {
   employee: null,
   projects: [],
+  myProjectIds: [],
   tasks: [],
   entries: [],
   timer: {
@@ -37,6 +39,7 @@ export const initialState: AppState = {
 export type AppAction =
   | { type: "SET_EMPLOYEE"; payload: Employee }
   | { type: "SET_PROJECTS"; payload: Project[] }
+  | { type: "SET_MY_PROJECT_IDS"; payload: string[] }
   | { type: "SET_TASKS"; payload: Task[] }
   | { type: "SET_ENTRIES"; payload: TimeEntry[] }
   | { type: "ADD_ENTRY"; payload: TimeEntry }
@@ -53,6 +56,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, employee: action.payload };
     case "SET_PROJECTS":
       return { ...state, projects: action.payload };
+    case "SET_MY_PROJECT_IDS":
+      return { ...state, myProjectIds: action.payload };
     case "SET_TASKS":
       return { ...state, tasks: action.payload };
     case "SET_ENTRIES":

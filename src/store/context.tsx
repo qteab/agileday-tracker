@@ -147,9 +147,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         dispatch({ type: "SET_EMPLOYEE", payload: employee });
 
-        const projects = await api!.getProjects();
+        const [projects, myProjectIds] = await Promise.all([
+          api!.getProjects(),
+          api!.getMyProjectIds(employee.id),
+        ]);
         if (cancelled) return;
         dispatch({ type: "SET_PROJECTS", payload: projects });
+        dispatch({ type: "SET_MY_PROJECT_IDS", payload: myProjectIds });
 
         const endDate = new Date().toISOString().split("T")[0];
         const startDate = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];

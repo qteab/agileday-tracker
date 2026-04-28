@@ -123,5 +123,9 @@ export function createMockProvider(
     async getAllocations(_employeeId: string) {
       return allocations;
     },
+
+    async getMyProjectIds(_employeeId: string) {
+      return projects.map((p) => p.id);
+    },
   };
 }

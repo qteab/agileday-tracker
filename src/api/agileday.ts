@@ -325,9 +325,18 @@ export function createAgileDayProvider(
     },
 
     async getAllocations(_employeeId: string): Promise<Allocation[]> {
-      // TODO: Map to AgileDay's opening/allocation endpoints when we identify
-      // the right one. For now return empty — allocations are optional.
+      // TODO: Parse allocation data from openings for the allocation chart
       return [];
+    },
+
+    async getMyProjectIds(employeeId: string): Promise<string[]> {
+      const filter = JSON.stringify({ candidate: { in: [employeeId] } });
+      const data = await apiFetch<{
+        openings: Array<{ projectlikeId: string; status: string }>;
+      }>(`/v2/opening?limit=100&filter=${encodeURIComponent(filter)}`);
+
+      const uniqueIds = [...new Set(data.openings.map((o) => o.projectlikeId))];
+      return uniqueIds;
     },
   };
 }

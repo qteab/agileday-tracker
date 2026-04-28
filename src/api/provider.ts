@@ -12,4 +12,5 @@ export interface ApiProvider {
   updateTimeEntry(employeeId: string, id: string, updates: Partial<TimeEntry>): Promise<TimeEntry>;
   deleteTimeEntry(ids: string[]): Promise<void>;
   getAllocations(employeeId: string): Promise<Allocation[]>;
+  getMyProjectIds(employeeId: string): Promise<string[]>;
 }

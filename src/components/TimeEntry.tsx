@@ -21,7 +21,7 @@ export function TimeEntry({ entry, onContinue }: TimeEntryProps) {
         className="group flex items-center gap-3 px-3 py-3 hover:bg-bg/40 transition-colors cursor-pointer"
       >
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-text truncate">
+          <p className="text-sm text-text truncate" title={entry.description || undefined}>
             {entry.description || <span className="text-text-muted">+ Add description</span>}
           </p>
           <div className="flex items-center gap-1.5 mt-0.5">
@@ -31,7 +31,9 @@ export function TimeEntry({ entry, onContinue }: TimeEntryProps) {
                   className="w-2 h-2 rounded-full shrink-0"
                   style={{ backgroundColor: project.color }}
                 />
-                <span className="text-xs text-text-muted truncate">{project.name}</span>
+                <span className="text-xs text-text-muted truncate" title={project.name}>
+                  {project.name}
+                </span>
               </>
             )}
           </div>
