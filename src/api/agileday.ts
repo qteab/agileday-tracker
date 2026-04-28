@@ -219,22 +219,12 @@ export function createAgileDayProvider(
         status: string;
       };
 
-      // 1. Fetch detailed entries (has descriptions + IDs, but may miss some statuses)
-      //    Also fetch Saved entries separately — these are entries we created that aren't submitted yet
-      const [defaultEntries, savedEntries] = await Promise.all([
-        apiFetch<RawEntry[]>(
-          `/v1/time_entry/employee/id/${employeeId}?startDate=${startDate}&endDate=${endDate}`
-        ).catch(() => [] as RawEntry[]),
-        apiFetch<RawEntry[]>(
-          `/v1/time_entry/employee/id/${employeeId}?startDate=${startDate}&endDate=${endDate}&status=Saved`
-        ).catch(() => [] as RawEntry[]),
-      ]);
-      // Merge and deduplicate by ID
-      const entryMap = new Map<string, RawEntry>();
-      for (const e of [...defaultEntries, ...savedEntries]) {
-        entryMap.set(e.id, e);
-      }
-      const detailedEntries = [...entryMap.values()];
+      // 1. Fetch detailed entries using the /updated endpoint
+      //    This returns ALL entries (including SAVED/unsaved) with descriptions
+      const updatedAfter = new Date(startDate + "T00:00:00Z").toISOString();
+      const detailedEntries = await apiFetch<RawEntry[]>(
+        `/v1/time_entry/employee/id/${employeeId}/updated?updatedAfter=${updatedAfter}`
+      ).catch(() => [] as RawEntry[]);
 
       // 2. Fetch timesheets summary (has all statuses, but no descriptions)
       const startMonth = startDate.substring(0, 7) + "-01";

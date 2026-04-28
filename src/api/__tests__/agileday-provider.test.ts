@@ -200,7 +200,8 @@ describe("getTasks", () => {
 });
 
 describe("getTimeEntries", () => {
-  it("calls GET with employee ID and date range", async () => {
+  it("fetches from /updated endpoint and timesheets summary", async () => {
+    // First call: /updated endpoint (detailed entries with descriptions)
     mockFetch.mockResolvedValueOnce(
       jsonResponse([
         {
@@ -214,13 +215,13 @@ describe("getTimeEntries", () => {
         },
       ])
     );
+    // Second call: timesheets summary
+    mockFetch.mockResolvedValueOnce(jsonResponse({ entries: [] }));
 
     const entries = await provider.getTimeEntries("emp-1", "2026-04-01", "2026-04-30");
 
     const [url] = mockFetch.mock.calls[0];
-    expect(url).toBe(
-      "https://qvik.agileday.io/api/v1/time_entry/employee/id/emp-1?startDate=2026-04-01&endDate=2026-04-30"
-    );
+    expect(url).toContain("/v1/time_entry/employee/id/emp-1/updated");
     expect(entries).toHaveLength(1);
     expect(entries[0].syncStatus).toBe("synced");
     expect(entries[0].description).toBe("work");
@@ -240,6 +241,7 @@ describe("getTimeEntries", () => {
         },
       ])
     );
+    mockFetch.mockResolvedValueOnce(jsonResponse({ entries: [] }));
 
     const entries = await provider.getTimeEntries("emp-1", "2026-04-24", "2026-04-24");
     expect(entries[0].description).toBe("");
