@@ -214,9 +214,21 @@ export function createAgileDayProvider(
       };
 
       // 1. Fetch detailed entries (has descriptions + IDs, but may miss some statuses)
-      const detailedEntries = await apiFetch<RawEntry[]>(
-        `/v1/time_entry/employee/id/${employeeId}?startDate=${startDate}&endDate=${endDate}`
-      ).catch(() => [] as RawEntry[]);
+      //    Also fetch Saved entries separately — these are entries we created that aren't submitted yet
+      const [defaultEntries, savedEntries] = await Promise.all([
+        apiFetch<RawEntry[]>(
+          `/v1/time_entry/employee/id/${employeeId}?startDate=${startDate}&endDate=${endDate}`
+        ).catch(() => [] as RawEntry[]),
+        apiFetch<RawEntry[]>(
+          `/v1/time_entry/employee/id/${employeeId}?startDate=${startDate}&endDate=${endDate}&status=Saved`
+        ).catch(() => [] as RawEntry[]),
+      ]);
+      // Merge and deduplicate by ID
+      const entryMap = new Map<string, RawEntry>();
+      for (const e of [...defaultEntries, ...savedEntries]) {
+        entryMap.set(e.id, e);
+      }
+      const detailedEntries = [...entryMap.values()];
 
       // 2. Fetch timesheets summary (has all statuses, but no descriptions)
       const startMonth = startDate.substring(0, 7) + "-01";
@@ -304,13 +316,10 @@ export function createAgileDayProvider(
         },
       ];
 
-      const results = await apiFetch<RawEntry[]>(
-        `/v1/time_entry/employee/id/${employeeId}`,
-        {
-          method: "POST",
-          body: JSON.stringify(body),
-        }
-      );
+      const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
 
       if (results.length === 0) throw new Error("No entry returned from API");
       const created = results[0];

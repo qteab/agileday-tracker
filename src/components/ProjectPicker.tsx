@@ -79,8 +79,11 @@ export function ProjectPicker({ selectedId, onSelect }: ProjectPickerProps) {
       </button>
 
       {open && (
-        <div className="fixed left-3 right-3 mt-1 bg-white rounded-xl shadow-lg border border-border z-50 overflow-hidden"
-          style={{ top: ref.current ? ref.current.getBoundingClientRect().bottom + "px" : undefined }}
+        <div
+          className="fixed left-3 right-3 mt-1 bg-white rounded-xl shadow-lg border border-border z-50 overflow-hidden"
+          style={{
+            top: ref.current ? ref.current.getBoundingClientRect().bottom + "px" : undefined,
+          }}
         >
           {/* Search input */}
           <div className="p-2.5 border-b border-divider">
@@ -96,7 +99,9 @@ export function ProjectPicker({ selectedId, onSelect }: ProjectPickerProps) {
 
           {/* Section label */}
           <div className="px-3 py-1.5 text-[10px] font-semibold text-text-muted uppercase tracking-wide">
-            {search.trim() ? `Results (${searchResults.length})` : `My projects (${myProjects.length})`}
+            {search.trim()
+              ? `Results (${searchResults.length})`
+              : `My projects (${myProjects.length})`}
           </div>
 
           {/* Project list */}
