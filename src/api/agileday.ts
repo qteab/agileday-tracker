@@ -193,10 +193,16 @@ export function createAgileDayProvider(
       startDate: string,
       endDate: string
     ): Promise<TimeEntry[]> {
-      // Use timesheets summary endpoint — returns all statuses including unsaved
-      // Fetch each month in the range
-      const startMonth = startDate.substring(0, 7) + "-01";
-      const endMonth = endDate.substring(0, 7) + "-01";
+      type RawEntry = {
+        id: string;
+        description: string;
+        projectId: string;
+        projectName: string;
+        taskId?: string;
+        date: string;
+        minutes: number;
+        status: string;
+      };
 
       type SummaryEntry = {
         date: string;
@@ -205,44 +211,133 @@ export function createAgileDayProvider(
         customer: string;
         minutes: number;
         status: string;
-        employeeId: string;
       };
 
-      const fetchMonth = (month: string) =>
-        apiFetch<{ entries: SummaryEntry[] }>(
-          `/v1/timesheets/${employeeId}/summary?date=${month}&intervalType=day&month=${month}`
-        ).then((d) => d.entries);
+      // 1. Fetch detailed entries (has descriptions + IDs, but may miss some statuses)
+      const detailedEntries = await apiFetch<RawEntry[]>(
+        `/v1/time_entry/employee/id/${employeeId}?startDate=${startDate}&endDate=${endDate}`
+      ).catch(() => [] as RawEntry[]);
 
-      // Collect unique months to fetch
-      const months = new Set<string>();
-      months.add(startMonth);
-      months.add(endMonth);
+      // 2. Fetch timesheets summary (has all statuses, but no descriptions)
+      const startMonth = startDate.substring(0, 7) + "-01";
+      const endMonth = endDate.substring(0, 7) + "-01";
+      const months = new Set([startMonth, endMonth]);
 
-      const allEntries: SummaryEntry[] = [];
+      const summaryEntries: SummaryEntry[] = [];
       for (const month of months) {
-        const entries = await fetchMonth(month);
-        allEntries.push(...entries);
+        const data = await apiFetch<{ entries: SummaryEntry[] }>(
+          `/v1/timesheets/${employeeId}/summary?date=${month}&intervalType=day&month=${month}`
+        ).catch(() => ({ entries: [] as SummaryEntry[] }));
+        summaryEntries.push(...data.entries);
       }
 
-      return allEntries
-        .filter((e) => e.minutes > 0 && e.date >= startDate && e.date <= endDate)
-        .map((e, i) => ({
-          id: `${e.projectId}-${e.date}-${i}`,
-          description: "",
+      // 3. Build result: use detailed entries as primary (they have descriptions + IDs)
+      const result: TimeEntry[] = detailedEntries
+        .filter((e) => e.date >= startDate && e.date <= endDate)
+        .map((e) => ({
+          id: e.id,
+          description: e.description ?? "",
           projectId: e.projectId,
-          projectName: e.project,
+          projectName: e.projectName,
+          taskId: e.taskId,
           date: e.date,
           startTime: `${e.date}T09:00:00.000Z`,
           minutes: e.minutes,
           status: e.status as TimeEntry["status"],
           syncStatus: "synced" as const,
         }));
+
+      // 4. Add entries from summary that aren't covered by detailed entries
+      //    (e.g. entries in SAVED/NEW status that time_entry endpoint doesn't return)
+      const detailedByProjectDate = new Map<string, number>();
+      for (const e of result) {
+        const key = `${e.projectId}::${e.date}`;
+        detailedByProjectDate.set(key, (detailedByProjectDate.get(key) ?? 0) + e.minutes);
+      }
+
+      for (const s of summaryEntries) {
+        if (s.minutes <= 0 || s.date < startDate || s.date > endDate) continue;
+        const key = `${s.projectId}::${s.date}`;
+        const detailedMinutes = detailedByProjectDate.get(key) ?? 0;
+
+        if (detailedMinutes < s.minutes) {
+          // There are minutes in the summary not covered by detailed entries
+          result.push({
+            id: `summary-${s.projectId}-${s.date}`,
+            description: "",
+            projectId: s.projectId,
+            projectName: s.project,
+            date: s.date,
+            startTime: `${s.date}T09:00:00.000Z`,
+            minutes: s.minutes - detailedMinutes,
+            status: s.status as TimeEntry["status"],
+            syncStatus: "synced" as const,
+          });
+        }
+      }
+
+      return result;
     },
 
     async createTimeEntry(
       employeeId: string,
       entry: Omit<TimeEntry, "id" | "syncStatus">
     ): Promise<TimeEntry> {
+      // Check if there's an existing entry for this project+date+description
+      // If so, update it instead of creating a new one
+      type RawEntry = {
+        id: string;
+        date: string;
+        minutes: number;
+        status: string;
+        description?: string;
+        projectId: string;
+        taskId?: string;
+      };
+
+      try {
+        const existing = await apiFetch<RawEntry[]>(
+          `/v1/time_entry/employee/id/${employeeId}?startDate=${entry.date}&endDate=${entry.date}&status=Saved`
+        );
+
+        const match = existing.find(
+          (e) =>
+            e.projectId === entry.projectId &&
+            (e.description ?? "") === (entry.description ?? "") &&
+            (e.taskId ?? "") === (entry.taskId ?? "")
+        );
+
+        if (match) {
+          // Update existing entry — add minutes
+          const updatedMinutes = match.minutes + entry.minutes;
+          const results = await apiFetch<RawEntry[]>(
+            `/v1/time_entry/employee/id/${employeeId}`,
+            {
+              method: "PATCH",
+              body: JSON.stringify([{ id: match.id, minutes: updatedMinutes }]),
+            }
+          );
+
+          const updated = results[0] ?? match;
+          return {
+            id: updated.id,
+            description: updated.description ?? entry.description ?? "",
+            projectId: updated.projectId,
+            projectName: entry.projectName,
+            taskId: updated.taskId,
+            date: updated.date,
+            startTime: entry.startTime,
+            endTime: entry.endTime,
+            minutes: updated.minutes,
+            status: updated.status as TimeEntry["status"],
+            syncStatus: "synced",
+          };
+        }
+      } catch {
+        // If lookup fails, fall through to create new
+      }
+
+      // No existing match — create new entry
       const body = [
         {
           date: entry.date,
@@ -254,20 +349,13 @@ export function createAgileDayProvider(
         },
       ];
 
-      const results = await apiFetch<
-        Array<{
-          id: string;
-          date: string;
-          minutes: number;
-          status: string;
-          description?: string;
-          projectId: string;
-          taskId?: string;
-        }>
-      >(`/v1/time_entry/employee/id/${employeeId}`, {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
+      const results = await apiFetch<RawEntry[]>(
+        `/v1/time_entry/employee/id/${employeeId}`,
+        {
+          method: "POST",
+          body: JSON.stringify(body),
+        }
+      );
 
       if (results.length === 0) throw new Error("No entry returned from API");
       const created = results[0];
