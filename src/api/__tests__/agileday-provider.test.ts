@@ -249,7 +249,10 @@ describe("getTimeEntries", () => {
 });
 
 describe("createTimeEntry", () => {
-  it("POSTs array to /v1/time_entry/employee/id/{id}", async () => {
+  it("queries /updated first, then POSTs if no match", async () => {
+    // First call: /updated query returns no matches
+    mockFetch.mockResolvedValueOnce(jsonResponse([]));
+    // Second call: POST creates entry
     mockFetch.mockResolvedValueOnce(
       jsonResponse([
         {
@@ -273,44 +276,61 @@ describe("createTimeEntry", () => {
       status: "SAVED",
     });
 
-    const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe("https://qvik.agileday.io/api/v1/time_entry/employee/id/emp-1");
+    // First call was /updated query
+    expect(mockFetch.mock.calls[0][0]).toContain("/updated");
+    // Second call was POST
+    const [url, opts] = mockFetch.mock.calls[1];
+    expect(url).toContain("/v1/time_entry/employee/id/emp-1");
     expect(opts.method).toBe("POST");
-
-    const body = JSON.parse(opts.body);
-    expect(body).toHaveLength(1);
-    expect(body[0].date).toBe("2026-04-24");
-    expect(body[0].minutes).toBe(60);
-    expect(body[0].projectId).toBe("p1");
-    expect(body[0].description).toBe("dev");
-
     expect(entry.id).toBe("new-1");
     expect(entry.syncStatus).toBe("synced");
   });
 
-  it("omits optional fields when not provided", async () => {
+  it("PATCHes existing entry when one match found", async () => {
+    // /updated returns one matching entry
     mockFetch.mockResolvedValueOnce(
       jsonResponse([
-        { id: "new-2", date: "2026-04-24", minutes: 30, status: "SAVED", projectId: "p1" },
+        {
+          id: "existing-1",
+          date: "2026-04-24",
+          minutes: 30,
+          status: "SAVED",
+          description: "dev",
+          projectId: "p1",
+        },
+      ])
+    );
+    // PATCH response
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "existing-1",
+          date: "2026-04-24",
+          minutes: 90,
+          status: "SAVED",
+          description: "dev",
+          projectId: "p1",
+        },
       ])
     );
 
-    await provider.createTimeEntry("emp-1", {
-      description: "",
+    const entry = await provider.createTimeEntry("emp-1", {
+      description: "dev",
       projectId: "p1",
       date: "2026-04-24",
       startTime: "2026-04-24T09:00:00Z",
-      minutes: 30,
+      minutes: 60,
       status: "SAVED",
     });
 
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body[0]).not.toHaveProperty("taskId");
-    expect(body[0]).not.toHaveProperty("description"); // empty string is falsy
+    const [, opts] = mockFetch.mock.calls[1];
+    expect(opts.method).toBe("PATCH");
+    expect(entry.minutes).toBe(90); // 30 existing + 60 new
   });
 
-  it("throws when API returns empty array", async () => {
-    mockFetch.mockResolvedValueOnce(jsonResponse([]));
+  it("throws when POST returns empty array", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse([])); // /updated
+    mockFetch.mockResolvedValueOnce(jsonResponse([])); // POST returns empty
     await expect(
       provider.createTimeEntry("emp-1", {
         description: "test",

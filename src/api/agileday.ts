@@ -64,10 +64,7 @@ export function createAgileDayProvider(
   }
 
   // Cache descriptions for entries we create — the API doesn't return them immediately
-  // Key: "entryId" → description
   const descriptionCache = new Map<string, string>();
-  // Also cache by projectId::date::description → entryId for merge lookups
-  const entryIdCache = new Map<string, string>();
 
   let resolvedFetch: typeof globalThis.fetch | null = fetchOverride ?? null;
 
@@ -255,9 +252,11 @@ export function createAgileDayProvider(
           syncStatus: "synced" as const,
         }));
 
-      // 4. Enrich entries with cached descriptions (from entries we created this session)
+      // 4. Enrich entries with cached descriptions
       for (const e of result) {
-        if (!e.description && descriptionCache.has(e.id)) {
+        if (e.description) {
+          descriptionCache.set(e.id, e.description);
+        } else if (descriptionCache.has(e.id)) {
           e.description = descriptionCache.get(e.id)!;
         }
       }
@@ -276,18 +275,9 @@ export function createAgileDayProvider(
         const detailedMinutes = detailedByProjectDate.get(key) ?? 0;
 
         if (detailedMinutes < s.minutes) {
-          // There are minutes in the summary not covered by detailed entries
-          // Try to find a cached description for this project+date
-          let cachedDesc = "";
-          for (const [cacheKey, _id] of entryIdCache) {
-            if (cacheKey.startsWith(`${s.projectId}::${s.date}::`)) {
-              cachedDesc = cacheKey.split("::")[2] ?? "";
-              break;
-            }
-          }
           result.push({
             id: `summary-${s.projectId}-${s.date}`,
-            description: cachedDesc,
+            description: "",
             projectId: s.projectId,
             projectName: s.project,
             date: s.date,
@@ -316,29 +306,85 @@ export function createAgileDayProvider(
         taskId?: string;
       };
 
-      const body = [
-        {
-          date: entry.date,
-          minutes: entry.minutes,
-          status: entry.status || "SAVED",
-          projectId: entry.projectId,
-          ...(entry.taskId ? { taskId: entry.taskId } : {}),
-          ...(entry.description ? { description: entry.description } : {}),
-        },
-      ];
+      const desc = entry.description ?? "";
 
-      const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
+      // 1. Query for existing SAVED entries with same project+date+description
+      const updatedAfter = new Date(entry.date + "T00:00:00Z").toISOString();
+      const allRecent = await apiFetch<RawEntry[]>(
+        `/v1/time_entry/employee/id/${employeeId}/updated?updatedAfter=${updatedAfter}`
+      ).catch(() => [] as RawEntry[]);
 
-      if (results.length === 0) throw new Error("No entry returned from API");
-      const created = results[0];
-      const desc = created.description ?? entry.description ?? "";
+      const matches = allRecent.filter(
+        (e) =>
+          e.projectId === entry.projectId &&
+          e.date === entry.date &&
+          (e.description ?? "") === desc &&
+          e.status === "SAVED"
+      );
 
-      // Cache the description so we can show it on reload
+      let created: RawEntry;
+
+      if (matches.length === 1) {
+        // 2. One match — PATCH to add this session's minutes
+        const existing = matches[0];
+        const newTotal = existing.minutes + entry.minutes;
+        const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
+          method: "PATCH",
+          body: JSON.stringify([{ id: existing.id, minutes: newTotal }]),
+        });
+        if (results.length === 0) throw new Error("No entry returned from API");
+        created = results[0];
+      } else if (matches.length > 1) {
+        // 3. Multiple matches — consolidate: create new with total, delete old
+        const totalExisting = matches.reduce((s, e) => s + e.minutes, 0);
+        const newTotal = totalExisting + entry.minutes;
+
+        // Create the consolidated entry first (safer — if delete fails, we have duplicates not data loss)
+        const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
+          method: "POST",
+          body: JSON.stringify([
+            {
+              date: entry.date,
+              minutes: newTotal,
+              status: "SAVED",
+              projectId: entry.projectId,
+              ...(entry.taskId ? { taskId: entry.taskId } : {}),
+              ...(desc ? { description: desc } : {}),
+            },
+          ]),
+        });
+        if (results.length === 0) throw new Error("No entry returned from API");
+        created = results[0];
+
+        // Delete the old duplicates one by one (batch delete may fail)
+        for (const old of matches) {
+          await apiFetch(`/v1/time_entry?ids=${old.id}`, {
+            method: "DELETE",
+          }).catch(() => {
+            // Non-fatal — worst case is a leftover duplicate
+          });
+        }
+      } else {
+        // 4. No matches — create new entry
+        const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
+          method: "POST",
+          body: JSON.stringify([
+            {
+              date: entry.date,
+              minutes: entry.minutes,
+              status: "SAVED",
+              projectId: entry.projectId,
+              ...(entry.taskId ? { taskId: entry.taskId } : {}),
+              ...(desc ? { description: desc } : {}),
+            },
+          ]),
+        });
+        if (results.length === 0) throw new Error("No entry returned from API");
+        created = results[0];
+      }
+
+      // Cache for description lookups on reload
       descriptionCache.set(created.id, desc);
-      entryIdCache.set(`${created.projectId}::${created.date}::${desc}`, created.id);
 
       return {
         id: created.id,

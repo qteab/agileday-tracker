@@ -69,43 +69,20 @@ export function useTimer() {
     };
     dispatch({ type: "ADD_ENTRY", payload: localEntry });
 
-    // 2. Sync to AgileDay: aggregate all local sessions for this description+project+date
-    const allSessions = [...state.entries, localEntry].filter(
-      (e) => e.projectId === projectId && e.date === date && e.description === description
-    );
-    const totalMinutes = allSessions.reduce((sum, e) => sum + e.minutes, 0);
-
-    // 3. Find existing AgileDay entry (has a real UUID, not local) to update
-    const agileEntry = allSessions.find(
-      (e) => !e.id.startsWith("summary-") && e.syncStatus === "synced"
-    );
-
     try {
-      if (agileEntry) {
-        // Update existing AgileDay entry with total minutes
-        await api.updateTimeEntry(employee.id, agileEntry.id, {
-          minutes: totalMinutes,
-        });
-      } else {
-        // Create new AgileDay entry with total minutes
-        const created = await api.createTimeEntry(employee.id, {
-          description,
-          projectId: projectId!,
-          projectName: project?.name,
-          taskId: taskId ?? undefined,
-          date,
-          startTime,
-          endTime,
-          minutes: totalMinutes,
-          status: "SAVED",
-        });
-        // Update the local entry with the real AgileDay ID
-        dispatch({
-          type: "UPDATE_ENTRY",
-          payload: { id: localEntry.id, updates: { id: created.id, syncStatus: "synced" } },
-        });
-      }
-      // Mark local entry as synced
+      // Send only THIS session's minutes — the provider handles
+      // finding existing entries and adding to their total
+      await api.createTimeEntry(employee.id, {
+        description,
+        projectId: projectId!,
+        projectName: project?.name,
+        taskId: taskId ?? undefined,
+        date,
+        startTime,
+        endTime,
+        minutes,
+        status: "SAVED",
+      });
       dispatch({
         type: "UPDATE_ENTRY",
         payload: { id: localEntry.id, updates: { syncStatus: "synced" } },
