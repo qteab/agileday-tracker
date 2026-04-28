@@ -26,7 +26,7 @@ export function useTimer() {
   }, [timer.isRunning, timer.startTime]);
 
   const start = useCallback(() => {
-    if (!timer.projectId) return;
+    if (!timer.projectId || !timer.taskId) return;
     dispatch({
       type: "SET_TIMER",
       payload: {
@@ -34,7 +34,7 @@ export function useTimer() {
         startTime: new Date().toISOString(),
       },
     });
-  }, [dispatch, timer.projectId]);
+  }, [dispatch, timer.projectId, timer.taskId]);
 
   const stop = useCallback(async () => {
     if (!timer.isRunning || !timer.startTime || !employee) return;
@@ -53,28 +53,42 @@ export function useTimer() {
     // Reset timer immediately so user can start a new one
     dispatch({ type: "RESET_TIMER" });
 
-    try {
-      // Check if there's an existing entry in local state to update
-      const existingEntry = state.entries.find(
-        (e) =>
-          e.projectId === projectId &&
-          e.date === date &&
-          e.description === description &&
-          !e.id.startsWith("summary-") // don't try to update summary-only entries
-      );
+    // 1. Always add individual session to local state (for the UI)
+    const localEntry = {
+      id: crypto.randomUUID(),
+      description,
+      projectId: projectId!,
+      projectName: project?.name,
+      taskId: taskId ?? undefined,
+      date,
+      startTime,
+      endTime,
+      minutes,
+      status: "SAVED" as const,
+      syncStatus: "pending" as const,
+    };
+    dispatch({ type: "ADD_ENTRY", payload: localEntry });
 
-      let entry;
-      if (existingEntry) {
-        // Update existing entry — add minutes
-        entry = await api.updateTimeEntry(employee.id, existingEntry.id, {
-          minutes: existingEntry.minutes + minutes,
-        });
-        dispatch({
-          type: "UPDATE_ENTRY",
-          payload: { id: existingEntry.id, updates: { minutes: entry.minutes } },
+    // 2. Sync to AgileDay: aggregate all local sessions for this description+project+date
+    const allSessions = [...state.entries, localEntry].filter(
+      (e) => e.projectId === projectId && e.date === date && e.description === description
+    );
+    const totalMinutes = allSessions.reduce((sum, e) => sum + e.minutes, 0);
+
+    // 3. Find existing AgileDay entry (has a real UUID, not local) to update
+    const agileEntry = allSessions.find(
+      (e) => !e.id.startsWith("summary-") && e.syncStatus === "synced"
+    );
+
+    try {
+      if (agileEntry) {
+        // Update existing AgileDay entry with total minutes
+        await api.updateTimeEntry(employee.id, agileEntry.id, {
+          minutes: totalMinutes,
         });
       } else {
-        entry = await api.createTimeEntry(employee.id, {
+        // Create new AgileDay entry with total minutes
+        const created = await api.createTimeEntry(employee.id, {
           description,
           projectId: projectId!,
           projectName: project?.name,
@@ -82,27 +96,25 @@ export function useTimer() {
           date,
           startTime,
           endTime,
-          minutes,
+          minutes: totalMinutes,
           status: "SAVED",
         });
-        dispatch({ type: "ADD_ENTRY", payload: entry });
+        // Update the local entry with the real AgileDay ID
+        dispatch({
+          type: "UPDATE_ENTRY",
+          payload: { id: localEntry.id, updates: { id: created.id, syncStatus: "synced" } },
+        });
       }
+      // Mark local entry as synced
+      dispatch({
+        type: "UPDATE_ENTRY",
+        payload: { id: localEntry.id, updates: { syncStatus: "synced" } },
+      });
     } catch (err) {
-      // Save locally as unsaved for manual retry
-      const unsavedEntry = {
-        id: crypto.randomUUID(),
-        description,
-        projectId: projectId!,
-        projectName: project?.name,
-        taskId: taskId ?? undefined,
-        date,
-        startTime,
-        endTime,
-        minutes,
-        status: "SAVED" as const,
-        syncStatus: "unsaved" as const,
-      };
-      dispatch({ type: "ADD_ENTRY", payload: unsavedEntry });
+      dispatch({
+        type: "UPDATE_ENTRY",
+        payload: { id: localEntry.id, updates: { syncStatus: "unsaved" } },
+      });
       const reason = err instanceof Error ? err.message : "Unknown error";
       dispatch({
         type: "SET_ERROR",

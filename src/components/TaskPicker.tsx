@@ -57,21 +57,12 @@ export function TaskPicker({ projectId, selectedId, onSelect }: TaskPickerProps)
           />
         </svg>
         <span className={selected ? "text-text" : "text-text-muted"}>
-          {selected ? selected.name : "Task (optional)"}
+          {selected ? selected.name : "Select task"}
         </span>
       </button>
 
       {open && (
         <div className="absolute top-full left-0 mt-1 w-56 bg-white rounded-lg shadow-lg border border-border z-50 py-1 max-h-48 overflow-y-auto">
-          <button
-            onClick={() => {
-              onSelect(null);
-              setOpen(false);
-            }}
-            className="w-full text-left px-3 py-2 text-sm text-text-muted hover:bg-bg transition-colors"
-          >
-            No task
-          </button>
           {state.tasks
             .filter((t) => t.active)
             .map((task) => (
