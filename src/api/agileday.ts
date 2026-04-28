@@ -92,6 +92,7 @@ export function createAgileDayProvider(
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
+        Origin: new URL(config.apiBaseUrl).origin,
         ...options.headers,
       },
     });
