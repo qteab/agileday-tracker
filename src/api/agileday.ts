@@ -283,8 +283,6 @@ export function createAgileDayProvider(
       employeeId: string,
       entry: Omit<TimeEntry, "id" | "syncStatus">
     ): Promise<TimeEntry> {
-      // Check if there's an existing entry for this project+date+description
-      // If so, update it instead of creating a new one
       type RawEntry = {
         id: string;
         date: string;
@@ -295,49 +293,6 @@ export function createAgileDayProvider(
         taskId?: string;
       };
 
-      try {
-        const existing = await apiFetch<RawEntry[]>(
-          `/v1/time_entry/employee/id/${employeeId}?startDate=${entry.date}&endDate=${entry.date}&status=Saved`
-        );
-
-        const match = existing.find(
-          (e) =>
-            e.projectId === entry.projectId &&
-            (e.description ?? "") === (entry.description ?? "") &&
-            (e.taskId ?? "") === (entry.taskId ?? "")
-        );
-
-        if (match) {
-          // Update existing entry — add minutes
-          const updatedMinutes = match.minutes + entry.minutes;
-          const results = await apiFetch<RawEntry[]>(
-            `/v1/time_entry/employee/id/${employeeId}`,
-            {
-              method: "PATCH",
-              body: JSON.stringify([{ id: match.id, minutes: updatedMinutes }]),
-            }
-          );
-
-          const updated = results[0] ?? match;
-          return {
-            id: updated.id,
-            description: updated.description ?? entry.description ?? "",
-            projectId: updated.projectId,
-            projectName: entry.projectName,
-            taskId: updated.taskId,
-            date: updated.date,
-            startTime: entry.startTime,
-            endTime: entry.endTime,
-            minutes: updated.minutes,
-            status: updated.status as TimeEntry["status"],
-            syncStatus: "synced",
-          };
-        }
-      } catch {
-        // If lookup fails, fall through to create new
-      }
-
-      // No existing match — create new entry
       const body = [
         {
           date: entry.date,

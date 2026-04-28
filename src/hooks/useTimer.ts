@@ -54,18 +54,39 @@ export function useTimer() {
     dispatch({ type: "RESET_TIMER" });
 
     try {
-      const entry = await api.createTimeEntry(employee.id, {
-        description,
-        projectId: projectId!,
-        projectName: project?.name,
-        taskId: taskId ?? undefined,
-        date,
-        startTime,
-        endTime,
-        minutes,
-        status: "SAVED",
-      });
-      dispatch({ type: "ADD_ENTRY", payload: entry });
+      // Check if there's an existing entry in local state to update
+      const existingEntry = state.entries.find(
+        (e) =>
+          e.projectId === projectId &&
+          e.date === date &&
+          e.description === description &&
+          !e.id.startsWith("summary-") // don't try to update summary-only entries
+      );
+
+      let entry;
+      if (existingEntry) {
+        // Update existing entry — add minutes
+        entry = await api.updateTimeEntry(employee.id, existingEntry.id, {
+          minutes: existingEntry.minutes + minutes,
+        });
+        dispatch({
+          type: "UPDATE_ENTRY",
+          payload: { id: existingEntry.id, updates: { minutes: entry.minutes } },
+        });
+      } else {
+        entry = await api.createTimeEntry(employee.id, {
+          description,
+          projectId: projectId!,
+          projectName: project?.name,
+          taskId: taskId ?? undefined,
+          date,
+          startTime,
+          endTime,
+          minutes,
+          status: "SAVED",
+        });
+        dispatch({ type: "ADD_ENTRY", payload: entry });
+      }
     } catch (err) {
       // Save locally as unsaved for manual retry
       const unsavedEntry = {
