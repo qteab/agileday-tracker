@@ -45,7 +45,9 @@ export function useTimer() {
     const startMs = new Date(startTime).getTime();
     const endMs = new Date(endTime).getTime();
     const minutes = Math.max(1, Math.round((endMs - startMs) / 60000));
-    const date = new Date(startMs).toISOString().split("T")[0];
+    // Use local date, not UTC
+    const startLocal = new Date(startMs);
+    const date = `${startLocal.getFullYear()}-${String(startLocal.getMonth() + 1).padStart(2, "0")}-${String(startLocal.getDate()).padStart(2, "0")}`;
     const project = state.projects.find((p) => p.id === projectId);
 
     // Reset timer immediately so user can start a new one

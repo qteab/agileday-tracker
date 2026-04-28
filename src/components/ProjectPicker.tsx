@@ -29,7 +29,7 @@ export function ProjectPicker({ selectedId, onSelect }: ProjectPickerProps) {
           p.name.toLowerCase().includes(q) ||
           (p.customerName && p.customerName.toLowerCase().includes(q))
       )
-      .slice(0, 15);
+      .slice(0, 20);
   }, [search, state.projects]);
 
   const displayProjects = search.trim() ? searchResults : myProjects;
@@ -79,30 +79,30 @@ export function ProjectPicker({ selectedId, onSelect }: ProjectPickerProps) {
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 w-72 bg-white rounded-lg shadow-lg border border-border z-50 overflow-hidden">
+        <div className="fixed left-3 right-3 mt-1 bg-white rounded-xl shadow-lg border border-border z-50 overflow-hidden"
+          style={{ top: ref.current ? ref.current.getBoundingClientRect().bottom + "px" : undefined }}
+        >
           {/* Search input */}
-          <div className="p-2 border-b border-divider">
+          <div className="p-2.5 border-b border-divider">
             <input
               ref={inputRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search all projects..."
-              className="w-full px-2.5 py-1.5 text-sm bg-bg rounded-md outline-none placeholder:text-text-muted"
+              placeholder="Search by project or client..."
+              className="w-full px-3 py-2 text-sm bg-bg rounded-lg outline-none placeholder:text-text-muted"
             />
           </div>
 
           {/* Section label */}
           <div className="px-3 py-1.5 text-[10px] font-semibold text-text-muted uppercase tracking-wide">
-            {search.trim()
-              ? `Results (${searchResults.length})`
-              : `My projects (${myProjects.length})`}
+            {search.trim() ? `Results (${searchResults.length})` : `My projects (${myProjects.length})`}
           </div>
 
           {/* Project list */}
-          <div className="max-h-52 overflow-y-auto py-1">
+          <div className="max-h-64 overflow-y-auto pb-1">
             {displayProjects.length === 0 && (
-              <div className="px-3 py-2 text-xs text-text-muted">
+              <div className="px-3 py-3 text-xs text-text-muted text-center">
                 {search.trim() ? "No projects found" : "No allocated projects"}
               </div>
             )}
@@ -114,7 +114,7 @@ export function ProjectPicker({ selectedId, onSelect }: ProjectPickerProps) {
                   setOpen(false);
                   setSearch("");
                 }}
-                className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-bg transition-colors text-sm ${
+                className={`w-full text-left px-3 py-2.5 flex items-center gap-2.5 hover:bg-bg transition-colors text-sm ${
                   project.id === selectedId ? "bg-bg" : ""
                 }`}
               >
@@ -122,11 +122,9 @@ export function ProjectPicker({ selectedId, onSelect }: ProjectPickerProps) {
                   className="w-2.5 h-2.5 rounded-full shrink-0"
                   style={{ backgroundColor: project.color }}
                 />
-                <span className="truncate" title={project.name}>
-                  {project.name}
-                </span>
+                <span className="truncate flex-1">{project.name}</span>
                 {project.customerName && (
-                  <span className="text-text-muted text-xs ml-auto truncate" title={project.customerName}>
+                  <span className="text-text-muted text-xs shrink-0 max-w-[40%] truncate text-right">
                     {project.customerName}
                   </span>
                 )}

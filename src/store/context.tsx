@@ -155,8 +155,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "SET_PROJECTS", payload: projects });
         dispatch({ type: "SET_MY_PROJECT_IDS", payload: myProjectIds });
 
-        const endDate = new Date().toISOString().split("T")[0];
-        const startDate = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+        // Use local dates (not UTC) to avoid timezone issues
+        const now = new Date();
+        const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+        const past = new Date(now);
+        past.setDate(past.getDate() - 30);
+        const startDate = `${past.getFullYear()}-${String(past.getMonth() + 1).padStart(2, "0")}-${String(past.getDate()).padStart(2, "0")}`;
         const entries = await api!.getTimeEntries(employee.id, startDate, endDate);
         if (cancelled) return;
         dispatch({ type: "SET_ENTRIES", payload: entries });
