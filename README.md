@@ -23,11 +23,22 @@ The app appears as a purple teddy bear icon in your menu bar (top-right of your 
 
 1. Type what you're working on in the **"What are you working on?"** field
 2. Select a **project** from the dropdown (required)
-3. Optionally select a **task** within the project
+3. Select a **task** within the project (required)
 4. Click the **purple play button** to start the timer
 5. Click the **red stop button** when you're done — the entry is saved automatically
 
 You can start and stop as many times as you want during the day. Each session is saved separately.
+
+### How time entries sync to AgileDay
+
+The app keeps things clean on your AgileDay timecard:
+
+- **Same description + same project + same day = one entry.** If you track "code review" on Fokus three times today, AgileDay shows one "code review" entry with the combined total — not three separate rows.
+- **Different descriptions = separate entries.** "code review" and "bug fix" on the same project create two entries, even on the same day.
+- **New day = new entry.** Tracking the same task tomorrow creates a fresh entry for that day.
+- **Submitted entries are locked.** Once you submit your timecard in AgileDay, those entries can't be edited from the app. You can still use the play button to start a new session for today.
+
+Behind the scenes: when you stop the timer, the app checks if an entry with the same description, project, and date already exists in AgileDay. If it does, the minutes are added to it. If multiple duplicates somehow exist, they're automatically consolidated into one.
 
 ### Viewing your entries
 

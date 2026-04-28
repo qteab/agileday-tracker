@@ -44,6 +44,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "copyright": "Built by a Maverick. Naturally bug free and works like a charm. If you have any issues or feature requests, send them to someone who might care.",
     "macOS": {
       "signingIdentity": null
     }
