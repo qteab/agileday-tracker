@@ -63,6 +63,12 @@ export function createAgileDayProvider(
     return auth.accessToken;
   }
 
+  // Cache descriptions for entries we create — the API doesn't return them immediately
+  // Key: "entryId" → description
+  const descriptionCache = new Map<string, string>();
+  // Also cache by projectId::date::description → entryId for merge lookups
+  const entryIdCache = new Map<string, string>();
+
   let resolvedFetch: typeof globalThis.fetch | null = fetchOverride ?? null;
 
   async function getResolvedFetch() {
@@ -259,7 +265,14 @@ export function createAgileDayProvider(
           syncStatus: "synced" as const,
         }));
 
-      // 4. Add entries from summary that aren't covered by detailed entries
+      // 4. Enrich entries with cached descriptions (from entries we created this session)
+      for (const e of result) {
+        if (!e.description && descriptionCache.has(e.id)) {
+          e.description = descriptionCache.get(e.id)!;
+        }
+      }
+
+      // 5. Add entries from summary that aren't covered by detailed entries
       //    (e.g. entries in SAVED/NEW status that time_entry endpoint doesn't return)
       const detailedByProjectDate = new Map<string, number>();
       for (const e of result) {
@@ -274,9 +287,17 @@ export function createAgileDayProvider(
 
         if (detailedMinutes < s.minutes) {
           // There are minutes in the summary not covered by detailed entries
+          // Try to find a cached description for this project+date
+          let cachedDesc = "";
+          for (const [cacheKey, _id] of entryIdCache) {
+            if (cacheKey.startsWith(`${s.projectId}::${s.date}::`)) {
+              cachedDesc = cacheKey.split("::")[2] ?? "";
+              break;
+            }
+          }
           result.push({
             id: `summary-${s.projectId}-${s.date}`,
-            description: "",
+            description: cachedDesc,
             projectId: s.projectId,
             projectName: s.project,
             date: s.date,
@@ -323,10 +344,15 @@ export function createAgileDayProvider(
 
       if (results.length === 0) throw new Error("No entry returned from API");
       const created = results[0];
+      const desc = created.description ?? entry.description ?? "";
+
+      // Cache the description so we can show it on reload
+      descriptionCache.set(created.id, desc);
+      entryIdCache.set(`${created.projectId}::${created.date}::${desc}`, created.id);
 
       return {
         id: created.id,
-        description: created.description ?? entry.description ?? "",
+        description: desc,
         projectId: created.projectId,
         projectName: entry.projectName,
         taskId: created.taskId,
