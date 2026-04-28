@@ -86,33 +86,29 @@ beforeEach(() => {
 // --- AC-48: Verify correct HTTP methods and paths ---
 
 describe("getCurrentEmployee", () => {
-  it("decodes JWT and fetches employee by ID", async () => {
+  it("fetches full profile from API using JWT employee_id", async () => {
     mockFetch.mockResolvedValueOnce(
-      jsonResponse({
-        id: "emp-1",
-        name: "Axel Jonsson",
-        email: "axel@qte.se",
-      })
+      jsonResponse({ id: "emp-1", name: "Axel Jonsson", email: "axel@qte.se" })
     );
 
     const emp = await provider.getCurrentEmployee();
 
-    expect(mockFetch).toHaveBeenCalledOnce();
     const [url] = mockFetch.mock.calls[0];
     expect(url).toBe("https://qvik.agileday.io/api/v1/employee/id/emp-1");
     expect(emp).toEqual({ id: "emp-1", name: "Axel Jonsson", email: "axel@qte.se" });
   });
 
-  it("falls back to JWT claims if employee fetch fails", async () => {
-    mockFetch.mockResolvedValueOnce(errorResponse(404, "Not found"));
+  it("falls back to JWT claims if employee API fails", async () => {
+    mockFetch.mockResolvedValueOnce(errorResponse(403, "Forbidden"));
 
     const emp = await provider.getCurrentEmployee();
 
     expect(emp.id).toBe("emp-1");
+    expect(emp.name).toBe("Axel Jonsson");
     expect(emp.email).toBe("axel@qte.se");
   });
 
-  it("falls back to employee list if JWT has no employee_id", async () => {
+  it("throws when JWT has no employee_id", async () => {
     authState = {
       ...VALID_AUTH,
       accessToken: fakeJwt({ sub: undefined, employee_id: undefined, uid: undefined }),
@@ -125,17 +121,7 @@ describe("getCurrentEmployee", () => {
       mockFetch as typeof globalThis.fetch
     );
 
-    mockFetch.mockResolvedValueOnce(
-      jsonResponse([
-        { id: "emp-99", name: "Other User", email: "other@qte.se" },
-        { id: "emp-1", name: "Axel Jonsson", email: "axel@qte.se" },
-      ])
-    );
-
-    const emp = await provider.getCurrentEmployee();
-    // Should match by email from JWT
-    expect(emp.email).toBe("axel@qte.se");
-    expect(emp.id).toBe("emp-1");
+    await expect(provider.getCurrentEmployee()).rejects.toThrow("employee ID");
   });
 
   it("throws when not authenticated", async () => {

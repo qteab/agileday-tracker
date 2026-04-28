@@ -112,69 +112,40 @@ export function createAgileDayProvider(
 
   return {
     async getCurrentEmployee(): Promise<Employee> {
-      // Try to get employee info from the JWT token first
       const auth = getAuthState();
-      if (auth?.accessToken) {
-        try {
-          const payload = JSON.parse(
-            atob(auth.accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))
-          );
-          // Look for common JWT claims that identify the user
-          const employeeId = payload.sub || payload.employee_id || payload.uid;
-          const email = payload.email;
-          const name = payload.name || payload.preferred_username || email || "Unknown";
-
-          if (employeeId) {
-            // Try to fetch the full employee record by ID
-            try {
-              const emp = await apiFetch<{
-                id: string;
-                name: string;
-                email: string;
-              }>(`/v1/employee/id/${employeeId}`);
-              return { id: emp.id, name: emp.name, email: emp.email };
-            } catch {
-              // If that fails, return what we have from the JWT
-              return { id: employeeId, name, email: email || "" };
-            }
-          }
-        } catch {
-          // JWT decode failed — fall through to employee list
-        }
+      if (!auth?.accessToken) {
+        throw new Error("Not authenticated — please sign in");
       }
 
-      // Fallback: fetch employee list and find by email from token
-      const employees = await apiFetch<
-        Array<{
-          id: string;
-          name: string;
-          email: string;
-        }>
-      >("/v1/employee?limit=100");
-
-      if (employees.length === 0) throw new Error("No employee found");
-
-      // Try to match by email from JWT
-      const auth2 = getAuthState();
-      if (auth2?.accessToken) {
-        try {
-          const payload = JSON.parse(
-            atob(auth2.accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))
-          );
-          if (payload.email) {
-            const match = employees.find(
-              (e) => e.email?.toLowerCase() === payload.email.toLowerCase()
-            );
-            if (match) return { id: match.id, name: match.name, email: match.email };
-          }
-        } catch {
-          // ignore
-        }
+      // Get employee ID from JWT
+      let employeeId: string | undefined;
+      let jwtName: string;
+      let jwtEmail: string;
+      try {
+        const payload = JSON.parse(
+          atob(auth.accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))
+        );
+        employeeId = payload.sub || payload.employee_id || payload.uid;
+        jwtEmail = payload.email || "";
+        jwtName = payload.name || payload.preferred_username || jwtEmail || "User";
+      } catch {
+        throw new Error("Failed to read user info from token");
       }
 
-      // Last resort: return first employee
-      const emp = employees[0];
-      return { id: emp.id, name: emp.name, email: emp.email };
+      if (!employeeId) {
+        throw new Error("Token does not contain an employee ID — please contact your admin");
+      }
+
+      // Try to fetch full profile (name, email) from API
+      try {
+        const emp = await apiFetch<{ id: string; name: string; email: string }>(
+          `/v1/employee/id/${employeeId}`
+        );
+        return { id: emp.id, name: emp.name || jwtName, email: emp.email || jwtEmail };
+      } catch {
+        // Employee endpoint not accessible — use JWT data
+        return { id: employeeId, name: jwtName, email: jwtEmail };
+      }
     },
 
     async getProjects(): Promise<Project[]> {
