@@ -371,6 +371,35 @@ describe("Update (updateTimeEntry)", () => {
     expect(body[0].minutes).toBe(30);
     expect(body[0]).not.toHaveProperty("projectId");
   });
+
+  it("sends group total when editing one session in a multi-session group", async () => {
+    // Scenario: Group has Session A (3 min) + Session B (7 min) = 10 min on AgileDay
+    // User edits Session A to 5 min
+    // The component calculates: groupTotal = 5 (edited) + 7 (other) = 12
+    // Then calls updateTimeEntry with minutes: 12
+    //
+    // This test verifies the API receives and returns the correct total.
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "agile-1",
+          date: "2026-04-28",
+          minutes: 12,
+          status: "SAVED",
+          description: "work",
+          projectId: "p1",
+        },
+      ])
+    );
+
+    const result = await provider.updateTimeEntry("emp-1", "agile-1", {
+      minutes: 12, // group total: edited 5 + other 7
+    });
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body[0].minutes).toBe(12);
+    expect(result.minutes).toBe(12);
+  });
 });
 
 // =============================================================================

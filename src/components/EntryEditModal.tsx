@@ -44,6 +44,16 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
     const mins = parseInt(parts[0] || "0") * 60 + parseInt(parts[1] || "0");
 
     try {
+      // Calculate group total: other sessions in the same group + this session's new value
+      const otherSessions = state.entries.filter(
+        (e) =>
+          e.id !== entry.id &&
+          e.projectId === entry.projectId &&
+          e.date === entry.date &&
+          e.description === entry.description
+      );
+      const groupTotal = otherSessions.reduce((s, e) => s + e.minutes, 0) + mins;
+
       // Find the real AgileDay entry to update
       const allRecent = await api.getTimeEntries(state.employee.id, entry.date, entry.date);
       const agileMatch = allRecent.find(
@@ -57,7 +67,7 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
         await api.updateTimeEntry(state.employee.id, agileMatch.id, {
           description,
           projectId,
-          minutes: mins,
+          minutes: groupTotal,
         });
       }
 

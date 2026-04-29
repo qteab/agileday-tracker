@@ -25,11 +25,18 @@ When the user stops the timer:
 
 ## Edit (Entry Edit Modal)
 
-When the user edits a session:
+When the user edits a session that's part of a group:
 
-1. **Local**: Update the session in app state
-2. **AgileDay**: PATCH the AgileDay entry with the new field values
-3. **Note**: Date changes are disabled — edit dates in AgileDay
+1. **Local**: Update the session in app state with new values
+2. **Calculate**: Sum ALL sessions in the group (including the edited one's new value)
+3. **AgileDay**: Find the real entry (via `getTimeEntries`), PATCH it with:
+   - `minutes`: the new group total
+   - `description`: the edited description (if changed)
+   - `projectId`: the edited project (if changed)
+4. **Note**: Date changes are disabled — edit dates in AgileDay
+
+**Example**: Group has Session A (3 min) + Session B (7 min) = 10 min.
+Edit Session A to 5 min → AgileDay entry PATCHed to 12 min (5+7).
 
 ## Delete (Entry Edit Modal → Delete)
 
@@ -60,6 +67,8 @@ When loading entries:
 | Delete one session from 3-session group | AgileDay entry PATCHed with reduced total |
 | Timer stop, same desc+project+date exists in AgileDay | PATCH existing, don't create new |
 | Timer stop, 3 duplicates exist in AgileDay | Consolidate: create 1 new, delete 3 old |
+| Edit one session in a 2-session group | AgileDay PATCHed with new group total (both sessions summed) |
+| Edit description in a group | AgileDay entry description updated, minutes = group total |
 | App restart, then delete a session | Session came from API (has real ID or summary ID) — handled the same way |
 | Delete a submitted entry | Not possible — edit modal blocked for submitted entries |
 | AgileDay entry not found during delete | No error — entry only existed locally |
