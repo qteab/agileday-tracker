@@ -144,7 +144,9 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
             disabled
             className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-bg/50 text-text-muted cursor-not-allowed"
           />
-          <p className="text-[10px] text-text-muted">To change the date, edit in AgileDay and sync.</p>
+          <p className="text-[10px] text-text-muted">
+            To change the date, edit in AgileDay and sync.
+          </p>
         </div>
 
         {/* Actions */}
