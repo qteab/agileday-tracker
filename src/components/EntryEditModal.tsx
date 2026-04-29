@@ -32,19 +32,36 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
   const [endTimeStr, setEndTimeStr] = useState(entry.endTime ? timeFromISO(entry.endTime) : "");
   const [duration, setDuration] = useState(formatDuration(entry.minutes));
 
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
   async function handleSave() {
     if (!state.employee) return;
+    setSaving(true);
+    setSaveError("");
 
-    // Parse duration back to minutes
     const parts = duration.split(":");
     const mins = parseInt(parts[0] || "0") * 60 + parseInt(parts[1] || "0");
 
     try {
-      await api.updateTimeEntry(state.employee.id, entry.id, {
-        description,
-        projectId,
-        minutes: mins,
-      });
+      // Find the real AgileDay entry to update
+      const allRecent = await api.getTimeEntries(state.employee.id, entry.date, entry.date);
+      const agileMatch = allRecent.find(
+        (e) =>
+          e.projectId === entry.projectId &&
+          e.description === entry.description &&
+          !e.id.startsWith("summary-")
+      );
+
+      if (agileMatch) {
+        await api.updateTimeEntry(state.employee.id, agileMatch.id, {
+          description,
+          projectId,
+          minutes: mins,
+        });
+      }
+
+      // Update local state
       dispatch({
         type: "UPDATE_ENTRY",
         payload: {
@@ -58,8 +75,10 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
         },
       });
       onClose();
-    } catch {
-      dispatch({ type: "SET_ERROR", payload: "Failed to update entry" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to update entry";
+      setSaveError(msg);
+      setSaving(false);
     }
   }
 
@@ -187,9 +206,11 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
           </p>
         </div>
 
-        {/* Delete error */}
-        {deleteError && (
-          <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2">{deleteError}</p>
+        {/* Errors */}
+        {(deleteError || saveError) && (
+          <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2">
+            {deleteError || saveError}
+          </p>
         )}
 
         {/* Actions */}
@@ -203,9 +224,10 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
           </button>
           <button
             onClick={handleSave}
-            className="px-5 py-2 text-sm text-white bg-primary hover:bg-primary-dark rounded-lg font-medium transition-colors"
+            disabled={saving}
+            className="px-5 py-2 text-sm text-white bg-primary hover:bg-primary-dark rounded-lg font-medium transition-colors disabled:opacity-50"
           >
-            Save
+            {saving ? "Saving..." : "Save"}
           </button>
         </div>
       </div>
