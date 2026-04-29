@@ -2949,7 +2949,7 @@ dependencies = [
 
 [[package]]
 name = "qte-time-tracker"
-version = "0.2.4"
+version = "0.2.7"
 dependencies = [
  "log",
  "serde",
