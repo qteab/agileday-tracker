@@ -63,53 +63,51 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
     }
   }
 
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
   async function handleDelete() {
+    if (!state.employee) return;
+    setDeleting(true);
+    setDeleteError("");
+
+    // Calculate remaining total BEFORE removing from local state
+    const remaining = state.entries.filter(
+      (e) =>
+        e.id !== entry.id &&
+        e.projectId === entry.projectId &&
+        e.date === entry.date &&
+        e.description === entry.description
+    );
+    const remainingMinutes = remaining.reduce((s, e) => s + e.minutes, 0);
+
     try {
-      // Remove from local state first
-      dispatch({ type: "DELETE_ENTRY", payload: entry.id });
-
-      // Recalculate remaining total for this description+project+date
-      const remaining = state.entries.filter(
+      // Sync to AgileDay first — if this fails, local state stays intact
+      const allRecent = await api.getTimeEntries(state.employee.id, entry.date, entry.date);
+      const agileMatch = allRecent.find(
         (e) =>
-          e.id !== entry.id &&
           e.projectId === entry.projectId &&
-          e.date === entry.date &&
-          e.description === entry.description
+          e.description === entry.description &&
+          !e.id.startsWith("summary-")
       );
-      const remainingMinutes = remaining.reduce((s, e) => s + e.minutes, 0);
 
-      if (remainingMinutes > 0) {
-        // Other sessions still exist — update AgileDay with reduced total
-        const allRecent = await api.getTimeEntries(state.employee!.id, entry.date, entry.date);
-        const agileMatch = allRecent.find(
-          (e) =>
-            e.projectId === entry.projectId &&
-            e.description === entry.description &&
-            !e.id.startsWith("summary-")
-        );
-        if (agileMatch) {
-          await api.updateTimeEntry(state.employee!.id, agileMatch.id, {
+      if (agileMatch) {
+        if (remainingMinutes > 0) {
+          await api.updateTimeEntry(state.employee.id, agileMatch.id, {
             minutes: remainingMinutes,
           });
-        }
-      } else {
-        // No sessions remaining — delete from AgileDay entirely
-        // Find the real AgileDay entry
-        const allRecent = await api.getTimeEntries(state.employee!.id, entry.date, entry.date);
-        const agileMatch = allRecent.find(
-          (e) =>
-            e.projectId === entry.projectId &&
-            e.description === entry.description &&
-            !e.id.startsWith("summary-")
-        );
-        if (agileMatch) {
+        } else {
           await api.deleteTimeEntry([agileMatch.id]);
         }
       }
+
+      // API succeeded — now remove from local state
+      dispatch({ type: "DELETE_ENTRY", payload: entry.id });
       onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to delete";
-      dispatch({ type: "SET_ERROR", payload: msg });
+      setDeleteError(msg);
+      setDeleting(false);
     }
   }
 
@@ -189,13 +187,19 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
           </p>
         </div>
 
+        {/* Delete error */}
+        {deleteError && (
+          <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2">{deleteError}</p>
+        )}
+
         {/* Actions */}
         <div className="flex items-center justify-between pt-2">
           <button
             onClick={handleDelete}
-            className="text-sm text-danger hover:text-danger/80 font-medium"
+            disabled={deleting}
+            className="text-sm text-danger hover:text-danger/80 font-medium disabled:opacity-50"
           >
-            Delete
+            {deleting ? "Deleting..." : "Delete"}
           </button>
           <button
             onClick={handleSave}
