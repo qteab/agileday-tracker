@@ -356,13 +356,38 @@ export function createAgileDayProvider(
         if (results.length === 0) throw new Error("No entry returned from API");
         created = results[0];
 
-        // Delete the old duplicates one by one (batch delete may fail)
+        // Delete the old duplicates one by one, track failures
+        const failedDeletes: string[] = [];
         for (const old of matches) {
-          await apiFetch(`/v1/time_entry?ids=${old.id}`, {
-            method: "DELETE",
-          }).catch(() => {
-            // Non-fatal — worst case is a leftover duplicate
-          });
+          try {
+            await apiFetch(`/v1/time_entry?ids=${old.id}`, { method: "DELETE" });
+          } catch {
+            failedDeletes.push(old.id);
+          }
+        }
+
+        // Verify deletions actually went through
+        if (failedDeletes.length === 0) {
+          // Double-check: re-query to make sure old entries are gone
+          const verifyEntries = await apiFetch<RawEntry[]>(
+            `/v1/time_entry/employee/id/${employeeId}/updated?updatedAfter=${updatedAfter}`
+          ).catch(() => [] as RawEntry[]);
+
+          const stillExist = verifyEntries.filter(
+            (e) => matches.some((m) => m.id === e.id) && e.status !== "DELETED"
+          );
+
+          if (stillExist.length > 0) {
+            throw new Error(
+              `Consolidated entry created, but ${stillExist.length} old entries couldn't be removed from AgileDay. ` +
+                `Please clean up duplicates manually in AgileDay's Time Reporting page.`
+            );
+          }
+        } else {
+          throw new Error(
+            `Consolidated entry created, but ${failedDeletes.length} of ${matches.length} old entries couldn't be deleted. ` +
+              `Please clean up duplicates manually in AgileDay's Time Reporting page.`
+          );
         }
       } else {
         // 4. No matches — create new entry

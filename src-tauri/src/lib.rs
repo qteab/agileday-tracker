@@ -3,7 +3,7 @@ use std::net::TcpListener;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    Manager,
+    Emitter, Manager,
 };
 
 #[cfg(target_os = "macos")]
@@ -143,6 +143,10 @@ pub fn run() {
                 .accelerator("CmdOrCtrl+T")
                 .build(app)?;
 
+            let sync_item = MenuItemBuilder::with_id("sync", "Sync")
+                .accelerator("CmdOrCtrl+R")
+                .build(app)?;
+
             let quit_item = MenuItemBuilder::with_id("quit", "Quit")
                 .accelerator("CmdOrCtrl+Q")
                 .build(app)?;
@@ -159,6 +163,7 @@ pub fn run() {
                 .item(&stop_item)
                 .item(&sep2)
                 .item(&show_item)
+                .item(&sync_item)
                 .item(&sep3)
                 .item(&quit_item)
                 .build()?;
@@ -172,6 +177,15 @@ pub fn run() {
                 .on_menu_event(|app, event| {
                     match event.id().as_ref() {
                         "new" | "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                                #[cfg(target_os = "macos")]
+                                set_dock_visible(app, true);
+                            }
+                        }
+                        "sync" => {
+                            let _ = app.emit("sync-data", ());
                             if let Some(window) = app.get_webview_window("main") {
                                 let _ = window.show();
                                 let _ = window.set_focus();

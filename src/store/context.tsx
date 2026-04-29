@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { appReducer, initialState, type AppState, type AppAction } from "./reducer";
+import { listen } from "@tauri-apps/api/event";
 import type { ApiProvider } from "../api/provider";
 import { createAgileDayProvider, type AgileDayConfig } from "../api/agileday";
 import type { AuthState } from "../api/auth";
@@ -38,6 +39,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [authState, setAuthState] = useState<AuthState | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [syncCounter, setSyncCounter] = useState(0);
   const authStateRef = useRef<AuthState | null>(null);
 
   authStateRef.current = authState;
@@ -84,6 +86,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "SET_ERROR", payload: null });
     dispatch({ type: "SET_LOADING", payload: false });
   }
+
+  // Listen for sync event from native menu
+  useEffect(() => {
+    const unlisten = listen("sync-data", () => {
+      setSyncCounter((c) => c + 1);
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
 
   // On mount: check for saved auth state
   useEffect(() => {
@@ -179,7 +191,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [isConnected]);
+  }, [isConnected, syncCounter]);
 
   return (
     <AppContext.Provider
