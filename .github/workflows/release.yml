@@ -109,26 +109,26 @@ jobs:
           VERSION=${{ steps.version.outputs.next }}
           BUNDLE_DIR="src-tauri/target/release/bundle/macos"
 
-          echo "Looking for files in $BUNDLE_DIR:"
-          ls -la "$BUNDLE_DIR/" || true
-          echo "---"
-
-          # Also check the parent for sig files
-          find src-tauri/target/release/bundle -name "*.sig" -o -name "*.tar.gz" 2>/dev/null
-          echo "---"
-
-          SIG_FILE="$BUNDLE_DIR/QTE Time Tracker.app.tar.gz.sig"
+          # The tauri-action creates the .tar.gz but doesn't sign it.
+          # We sign it ourselves and generate latest.json.
           TAR_FILE="$BUNDLE_DIR/QTE Time Tracker.app.tar.gz"
 
-          if [ ! -f "$SIG_FILE" ] || [ ! -f "$TAR_FILE" ]; then
-            echo "Missing sig or tar file"
-            echo "SIG exists: $(test -f "$SIG_FILE" && echo yes || echo no)"
-            echo "TAR exists: $(test -f "$TAR_FILE" && echo yes || echo no)"
+          if [ ! -f "$TAR_FILE" ]; then
+            echo "No tar.gz found, skipping updater"
+            ls -la "$BUNDLE_DIR/" || true
+            exit 0
+          fi
+
+          # Sign the tar.gz
+          npx tauri signer sign "$TAR_FILE"
+          SIG_FILE="${TAR_FILE}.sig"
+
+          if [ ! -f "$SIG_FILE" ]; then
+            echo "Signing failed — no .sig file produced"
             exit 0
           fi
 
           SIGNATURE=$(cat "$SIG_FILE")
-          # The tauri-action uploads with dots instead of spaces
           TAR_NAME="QTE.Time.Tracker_aarch64.app.tar.gz"
 
           # Upload .sig file

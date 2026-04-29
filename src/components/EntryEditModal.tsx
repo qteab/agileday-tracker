@@ -25,7 +25,7 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
   const api = useApi();
   const [description, setDescription] = useState(entry.description);
   const [projectId, setProjectId] = useState(entry.projectId);
-  const [date, setDate] = useState(entry.date);
+  const date = entry.date;
   const [startTimeStr, setStartTimeStr] = useState(
     entry.startTime ? timeFromISO(entry.startTime) : ""
   );
@@ -43,7 +43,6 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
       await api.updateTimeEntry(state.employee.id, entry.id, {
         description,
         projectId,
-        date,
         minutes: mins,
       });
       dispatch({
@@ -54,7 +53,6 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
             description,
             projectId,
             projectName: state.projects.find((p) => p.id === projectId)?.name,
-            date,
             minutes: mins,
           },
         },
@@ -138,13 +136,16 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
           />
         </div>
 
-        {/* Date */}
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-bg focus:outline-none focus:border-primary"
-        />
+        {/* Date — read-only, change in AgileDay */}
+        <div className="space-y-1">
+          <input
+            type="date"
+            value={date}
+            disabled
+            className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-bg/50 text-text-muted cursor-not-allowed"
+          />
+          <p className="text-[10px] text-text-muted">To change the date, edit in AgileDay and sync.</p>
+        </div>
 
         {/* Actions */}
         <div className="flex items-center justify-between pt-2">
