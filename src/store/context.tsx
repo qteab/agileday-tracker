@@ -97,14 +97,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // On mount: check for saved auth state
+  // On mount: check for saved auth state, refresh if expired
   useEffect(() => {
     loadAuthState()
-      .then((saved) => {
-        if (saved && saved.expiresAt > Date.now()) {
+      .then(async (saved) => {
+        if (!saved) return;
+
+        if (saved.expiresAt > Date.now()) {
+          // Token still valid
           setAuthState(saved);
           setIsConnected(true);
-        } else if (saved) {
+        } else if (saved.refreshToken) {
+          // Access token expired but we have a refresh token — try to refresh
+          try {
+            const authConfig = buildAuthConfig(DEFAULT_CONNECTION);
+            const tokens = await refreshAccessToken(authConfig, saved.refreshToken);
+            const newState = tokenResponseToAuthState(tokens);
+            await saveAuthState(newState).catch(() => {});
+            setAuthState(newState);
+            setIsConnected(true);
+          } catch {
+            // Refresh failed — clear auth, user needs to log in again
+            clearAuth().catch(() => {});
+          }
+        } else {
+          // No refresh token — clear
           clearAuth().catch(() => {});
         }
       })

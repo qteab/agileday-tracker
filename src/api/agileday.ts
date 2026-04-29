@@ -44,20 +44,36 @@ export function createAgileDayProvider(
     const auth = getAuthState();
     if (!auth) throw new Error("Not authenticated — please log in");
 
-    if (isTokenExpired(auth)) {
+    if (isTokenExpired(auth, 0)) {
+      // Token is expired or about to expire — try to refresh
       if (!auth.refreshToken) {
         clearAuthState();
         throw new Error("Session expired — please log in again");
       }
-      try {
-        const tokens = await refreshAccessToken(config.authConfig, auth.refreshToken);
-        const newState = tokenResponseToAuthState(tokens);
-        setAuthState(newState);
-        return newState.accessToken;
-      } catch {
-        clearAuthState();
-        throw new Error("Session expired — please log in again");
+
+      // Try refresh with one retry
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const tokens = await refreshAccessToken(config.authConfig, auth.refreshToken);
+          const newState = tokenResponseToAuthState(tokens);
+          setAuthState(newState);
+          return newState.accessToken;
+        } catch {
+          if (attempt === 0) {
+            // First attempt failed — wait briefly and retry
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+        }
       }
+      clearAuthState();
+      throw new Error("Session expired — please log in again");
+    }
+
+    // Token still valid but refresh proactively if < 2 min left
+    if (isTokenExpired(auth, 120_000) && auth.refreshToken) {
+      refreshAccessToken(config.authConfig, auth.refreshToken)
+        .then((tokens) => setAuthState(tokenResponseToAuthState(tokens)))
+        .catch(() => {}); // Best effort, don't block the current request
     }
 
     return auth.accessToken;
