@@ -65,11 +65,51 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
 
   async function handleDelete() {
     try {
-      await api.deleteTimeEntry([entry.id]);
+      // Remove from local state first
       dispatch({ type: "DELETE_ENTRY", payload: entry.id });
+
+      // Recalculate remaining total for this description+project+date
+      const remaining = state.entries.filter(
+        (e) =>
+          e.id !== entry.id &&
+          e.projectId === entry.projectId &&
+          e.date === entry.date &&
+          e.description === entry.description
+      );
+      const remainingMinutes = remaining.reduce((s, e) => s + e.minutes, 0);
+
+      if (remainingMinutes > 0) {
+        // Other sessions still exist — update AgileDay with reduced total
+        const allRecent = await api.getTimeEntries(state.employee!.id, entry.date, entry.date);
+        const agileMatch = allRecent.find(
+          (e) =>
+            e.projectId === entry.projectId &&
+            e.description === entry.description &&
+            !e.id.startsWith("summary-")
+        );
+        if (agileMatch) {
+          await api.updateTimeEntry(state.employee!.id, agileMatch.id, {
+            minutes: remainingMinutes,
+          });
+        }
+      } else {
+        // No sessions remaining — delete from AgileDay entirely
+        // Find the real AgileDay entry
+        const allRecent = await api.getTimeEntries(state.employee!.id, entry.date, entry.date);
+        const agileMatch = allRecent.find(
+          (e) =>
+            e.projectId === entry.projectId &&
+            e.description === entry.description &&
+            !e.id.startsWith("summary-")
+        );
+        if (agileMatch) {
+          await api.deleteTimeEntry([agileMatch.id]);
+        }
+      }
       onClose();
-    } catch {
-      dispatch({ type: "SET_ERROR", payload: "Failed to delete entry" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to delete";
+      dispatch({ type: "SET_ERROR", payload: msg });
     }
   }
 
