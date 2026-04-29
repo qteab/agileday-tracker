@@ -107,20 +107,29 @@ jobs:
         run: |
           TAG=${{ steps.version.outputs.tag }}
           VERSION=${{ steps.version.outputs.next }}
-          BUNDLE_DIR="src-tauri/target/release/bundle"
+          BUNDLE_DIR="src-tauri/target/release/bundle/macos"
 
-          # Find the .sig file
-          SIG_FILE=$(find "$BUNDLE_DIR" -name "*.tar.gz.sig" | head -1)
-          TAR_FILE=$(find "$BUNDLE_DIR" -name "*.app.tar.gz" | head -1)
+          echo "Looking for files in $BUNDLE_DIR:"
+          ls -la "$BUNDLE_DIR/" || true
+          echo "---"
 
-          if [ -z "$SIG_FILE" ] || [ -z "$TAR_FILE" ]; then
-            echo "Missing sig or tar file, skipping updater JSON"
-            ls -la "$BUNDLE_DIR/macos/" || true
+          # Also check the parent for sig files
+          find src-tauri/target/release/bundle -name "*.sig" -o -name "*.tar.gz" 2>/dev/null
+          echo "---"
+
+          SIG_FILE="$BUNDLE_DIR/QTE Time Tracker.app.tar.gz.sig"
+          TAR_FILE="$BUNDLE_DIR/QTE Time Tracker.app.tar.gz"
+
+          if [ ! -f "$SIG_FILE" ] || [ ! -f "$TAR_FILE" ]; then
+            echo "Missing sig or tar file"
+            echo "SIG exists: $(test -f "$SIG_FILE" && echo yes || echo no)"
+            echo "TAR exists: $(test -f "$TAR_FILE" && echo yes || echo no)"
             exit 0
           fi
 
           SIGNATURE=$(cat "$SIG_FILE")
-          TAR_NAME=$(basename "$TAR_FILE")
+          # The tauri-action uploads with dots instead of spaces
+          TAR_NAME="QTE.Time.Tracker_aarch64.app.tar.gz"
 
           # Upload .sig file
           gh release upload "$TAG" "$SIG_FILE" --clobber
