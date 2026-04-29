@@ -6,8 +6,13 @@ A lightweight macOS menu bar app for tracking time against AgileDay projects. Bu
 
 1. Download the latest `.dmg` file from [Releases](https://github.com/Kaijonsson/agileday-tracker/releases)
 2. Open the `.dmg` and drag **QTE Time Tracker** into your **Applications** folder
-3. Open the app from Applications
-4. **First time only:** macOS will warn about an unidentified developer. Right-click the app → **Open** → click **Open** in the dialog. You only need to do this once.
+3. **Before opening for the first time**, you need to allow the app since it's not signed with an Apple certificate. Choose one:
+   - **Option A (easiest):** Open **Terminal** and paste:
+     ```
+     xattr -cr /Applications/QTE\ Time\ Tracker.app
+     ```
+   - **Option B:** Try opening the app. If macOS blocks it, go to **System Settings → Privacy & Security**, scroll down, and click **"Open Anyway"** next to the QTE Time Tracker message.
+4. Open the app from Applications
 
 The app appears as a purple teddy bear icon in your menu bar (top-right of your screen).
 
