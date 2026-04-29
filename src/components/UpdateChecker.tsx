@@ -21,8 +21,17 @@ export function UpdateChecker() {
         // Silent fail — update check is non-critical
       }
     }
-    const timer = setTimeout(checkForUpdate, 3000);
-    return () => clearTimeout(timer);
+
+    // Check on launch (after 3s delay)
+    const initialTimer = setTimeout(checkForUpdate, 3000);
+
+    // Re-check every 2 hours
+    const interval = setInterval(checkForUpdate, 2 * 60 * 60 * 1000);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+    };
   }, []);
 
   async function handleUpdate() {
