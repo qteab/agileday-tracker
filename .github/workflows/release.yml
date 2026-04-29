@@ -100,3 +100,49 @@ jobs:
             **Updates:** The app checks for updates automatically.
           releaseDraft: false
           prerelease: false
+
+      - name: Upload updater files
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=${{ steps.version.outputs.tag }}
+          VERSION=${{ steps.version.outputs.next }}
+          BUNDLE_DIR="src-tauri/target/release/bundle"
+
+          # Find the .sig file
+          SIG_FILE=$(find "$BUNDLE_DIR" -name "*.tar.gz.sig" | head -1)
+          TAR_FILE=$(find "$BUNDLE_DIR" -name "*.app.tar.gz" | head -1)
+
+          if [ -z "$SIG_FILE" ] || [ -z "$TAR_FILE" ]; then
+            echo "Missing sig or tar file, skipping updater JSON"
+            ls -la "$BUNDLE_DIR/macos/" || true
+            exit 0
+          fi
+
+          SIGNATURE=$(cat "$SIG_FILE")
+          TAR_NAME=$(basename "$TAR_FILE")
+
+          # Upload .sig file
+          gh release upload "$TAG" "$SIG_FILE" --clobber
+
+          # Generate and upload latest.json
+          cat > /tmp/latest.json << ENDJSON
+          {
+            "version": "$VERSION",
+            "notes": "QTE Time Tracker $TAG",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "$SIGNATURE",
+                "url": "https://github.com/Kaijonsson/agileday-tracker/releases/download/$TAG/$TAR_NAME"
+              },
+              "darwin-x86_64": {
+                "signature": "$SIGNATURE",
+                "url": "https://github.com/Kaijonsson/agileday-tracker/releases/download/$TAG/$TAR_NAME"
+              }
+            }
+          }
+          ENDJSON
+
+          gh release upload "$TAG" /tmp/latest.json --clobber
+          echo "Uploaded latest.json and .sig file"
