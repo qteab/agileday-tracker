@@ -104,6 +104,8 @@ jobs:
       - name: Upload updater files
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
         run: |
           TAG=${{ steps.version.outputs.tag }}
           VERSION=${{ steps.version.outputs.next }}
