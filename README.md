@@ -87,6 +87,77 @@ Another application is using the port needed for sign-in. Close the other applic
 **Can't find the app after closing the window**
 The app stays in your menu bar even when the window is closed. Click the teddy bear icon → **Show** to bring it back. To fully quit, use the menu → **Quit**.
 
+## Contributing
+
+### Getting started
+
+Prerequisites: [Node.js](https://nodejs.org/) 22+, [Rust](https://rustup.rs/), Xcode CLI tools.
+
+```bash
+git clone https://github.com/Kaijonsson/agileday-tracker.git
+cd agileday-tracker
+npm install
+npm run tauri dev    # Run the app in dev mode
+```
+
+Local builds require a signing key for the updater:
+```bash
+TAURI_SIGNING_PRIVATE_KEY=$(cat ~/.tauri/agileday-tracker-v2.key) \
+TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
+npx tauri build --bundles app
+```
+
+### Code quality
+
+Before pushing, run the full check suite:
+```bash
+npm run check    # typecheck → lint → format → test
+```
+
+This is the same check CI runs on every push. PRs that fail checks won't be merged.
+
+### Key commands
+
+| Command | What it does |
+|---------|-------------|
+| `npm run dev` | Vite dev server (port 1420) |
+| `npm run tauri dev` | Full app in dev mode |
+| `npm run test` | Run all tests (68 tests) |
+| `npm run lint` | ESLint |
+| `npm run format` | Prettier (auto-fix) |
+| `npm run check` | All of the above |
+
+### Documentation for AI assistance
+
+This project is set up to work well with AI coding assistants (Claude Code, Cursor, etc.):
+
+- **`CLAUDE.md`** — Project context, architecture, commands, and key decisions. Loaded automatically by Claude Code.
+- **`specs/agileday-tracker/plan.md`** — Implementation plan with task status.
+- **`specs/agileday-tracker/spec.md`** — Acceptance criteria (48 ACs).
+- **`specs/agileday-tracker/entry-sync.md`** — How time entries sync between the app and AgileDay. Read this before touching the create/edit/delete flow.
+- **`specs/agileday-tracker/openapi.yaml`** — AgileDay's REST API spec.
+
+If you're using an AI assistant, point it to these files first. They contain the decisions and constraints that aren't obvious from the code alone.
+
+### Architecture overview
+
+The app has three layers:
+
+1. **Tauri shell** (Rust, `src-tauri/`) — system tray, window management, OAuth callback server
+2. **React frontend** (`src/`) — UI components, state management, timer logic
+3. **API abstraction** (`src/api/`) — `ApiProvider` interface with AgileDay implementation
+
+The most complex part is the entry sync logic (`src/api/agileday.ts` → `createTimeEntry`). It handles finding existing entries, patching, and consolidating duplicates. The behavior is documented in `entry-sync.md` and tested in `entry-sync.test.ts`.
+
+### Releasing
+
+Releases are dispatched manually from GitHub Actions:
+
+1. Go to **Actions → Release → Run workflow**
+2. Pick bump type: `patch` / `minor` / `major`
+3. CI bumps version, builds, signs, and publishes to GitHub Releases
+4. Users get an update prompt in the app
+
 ---
 
 Built with [Tauri](https://tauri.app), React, and TypeScript.
