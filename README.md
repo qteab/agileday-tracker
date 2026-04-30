@@ -100,12 +100,20 @@ npm install
 npm run tauri dev    # Run the app in dev mode
 ```
 
-Local builds require a signing key for the updater:
+Local builds require a signing key for the updater. If you're a new contributor, generate your own key for local dev builds:
+
 ```bash
-TAURI_SIGNING_PRIVATE_KEY=$(cat ~/.tauri/agileday-tracker-v2.key) \
+npx tauri signer generate -w ~/.tauri/mykey.key --ci
+```
+
+Then build with:
+```bash
+TAURI_SIGNING_PRIVATE_KEY=$(cat ~/.tauri/mykey.key) \
 TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
 npx tauri build --bundles app
 ```
+
+> **Note:** Your local key is for dev builds only. Production releases use the project signing key stored in GitHub Secrets (`TAURI_SIGNING_PRIVATE_KEY`). Only the project maintainer needs access to the production key.
 
 ### Code quality
 
