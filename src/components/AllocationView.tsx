@@ -115,26 +115,41 @@ function StackedBar({ segments, totalMinutes }: { segments: BarSegment[]; totalM
     return <div className="h-3 bg-bg rounded-full" />;
   }
   const visible = segments.filter((s) => s.minutes > 0);
+  // Precompute each segment's center position so we can anchor its tooltip to
+  // the side of the segment that keeps the popover within the bar.
+  let runningPct = 0;
+  const segmentsWithPos = visible.map((s) => {
+    const widthPct = (s.minutes / totalMinutes) * 100;
+    const centerPct = runningPct + widthPct / 2;
+    runningPct += widthPct;
+    return { s, widthPct, centerPct };
+  });
   return (
     <div className="flex h-3 bg-bg rounded-full">
-      {visible.map((s, i) => {
-        const pct = (s.minutes / totalMinutes) * 100;
+      {segmentsWithPos.map(({ s, widthPct, centerPct }, i) => {
         const isFirst = i === 0;
-        const isLast = i === visible.length - 1;
+        const isLast = i === segmentsWithPos.length - 1;
+        const onlyOne = segmentsWithPos.length === 1;
         const rounded = `${isFirst ? "rounded-l-full" : ""} ${isLast ? "rounded-r-full" : ""}`;
         const separator = !isLast ? "border-r-2 border-bg-card" : "";
+        const tooltipAlign = onlyOne
+          ? "left-1/2 -translate-x-1/2"
+          : centerPct > 50
+            ? "right-0"
+            : "left-0";
         return (
-          <div key={s.key} className="group relative h-full" style={{ width: `${pct}%` }}>
+          <div key={s.key} className="group relative h-full" style={{ width: `${widthPct}%` }}>
             <div
               className={`h-full ${rounded} ${separator}`}
               style={{ backgroundColor: s.color }}
             />
-            <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1.5 rounded-md bg-bg-dark text-bg-card text-[10px] leading-tight whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10">
+            <div
+              className={`hidden group-hover:block pointer-events-none absolute bottom-full mb-2 px-2 py-1.5 rounded-md bg-bg-dark text-bg-card text-[10px] leading-tight whitespace-nowrap shadow-md z-10 ${tooltipAlign}`}
+            >
               <div className="font-semibold mb-0.5">{s.label}</div>
               <div>
-                {formatHours(s.minutes)} ({Math.round(pct)}%)
+                {formatHours(s.minutes)} ({Math.round(widthPct)}%)
               </div>
-              <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2 w-2 h-2 bg-bg-dark rotate-45" />
             </div>
           </div>
         );
@@ -257,18 +272,24 @@ export function AllocationView() {
 
   // Tracked-time breakdown for the current period (week/month)
   const projectSegments = useMemo<BarSegment[]>(() => {
-    const totals = new Map<string, number>();
+    const totals = new Map<string, { name: string; minutes: number }>();
     for (const e of state.entries) {
       if (e.date < range.start || e.date > range.end) continue;
-      totals.set(e.projectId, (totals.get(e.projectId) ?? 0) + e.minutes);
+      const existing = totals.get(e.projectId);
+      if (existing) {
+        existing.minutes += e.minutes;
+        if (!existing.name && e.projectName) existing.name = e.projectName;
+      } else {
+        totals.set(e.projectId, { name: e.projectName ?? "", minutes: e.minutes });
+      }
     }
     return [...totals.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([projectId, minutes]) => {
+      .sort((a, b) => b[1].minutes - a[1].minutes)
+      .map(([projectId, { name, minutes }]) => {
         const project = state.projects.find((p) => p.id === projectId);
         return {
           key: projectId,
-          label: project?.name ?? "Unknown project",
+          label: project?.name ?? name ?? "Unknown project",
           color: project?.color ?? SEGMENT_FALLBACK_COLOR,
           minutes,
         };
@@ -302,6 +323,56 @@ export function AllocationView() {
   const nonBillableMinutes = billableSegments.find((s) => s.key === "non-billable")?.minutes ?? 0;
   const billablePct = totalTracked > 0 ? (billableMinutes / totalTracked) * 100 : 0;
   const nonBillablePct = totalTracked > 0 ? (nonBillableMinutes / totalTracked) * 100 : 0;
+
+  // Per-project rows for the allocation list. Multiple openings on the same
+  // project (common for vacation) are merged into a single row by summing
+  // each opening's allocMinutes for the visible range.
+  const projectRows = useMemo(() => {
+    type Row = {
+      projectId: string;
+      projectName: string;
+      allocMinutes: number;
+      tracked: number;
+    };
+
+    const days: string[] = [];
+    const start = new Date(range.start + "T12:00:00");
+    const end = new Date(range.end + "T12:00:00");
+    const cur = new Date(start);
+    while (cur <= end) {
+      days.push(cur.toISOString().split("T")[0]);
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    const byProject = new Map<string, Row>();
+    for (const alloc of allocations) {
+      const allocMinutes = days.reduce(
+        (s, d) => s + Math.round((getAllocPercentageOnDate(alloc, d) / 100) * WORKDAY_MINUTES),
+        0
+      );
+      const existing = byProject.get(alloc.projectId);
+      if (existing) {
+        existing.allocMinutes += allocMinutes;
+      } else {
+        byProject.set(alloc.projectId, {
+          projectId: alloc.projectId,
+          projectName: alloc.projectName,
+          allocMinutes,
+          tracked: 0,
+        });
+      }
+    }
+
+    for (const row of byProject.values()) {
+      row.tracked = state.entries
+        .filter(
+          (e) => e.projectId === row.projectId && e.date >= range.start && e.date <= range.end
+        )
+        .reduce((s, e) => s + e.minutes, 0);
+    }
+
+    return [...byProject.values()].filter((r) => r.allocMinutes > 0 || r.tracked > 0);
+  }, [allocations, state.entries, range.start, range.end]);
   const referenceMinutes = period === "week" ? WORKDAY_MINUTES : WEEK_CAPACITY_MINUTES;
   const referenceLabel = period === "week" ? "8h" : "40h";
   const maxMinutes = Math.max(
@@ -310,7 +381,7 @@ export function AllocationView() {
   );
 
   return (
-    <div className="flex-1 overflow-y-auto pt-2 pb-4">
+    <div className="flex-1 overflow-y-auto overflow-x-clip pt-2 pb-4">
       <div className="mx-2">
         {/* Period header */}
         <div className="flex items-center justify-between px-3 py-2">
@@ -472,67 +543,44 @@ export function AllocationView() {
               No allocation data available
             </div>
           )}
-          {allocations
-            .map((alloc) => {
-              const days: string[] = [];
-              const start = new Date(range.start + "T12:00:00");
-              const end = new Date(range.end + "T12:00:00");
-              const cur = new Date(start);
-              while (cur <= end) {
-                days.push(cur.toISOString().split("T")[0]);
-                cur.setDate(cur.getDate() + 1);
-              }
-              const allocMinutes = days.reduce(
-                (s, d) =>
-                  s + Math.round((getAllocPercentageOnDate(alloc, d) / 100) * WORKDAY_MINUTES),
-                0
-              );
-              const tracked = state.entries
-                .filter(
-                  (e) =>
-                    e.projectId === alloc.projectId && e.date >= range.start && e.date <= range.end
-                )
-                .reduce((s, e) => s + e.minutes, 0);
-              return { alloc, allocMinutes, tracked };
-            })
-            .filter(({ allocMinutes, tracked }) => allocMinutes > 0 || tracked > 0)
-            .map(({ alloc, allocMinutes, tracked }, i, arr) => {
-              const project = state.projects.find((p) => p.id === alloc.projectId);
-              const pct = allocMinutes > 0 ? Math.min((tracked / allocMinutes) * 100, 100) : 0;
+          {projectRows.map((row, i, arr) => {
+            const project = state.projects.find((p) => p.id === row.projectId);
+            const pct =
+              row.allocMinutes > 0 ? Math.min((row.tracked / row.allocMinutes) * 100, 100) : 0;
 
-              return (
-                <div
-                  key={alloc.projectId + alloc.startDate}
-                  className={`px-4 py-3 ${i < arr.length - 1 ? "border-b border-divider" : ""}`}
-                >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className="w-2 h-2 rounded-full shrink-0"
-                        style={{ backgroundColor: project?.color ?? "#999" }}
-                      />
-                      <span className="text-sm text-text">{alloc.projectName}</span>
-                    </div>
-                    <span className="text-xs text-text-muted tabular-nums">
-                      {formatHours(tracked)} / {formatHours(allocMinutes)}
-                    </span>
+            return (
+              <div
+                key={row.projectId}
+                className={`px-4 py-3 ${i < arr.length - 1 ? "border-b border-divider" : ""}`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: project?.color ?? "#999" }}
+                    />
+                    <span className="text-sm text-text">{row.projectName}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-bg rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          tracked > allocMinutes ? "bg-danger/70" : "bg-primary"
-                        }`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <span className="text-[10px] text-text-muted tabular-nums w-8 text-right">
-                      {Math.round(pct)}%
-                    </span>
-                  </div>
+                  <span className="text-xs text-text-muted tabular-nums">
+                    {formatHours(row.tracked)} / {formatHours(row.allocMinutes)}
+                  </span>
                 </div>
-              );
-            })}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-bg rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        row.tracked > row.allocMinutes ? "bg-danger/70" : "bg-primary"
+                      }`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-text-muted tabular-nums w-8 text-right">
+                    {Math.round(pct)}%
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

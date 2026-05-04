@@ -218,13 +218,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "SET_PROJECTS", payload: enrichedProjects });
         dispatch({ type: "SET_MY_PROJECT_IDS", payload: myProjects.map((p) => p.id) });
 
-        // Use local dates (not UTC) to avoid timezone issues
+        // Use local dates (not UTC) to avoid timezone issues. Window extends
+        // 30 days ahead so future-logged entries (e.g. vacation) show up in
+        // the allocation view's weekly/monthly totals.
+        const fmt = (d: Date) =>
+          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
         const now = new Date();
-        const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
         const past = new Date(now);
         past.setDate(past.getDate() - 30);
-        const startDate = `${past.getFullYear()}-${String(past.getMonth() + 1).padStart(2, "0")}-${String(past.getDate()).padStart(2, "0")}`;
-        const entries = await api!.getTimeEntries(employee.id, startDate, endDate);
+        const future = new Date(now);
+        future.setDate(future.getDate() + 30);
+        const entries = await api!.getTimeEntries(employee.id, fmt(past), fmt(future));
         if (cancelled) return;
         dispatch({ type: "SET_ENTRIES", payload: entries });
       } catch (err) {
