@@ -294,7 +294,7 @@ export function AllocationView() {
         {/* Per-project breakdown */}
         <div className="px-3 py-2">
           <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">
-            By Project
+            Allocation by project ({period === "week" ? "this week" : "this month"})
           </span>
         </div>
         <div className="bg-bg-card rounded-xl shadow-sm overflow-hidden">
