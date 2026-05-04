@@ -22,6 +22,7 @@ import {
   buildApiBaseUrl,
   DEFAULT_CONNECTION,
 } from "../api/auth-manager";
+import { loadTimerState, saveTimerState, clearTimerState } from "./timer-store";
 
 interface AppContextValue {
   state: AppState;
@@ -41,6 +42,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [syncCounter, setSyncCounter] = useState(0);
+  const [timerLoaded, setTimerLoaded] = useState(false);
   const authStateRef = useRef<AuthState | null>(null);
 
   authStateRef.current = authState;
@@ -84,6 +86,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setIsConnected(false);
     dispatch({ type: "SET_ENTRIES", payload: [] });
     dispatch({ type: "SET_PROJECTS", payload: [] });
+    dispatch({ type: "CLEAR_ALLOCATIONS" });
     dispatch({ type: "SET_ERROR", payload: null });
     dispatch({ type: "SET_LOADING", payload: false });
   }
@@ -97,6 +100,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
       unlisten.then((fn) => fn());
     };
   }, []);
+
+  // Restore a running timer that survived a quit/crash. Elapsed is derived
+  // from startTime + now(), so time the app was closed is naturally counted.
+  useEffect(() => {
+    loadTimerState()
+      .then((saved) => {
+        if (saved?.isRunning && saved.startTime) {
+          dispatch({ type: "SET_TIMER", payload: saved });
+        }
+      })
+      .catch(() => {
+        // Best effort — if the store can't be read, the user starts with a fresh timer
+      })
+      .finally(() => setTimerLoaded(true));
+  }, []);
+
+  // Persist the timer whenever it changes, but only after the initial load —
+  // otherwise the default empty timer would overwrite a saved running timer.
+  useEffect(() => {
+    if (!timerLoaded) return;
+    if (state.timer.isRunning) {
+      saveTimerState(state.timer).catch(() => {});
+    } else {
+      clearTimerState().catch(() => {});
+    }
+  }, [timerLoaded, state.timer]);
 
   // On mount: check for saved auth state, refresh if expired
   useEffect(() => {
