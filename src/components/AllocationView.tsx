@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useApp, useApi } from "../store/context";
 import type { Allocation } from "../api/types";
 
 type Period = "week" | "month";
 
 const WORKDAY_MINUTES = 480; // 8 hours
+const ALLOCATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function getWeekRange(ref: Date): { start: string; end: string; label: string } {
   const day = ref.getDay();
@@ -113,18 +114,34 @@ function Bar({ data, maxMinutes }: { data: BarData; maxMinutes: number }) {
 }
 
 export function AllocationView() {
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const api = useApi();
   const [period, setPeriod] = useState<Period>("week");
-  const [allocations, setAllocations] = useState<Allocation[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const allocations = state.allocations;
+  const fetchedAt = state.allocationsFetchedAt;
+  const inflightRef = useRef(false);
+
+  const fetchAllocations = async (force: boolean) => {
+    if (!state.employee || inflightRef.current) return;
+    if (!force && fetchedAt !== null && Date.now() - fetchedAt < ALLOCATION_CACHE_TTL_MS) {
+      return;
+    }
+    inflightRef.current = true;
+    if (force) setRefreshing(true);
+    try {
+      const data = await api.getAllocations(state.employee.id);
+      dispatch({ type: "SET_ALLOCATIONS", payload: { allocations: data, fetchedAt: Date.now() } });
+    } catch {
+      // Network or auth failure — leave any prior cache in place
+    } finally {
+      inflightRef.current = false;
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    if (state.employee) {
-      api
-        .getAllocations(state.employee.id)
-        .then(setAllocations)
-        .catch(() => {});
-    }
+    fetchAllocations(false);
   }, [state.employee, api]);
 
   const now = new Date();
@@ -180,23 +197,50 @@ export function AllocationView() {
         {/* Period header */}
         <div className="flex items-center justify-between px-3 py-2">
           <span className="text-sm font-semibold text-text">{range.label}</span>
-          <div className="flex bg-bg rounded-md p-0.5">
+          <div className="flex items-center gap-1.5">
             <button
-              onClick={() => setPeriod("week")}
-              className={`px-2.5 py-1 text-[10px] font-medium rounded transition-all ${
-                period === "week" ? "bg-bg-card text-text shadow-sm" : "text-text-muted"
-              }`}
+              onClick={() => fetchAllocations(true)}
+              disabled={refreshing || !state.employee}
+              title={
+                fetchedAt
+                  ? `Last refreshed ${new Date(fetchedAt).toLocaleString()}`
+                  : "Refresh allocations"
+              }
+              className="p-1 rounded text-text-muted hover:text-text hover:bg-bg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              aria-label="Refresh allocations"
             >
-              Week
+              <svg
+                className={`w-3.5 h-3.5 ${refreshing ? "animate-spin [animation-direction:reverse]" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
             </button>
-            <button
-              onClick={() => setPeriod("month")}
-              className={`px-2.5 py-1 text-[10px] font-medium rounded transition-all ${
-                period === "month" ? "bg-bg-card text-text shadow-sm" : "text-text-muted"
-              }`}
-            >
-              Month
-            </button>
+            <div className="flex bg-bg rounded-md p-0.5">
+              <button
+                onClick={() => setPeriod("week")}
+                className={`px-2.5 py-1 text-[10px] font-medium rounded transition-all ${
+                  period === "week" ? "bg-bg-card text-text shadow-sm" : "text-text-muted"
+                }`}
+              >
+                Week
+              </button>
+              <button
+                onClick={() => setPeriod("month")}
+                className={`px-2.5 py-1 text-[10px] font-medium rounded transition-all ${
+                  period === "month" ? "bg-bg-card text-text shadow-sm" : "text-text-muted"
+                }`}
+              >
+                Month
+              </button>
+            </div>
           </div>
         </div>
 

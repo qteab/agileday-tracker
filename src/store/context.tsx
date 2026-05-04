@@ -84,6 +84,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setIsConnected(false);
     dispatch({ type: "SET_ENTRIES", payload: [] });
     dispatch({ type: "SET_PROJECTS", payload: [] });
+    dispatch({ type: "CLEAR_ALLOCATIONS" });
     dispatch({ type: "SET_ERROR", payload: null });
     dispatch({ type: "SET_LOADING", payload: false });
   }
