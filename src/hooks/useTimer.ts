@@ -129,7 +129,7 @@ export function useTimer() {
     [dispatch]
   );
 
-  const startLastTask = useCallback(() => {
+  const continueLastTask = useCallback(() => {
     if (timer.isRunning) return;
     const latest = state.entries.reduce<(typeof state.entries)[number] | null>(
       (best, e) => (best === null || e.startTime > best.startTime ? e : best),
@@ -148,23 +148,23 @@ export function useTimer() {
     });
   }, [dispatch, state.entries, timer.isRunning]);
 
-  // Tray menu Start/Stop buttons emit these events; keep refs so we register
+  // Tray menu Continue/Stop buttons emit these events; keep refs so we register
   // the listeners only once but always invoke the latest closure.
   const stopRef = useRef(stop);
-  const startLastRef = useRef(startLastTask);
+  const continueLastRef = useRef(continueLastTask);
   stopRef.current = stop;
-  startLastRef.current = startLastTask;
+  continueLastRef.current = continueLastTask;
 
   useEffect(() => {
     const unlistenStop = listen("tray-stop-timer", () => {
       void stopRef.current();
     });
-    const unlistenStart = listen("tray-start-last", () => {
-      startLastRef.current();
+    const unlistenContinue = listen("tray-continue-last", () => {
+      continueLastRef.current();
     });
     return () => {
       unlistenStop.then((fn) => fn()).catch(() => {});
-      unlistenStart.then((fn) => fn()).catch(() => {});
+      unlistenContinue.then((fn) => fn()).catch(() => {});
     };
   }, []);
 
