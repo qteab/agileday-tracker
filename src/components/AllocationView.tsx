@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useApp, useApi } from "../store/context";
+import { isBillableProjectType } from "./BillableIndicator";
 import type { Allocation } from "../api/types";
 
 type Period = "week" | "month";
@@ -96,6 +97,50 @@ interface BarData {
   label: string;
   allocated: number;
   tracked: number;
+}
+
+interface BarSegment {
+  key: string;
+  label: string;
+  color: string;
+  minutes: number;
+}
+
+const SEGMENT_FALLBACK_COLOR = "#9CA3AF";
+const BILLABLE_COLOR = "#7A59FC"; // matches --color-primary
+const NON_BILLABLE_COLOR = "#D1CCC9"; // matches the bar's empty track tint
+
+function StackedBar({ segments, totalMinutes }: { segments: BarSegment[]; totalMinutes: number }) {
+  if (totalMinutes === 0 || segments.length === 0) {
+    return <div className="h-3 bg-bg rounded-full" />;
+  }
+  const visible = segments.filter((s) => s.minutes > 0);
+  return (
+    <div className="flex h-3 bg-bg rounded-full">
+      {visible.map((s, i) => {
+        const pct = (s.minutes / totalMinutes) * 100;
+        const isFirst = i === 0;
+        const isLast = i === visible.length - 1;
+        const rounded = `${isFirst ? "rounded-l-full" : ""} ${isLast ? "rounded-r-full" : ""}`;
+        const separator = !isLast ? "border-r-2 border-bg-card" : "";
+        return (
+          <div key={s.key} className="group relative h-full" style={{ width: `${pct}%` }}>
+            <div
+              className={`h-full ${rounded} ${separator}`}
+              style={{ backgroundColor: s.color }}
+            />
+            <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1.5 rounded-md bg-bg-dark text-bg-card text-[10px] leading-tight whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10">
+              <div className="font-semibold mb-0.5">{s.label}</div>
+              <div>
+                {formatHours(s.minutes)} ({pct.toFixed(1)}%)
+              </div>
+              <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2 w-2 h-2 bg-bg-dark rotate-45" />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function BarVisual({ data, maxMinutes }: { data: BarData; maxMinutes: number }) {
@@ -209,6 +254,54 @@ export function AllocationView() {
 
   const totalAllocated = barData.reduce((s, d) => s + d.allocated, 0);
   const totalTracked = barData.reduce((s, d) => s + d.tracked, 0);
+
+  // Tracked-time breakdown for the current period (week/month)
+  const projectSegments = useMemo<BarSegment[]>(() => {
+    const totals = new Map<string, number>();
+    for (const e of state.entries) {
+      if (e.date < range.start || e.date > range.end) continue;
+      totals.set(e.projectId, (totals.get(e.projectId) ?? 0) + e.minutes);
+    }
+    return [...totals.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([projectId, minutes]) => {
+        const project = state.projects.find((p) => p.id === projectId);
+        return {
+          key: projectId,
+          label: project?.name ?? "Unknown project",
+          color: project?.color ?? SEGMENT_FALLBACK_COLOR,
+          minutes,
+        };
+      });
+  }, [state.entries, state.projects, range.start, range.end]);
+
+  const billableSegments = useMemo<BarSegment[]>(() => {
+    let billable = 0;
+    let nonBillable = 0;
+    for (const e of state.entries) {
+      if (e.date < range.start || e.date > range.end) continue;
+      const project = state.projects.find((p) => p.id === e.projectId);
+      const type = e.projectType ?? project?.projectType;
+      if (isBillableProjectType(type)) billable += e.minutes;
+      else nonBillable += e.minutes;
+    }
+    const segs: BarSegment[] = [];
+    if (billable > 0)
+      segs.push({ key: "billable", label: "Billable", color: BILLABLE_COLOR, minutes: billable });
+    if (nonBillable > 0)
+      segs.push({
+        key: "non-billable",
+        label: "Non-billable",
+        color: NON_BILLABLE_COLOR,
+        minutes: nonBillable,
+      });
+    return segs;
+  }, [state.entries, state.projects, range.start, range.end]);
+
+  const billableMinutes = billableSegments.find((s) => s.key === "billable")?.minutes ?? 0;
+  const nonBillableMinutes = billableSegments.find((s) => s.key === "non-billable")?.minutes ?? 0;
+  const billablePct = totalTracked > 0 ? (billableMinutes / totalTracked) * 100 : 0;
+  const nonBillablePct = totalTracked > 0 ? (nonBillableMinutes / totalTracked) * 100 : 0;
   const referenceMinutes = period === "week" ? WORKDAY_MINUTES : WEEK_CAPACITY_MINUTES;
   const referenceLabel = period === "week" ? "8h" : "40h";
   const maxMinutes = Math.max(
@@ -338,6 +431,31 @@ export function AllocationView() {
             <div className="flex items-center gap-1.5">
               <div className="w-2.5 h-2.5 rounded-sm bg-danger/70" />
               <span className="text-[10px] text-text-muted">Over</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Tracked-time breakdown (per project + billable split) */}
+        <div className="px-3 py-2">
+          <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">
+            Tracked time ({period === "week" ? "this week" : "this month"})
+          </span>
+        </div>
+        <div className="bg-bg-card rounded-xl shadow-sm px-4 py-3 mb-3">
+          <div className="space-y-2.5">
+            <div className="text-[10px] text-text-muted uppercase tracking-wide">By project</div>
+            <StackedBar segments={projectSegments} totalMinutes={totalTracked} />
+          </div>
+          <div className="border-t border-divider my-4" />
+          <div className="space-y-2.5">
+            <StackedBar segments={billableSegments} totalMinutes={totalTracked} />
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wide tabular-nums text-primary">
+                Billable {Math.round(billablePct)}%
+              </span>
+              <span className="text-[10px] uppercase tracking-wide tabular-nums text-text-muted">
+                {Math.round(nonBillablePct)}% Non-billable
+              </span>
             </div>
           </div>
         </div>
