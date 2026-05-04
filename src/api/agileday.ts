@@ -106,15 +106,26 @@ export function createAgileDayProvider(
     }
 
     const doFetch = await getResolvedFetch();
-    const response = await doFetch(url, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        Origin: new URL(config.apiBaseUrl).origin,
-        ...options.headers,
-      },
-    });
+    const method = options.method ?? "GET";
+    const startedAt = performance.now();
+    let response: Response;
+    try {
+      response = await doFetch(url, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          Origin: new URL(config.apiBaseUrl).origin,
+          ...options.headers,
+        },
+      });
+    } catch (err) {
+      const elapsed = Math.round(performance.now() - startedAt);
+      console.log(`[AgileDay] ${method} ${url} → network error (${elapsed}ms)`);
+      throw err;
+    }
+    const elapsed = Math.round(performance.now() - startedAt);
+    console.log(`[AgileDay] ${method} ${url} → ${response.status} (${elapsed}ms)`);
 
     if (response.status === 401) {
       const body = await response.text().catch(() => "");
