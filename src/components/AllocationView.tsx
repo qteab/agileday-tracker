@@ -7,16 +7,28 @@ type Period = "week" | "month";
 const WORKDAY_MINUTES = 480; // 8 hours
 const WEEK_CAPACITY_MINUTES = 2400; // 40 hours
 
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
+}
+
 function getWeekRange(ref: Date): { start: string; end: string; label: string } {
   const day = ref.getDay();
   const monday = new Date(ref);
   monday.setDate(ref.getDate() - ((day + 6) % 7));
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
+  const sameMonth = monday.getMonth() === sunday.getMonth();
+  const startOrd = ordinal(monday.getDate());
+  const endOrd = sameMonth
+    ? ordinal(sunday.getDate())
+    : `${ordinal(sunday.getDate())} ${sunday.toLocaleDateString("en-US", { month: "short" })}`;
+  const startBase = monday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   return {
     start: monday.toISOString().split("T")[0],
     end: sunday.toISOString().split("T")[0],
-    label: `Week of ${monday.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
+    label: `Week of ${startBase} (${startOrd} - ${endOrd})`,
   };
 }
 
