@@ -205,13 +205,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         dispatch({ type: "SET_EMPLOYEE", payload: employee });
 
-        const [projects, myProjectIds] = await Promise.all([
+        const [projects, myProjects] = await Promise.all([
           api!.getProjects(),
-          api!.getMyProjectIds(employee.id),
+          api!.getMyProjects(employee.id),
         ]);
         if (cancelled) return;
-        dispatch({ type: "SET_PROJECTS", payload: projects });
-        dispatch({ type: "SET_MY_PROJECT_IDS", payload: myProjectIds });
+        const typeById = new Map(myProjects.map((p) => [p.id, p.projectType]));
+        const enrichedProjects = projects.map((p) =>
+          typeById.has(p.id) ? { ...p, projectType: typeById.get(p.id) } : p
+        );
+        dispatch({ type: "SET_PROJECTS", payload: enrichedProjects });
+        dispatch({ type: "SET_MY_PROJECT_IDS", payload: myProjects.map((p) => p.id) });
 
         // Use local dates (not UTC) to avoid timezone issues
         const now = new Date();

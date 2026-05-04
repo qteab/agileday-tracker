@@ -1,8 +1,11 @@
+export type ProjectType = "INTERNAL" | "EXTERNAL" | "ABSENCE" | "IDLE";
+
 export interface Project {
   id: string;
   name: string;
   customerName?: string;
   color: string;
+  projectType?: ProjectType;
 }
 
 export interface Task {
@@ -22,6 +25,7 @@ export interface TimeEntry {
   description: string;
   projectId: string;
   projectName?: string;
+  projectType?: ProjectType;
   taskId?: string;
   date: string; // YYYY-MM-DD
   startTime: string; // ISO timestamp

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useApp } from "../store/context";
 import { formatMinutes } from "../hooks/useTimer";
 import { EntryEditModal } from "./EntryEditModal";
+import { BillableIndicator } from "./BillableIndicator";
 import type { TimeEntry as TimeEntryType } from "../api/types";
 
 interface TimeEntryProps {
@@ -35,6 +36,7 @@ export function TimeEntry({ entry, onContinue }: TimeEntryProps) {
             {entry.description || <span className="text-text-muted">+ Add description</span>}
           </p>
           <div className="flex items-center gap-1.5 mt-0.5">
+            <BillableIndicator projectType={entry.projectType ?? project?.projectType} />
             {project && (
               <>
                 <span

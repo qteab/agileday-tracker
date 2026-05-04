@@ -2,11 +2,17 @@ import type { ApiProvider } from "./provider";
 import type { Allocation, Employee, Project, Task, TimeEntry } from "./types";
 
 export const MOCK_PROJECTS: Project[] = [
-  { id: "p1", name: "Fokus", customerName: "QTE", color: "#E5B80B" },
-  { id: "p2", name: "DHL - PIL", customerName: "DHL", color: "#AEA7FF" },
-  { id: "p3", name: "maverick", customerName: "Maverick", color: "#D946EF" },
-  { id: "p4", name: "KBV", customerName: "KBV", color: "#374151" },
-  { id: "p5", name: "QTE - möten", customerName: "QTE", color: "#7A59FC" },
+  { id: "p1", name: "Fokus", customerName: "QTE", color: "#E5B80B", projectType: "INTERNAL" },
+  { id: "p2", name: "DHL - PIL", customerName: "DHL", color: "#AEA7FF", projectType: "EXTERNAL" },
+  {
+    id: "p3",
+    name: "maverick",
+    customerName: "Maverick",
+    color: "#D946EF",
+    projectType: "EXTERNAL",
+  },
+  { id: "p4", name: "KBV", customerName: "KBV", color: "#374151", projectType: "EXTERNAL" },
+  { id: "p5", name: "QTE - möten", customerName: "QTE", color: "#7A59FC", projectType: "INTERNAL" },
 ];
 
 export const MOCK_TASKS: Record<string, Task[]> = {
@@ -116,8 +122,8 @@ export function createMockProvider(
       return allocations;
     },
 
-    async getMyProjectIds(_employeeId: string) {
-      return projects.map((p) => p.id);
+    async getMyProjects(_employeeId: string) {
+      return projects.map((p) => ({ id: p.id, projectType: p.projectType }));
     },
   };
 }
