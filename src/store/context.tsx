@@ -3,6 +3,7 @@ import {
   useContext,
   useReducer,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -44,28 +45,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   authStateRef.current = authState;
 
-  const api: ApiProvider | null =
-    isConnected && authState
-      ? createAgileDayProvider(
-          {
-            apiBaseUrl: buildApiBaseUrl(DEFAULT_CONNECTION),
-            authConfig: buildAuthConfig(DEFAULT_CONNECTION),
-          } as AgileDayConfig,
-          () => authStateRef.current,
-          (newState: AuthState) => {
-            setAuthState(newState);
-            saveAuthState(newState).catch(() => {
-              // Store save failed — token is in memory but won't persist across restarts
-            });
-          },
-          () => {
-            setAuthState(null);
-            setIsConnected(false);
-            dispatch({ type: "SET_ERROR", payload: "Session expired — please sign in again" });
-            clearAuth().catch(() => {});
-          }
-        )
-      : null;
+  const api = useMemo<ApiProvider | null>(() => {
+    if (!isConnected) return null;
+    return createAgileDayProvider(
+      {
+        apiBaseUrl: buildApiBaseUrl(DEFAULT_CONNECTION),
+        authConfig: buildAuthConfig(DEFAULT_CONNECTION),
+      } as AgileDayConfig,
+      () => authStateRef.current,
+      (newState: AuthState) => {
+        setAuthState(newState);
+        saveAuthState(newState).catch(() => {
+          // Store save failed — token is in memory but won't persist across restarts
+        });
+      },
+      () => {
+        setAuthState(null);
+        setIsConnected(false);
+        dispatch({ type: "SET_ERROR", payload: "Session expired — please sign in again" });
+        clearAuth().catch(() => {});
+      }
+    );
+  }, [isConnected]);
 
   function onLogin(auth: AuthState) {
     dispatch({ type: "SET_ERROR", payload: null });
