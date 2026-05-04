@@ -8,11 +8,11 @@ use tauri::{
 
 #[cfg(target_os = "macos")]
 fn set_dock_visible(app: &tauri::AppHandle, visible: bool) {
-    if visible {
-        app.set_activation_policy(tauri::ActivationPolicy::Regular);
+    let _ = if visible {
+        app.set_activation_policy(tauri::ActivationPolicy::Regular)
     } else {
-        app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-    }
+        app.set_activation_policy(tauri::ActivationPolicy::Accessory)
+    };
 }
 
 /// Start a one-shot HTTP server on localhost:19847 to capture the OAuth callback.
@@ -173,7 +173,7 @@ pub fn run() {
                 .icon_as_template(false)
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
-                .menu_on_left_click(true)
+                .show_menu_on_left_click(true)
                 .on_menu_event(|app, event| {
                     match event.id().as_ref() {
                         "new" | "show" => {
