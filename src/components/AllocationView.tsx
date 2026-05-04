@@ -132,7 +132,7 @@ function StackedBar({ segments, totalMinutes }: { segments: BarSegment[]; totalM
             <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1.5 rounded-md bg-bg-dark text-bg-card text-[10px] leading-tight whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10">
               <div className="font-semibold mb-0.5">{s.label}</div>
               <div>
-                {formatHours(s.minutes)} ({pct.toFixed(1)}%)
+                {formatHours(s.minutes)} ({Math.round(pct)}%)
               </div>
               <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2 w-2 h-2 bg-bg-dark rotate-45" />
             </div>
