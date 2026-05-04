@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useApp, useApi } from "../store/context";
 
 export function useTimer() {
@@ -13,7 +14,12 @@ export function useTimer() {
     if (timer.isRunning && timer.startTime) {
       const updateElapsed = () => {
         const start = new Date(timer.startTime!).getTime();
-        setElapsed(Math.floor((Date.now() - start) / 1000));
+        const seconds = Math.floor((Date.now() - start) / 1000);
+        setElapsed(seconds);
+        invoke("set_timer_status", {
+          running: true,
+          elapsedText: formatTime(seconds),
+        }).catch(() => {});
       };
       updateElapsed();
       intervalRef.current = setInterval(updateElapsed, 1000);
@@ -22,6 +28,7 @@ export function useTimer() {
       };
     } else {
       setElapsed(0);
+      invoke("set_timer_status", { running: false, elapsedText: null }).catch(() => {});
     }
   }, [timer.isRunning, timer.startTime]);
 

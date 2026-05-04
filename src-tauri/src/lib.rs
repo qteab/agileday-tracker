@@ -1,10 +1,32 @@
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
+    menu::{MenuBuilder, MenuItem, MenuItemBuilder, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    Emitter, Manager,
+    Emitter, Manager, Wry,
 };
+
+struct TrayMenuItems {
+    timer_status: MenuItem<Wry>,
+}
+
+#[tauri::command]
+fn set_timer_status(
+    app: tauri::AppHandle,
+    running: bool,
+    elapsed_text: Option<String>,
+) -> Result<(), String> {
+    let items = app.state::<TrayMenuItems>();
+    let text = if running {
+        match elapsed_text.as_deref() {
+            Some(t) if !t.is_empty() => format!("Timer running — {}", t),
+            _ => "Timer running".to_string(),
+        }
+    } else {
+        "Timer is not running".to_string()
+    };
+    items.timer_status.set_text(text).map_err(|e| e.to_string())
+}
 
 #[cfg(target_os = "macos")]
 fn set_dock_visible(app: &tauri::AppHandle, visible: bool) {
@@ -103,7 +125,10 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_http::init())
-        .invoke_handler(tauri::generate_handler![wait_for_oauth_callback])
+        .invoke_handler(tauri::generate_handler![
+            wait_for_oauth_callback,
+            set_timer_status
+        ])
         .setup(move |app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -167,6 +192,10 @@ pub fn run() {
                 .item(&sep3)
                 .item(&quit_item)
                 .build()?;
+
+            app.manage(TrayMenuItems {
+                timer_status: timer_status.clone(),
+            });
 
             TrayIconBuilder::new()
                 .tooltip("QTE Time Tracker")
