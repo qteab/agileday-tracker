@@ -5,6 +5,7 @@ import type { Allocation } from "../api/types";
 type Period = "week" | "month";
 
 const WORKDAY_MINUTES = 480; // 8 hours
+const WEEK_CAPACITY_MINUTES = 2400; // 40 hours
 
 function getWeekRange(ref: Date): { start: string; end: string; label: string } {
   const day = ref.getDay();
@@ -84,30 +85,27 @@ interface BarData {
   tracked: number;
 }
 
-function Bar({ data, maxMinutes }: { data: BarData; maxMinutes: number }) {
+function BarVisual({ data, maxMinutes }: { data: BarData; maxMinutes: number }) {
   const allocatedPct = maxMinutes > 0 ? (data.allocated / maxMinutes) * 100 : 0;
   const trackedPct = maxMinutes > 0 ? (data.tracked / maxMinutes) * 100 : 0;
   const overAllocated = data.tracked > data.allocated && data.allocated > 0;
 
   return (
-    <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
-      <div className="flex items-end gap-0.5 h-32 w-full justify-center">
-        <div className="relative w-5 bg-bg rounded-t" style={{ height: "100%" }}>
-          <div
-            className="absolute bottom-0 left-0 right-0 bg-primary/20 rounded-t transition-all"
-            style={{ height: `${allocatedPct}%` }}
-          />
-        </div>
-        <div className="relative w-5 bg-bg rounded-t" style={{ height: "100%" }}>
-          <div
-            className={`absolute bottom-0 left-0 right-0 rounded-t transition-all ${
-              overAllocated ? "bg-danger/70" : "bg-primary"
-            }`}
-            style={{ height: `${Math.min(trackedPct, 100)}%` }}
-          />
-        </div>
+    <div className="flex items-end gap-0.5 flex-1 h-full justify-center min-w-0">
+      <div className="relative w-5 bg-bg rounded-t" style={{ height: "100%" }}>
+        <div
+          className="absolute bottom-0 left-0 right-0 bg-primary/20 rounded-t transition-all"
+          style={{ height: `${allocatedPct}%` }}
+        />
       </div>
-      <span className="text-[10px] text-text-muted">{data.label}</span>
+      <div className="relative w-5 bg-bg rounded-t" style={{ height: "100%" }}>
+        <div
+          className={`absolute bottom-0 left-0 right-0 rounded-t transition-all ${
+            overAllocated ? "bg-danger/70" : "bg-primary"
+          }`}
+          style={{ height: `${Math.min(trackedPct, 100)}%` }}
+        />
+      </div>
     </div>
   );
 }
@@ -172,7 +170,12 @@ export function AllocationView() {
 
   const totalAllocated = barData.reduce((s, d) => s + d.allocated, 0);
   const totalTracked = barData.reduce((s, d) => s + d.tracked, 0);
-  const maxMinutes = Math.max(...barData.map((d) => Math.max(d.allocated, d.tracked)), 1);
+  const referenceMinutes = period === "week" ? WORKDAY_MINUTES : WEEK_CAPACITY_MINUTES;
+  const referenceLabel = period === "week" ? "8h" : "40h";
+  const maxMinutes = Math.max(
+    ...barData.map((d) => Math.max(d.allocated, d.tracked)),
+    referenceMinutes
+  );
 
   return (
     <div className="flex-1 overflow-y-auto pt-2 pb-4">
@@ -222,10 +225,32 @@ export function AllocationView() {
           </div>
 
           {/* Chart */}
-          <div className="flex items-end gap-1">
-            {barData.map((d) => (
-              <Bar key={d.label} data={d} maxMinutes={maxMinutes} />
-            ))}
+          <div className="pr-6">
+            <div className="relative flex items-end gap-1 h-32">
+              {barData.map((d) => (
+                <BarVisual key={d.label} data={d} maxMinutes={maxMinutes} />
+              ))}
+              <div
+                className="absolute left-0 -right-6 border-t border-dashed border-text-muted/50 pointer-events-none"
+                style={{ bottom: `${(referenceMinutes / maxMinutes) * 100}%` }}
+              />
+              <span
+                className="absolute -right-6 text-[9px] text-text-muted leading-none pointer-events-none"
+                style={{ bottom: `calc(${(referenceMinutes / maxMinutes) * 100}% + 3px)` }}
+              >
+                {referenceLabel}
+              </span>
+            </div>
+            <div className="flex gap-1 mt-1">
+              {barData.map((d) => (
+                <span
+                  key={d.label}
+                  className="flex-1 text-center text-[10px] text-text-muted min-w-0"
+                >
+                  {d.label}
+                </span>
+              ))}
+            </div>
           </div>
 
           {/* Legend */}
