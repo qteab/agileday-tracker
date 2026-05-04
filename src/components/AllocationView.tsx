@@ -89,9 +89,10 @@ function BarVisual({ data, maxMinutes }: { data: BarData; maxMinutes: number }) 
   const allocatedPct = maxMinutes > 0 ? (data.allocated / maxMinutes) * 100 : 0;
   const trackedPct = maxMinutes > 0 ? (data.tracked / maxMinutes) * 100 : 0;
   const overAllocated = data.tracked > data.allocated && data.allocated > 0;
+  const usagePct = data.allocated > 0 ? (data.tracked / data.allocated) * 100 : 0;
 
   return (
-    <div className="flex items-end gap-0.5 flex-1 h-full justify-center min-w-0">
+    <div className="group relative flex items-end gap-0.5 flex-1 h-full justify-center min-w-0">
       <div className="relative w-5 bg-bg rounded-t" style={{ height: "100%" }}>
         <div
           className="absolute bottom-0 left-0 right-0 bg-primary/20 rounded-t transition-all"
@@ -105,6 +106,14 @@ function BarVisual({ data, maxMinutes }: { data: BarData; maxMinutes: number }) 
           }`}
           style={{ height: `${Math.min(trackedPct, 100)}%` }}
         />
+      </div>
+      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1.5 rounded-md bg-bg-dark text-bg-card text-[10px] leading-tight whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10">
+        <div className="font-semibold mb-0.5">{data.label}</div>
+        <div>Allocated: {formatHours(data.allocated)}</div>
+        <div>Tracked: {formatHours(data.tracked)}</div>
+        {data.allocated > 0 && (
+          <div className={overAllocated ? "text-danger" : ""}>{Math.round(usagePct)}%</div>
+        )}
       </div>
     </div>
   );
