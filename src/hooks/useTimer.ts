@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useApp, useApi } from "../store/context";
 
 export function useTimer() {
@@ -13,7 +15,12 @@ export function useTimer() {
     if (timer.isRunning && timer.startTime) {
       const updateElapsed = () => {
         const start = new Date(timer.startTime!).getTime();
-        setElapsed(Math.floor((Date.now() - start) / 1000));
+        const seconds = Math.floor((Date.now() - start) / 1000);
+        setElapsed(seconds);
+        invoke("set_timer_status", {
+          running: true,
+          elapsedText: formatTime(seconds),
+        }).catch(() => {});
       };
       updateElapsed();
       intervalRef.current = setInterval(updateElapsed, 1000);
@@ -22,6 +29,7 @@ export function useTimer() {
       };
     } else {
       setElapsed(0);
+      invoke("set_timer_status", { running: false, elapsedText: null }).catch(() => {});
     }
   }, [timer.isRunning, timer.startTime]);
 
@@ -120,6 +128,45 @@ export function useTimer() {
     },
     [dispatch]
   );
+
+  const continueLastTask = useCallback(() => {
+    if (timer.isRunning) return;
+    const latest = state.entries.reduce<(typeof state.entries)[number] | null>(
+      (best, e) => (best === null || e.startTime > best.startTime ? e : best),
+      null
+    );
+    if (!latest) return;
+    dispatch({
+      type: "SET_TIMER",
+      payload: {
+        description: latest.description,
+        projectId: latest.projectId,
+        taskId: latest.taskId ?? null,
+        isRunning: true,
+        startTime: new Date().toISOString(),
+      },
+    });
+  }, [dispatch, state.entries, timer.isRunning]);
+
+  // Tray menu Continue/Stop buttons emit these events; keep refs so we register
+  // the listeners only once but always invoke the latest closure.
+  const stopRef = useRef(stop);
+  const continueLastRef = useRef(continueLastTask);
+  stopRef.current = stop;
+  continueLastRef.current = continueLastTask;
+
+  useEffect(() => {
+    const unlistenStop = listen("tray-stop-timer", () => {
+      void stopRef.current();
+    });
+    const unlistenContinue = listen("tray-continue-last", () => {
+      continueLastRef.current();
+    });
+    return () => {
+      unlistenStop.then((fn) => fn()).catch(() => {});
+      unlistenContinue.then((fn) => fn()).catch(() => {});
+    };
+  }, []);
 
   return {
     isRunning: timer.isRunning,

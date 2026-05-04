@@ -1,10 +1,43 @@
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
+    menu::{MenuBuilder, MenuItem, MenuItemBuilder, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    Emitter, Manager,
+    Emitter, Manager, Wry,
 };
+
+struct TrayMenuItems {
+    timer_status: MenuItem<Wry>,
+    continue_item: MenuItem<Wry>,
+    stop_item: MenuItem<Wry>,
+}
+
+#[tauri::command]
+fn set_timer_status(
+    app: tauri::AppHandle,
+    running: bool,
+    elapsed_text: Option<String>,
+) -> Result<(), String> {
+    let items = app.state::<TrayMenuItems>();
+    let text = if running {
+        match elapsed_text.as_deref() {
+            Some(t) if !t.is_empty() => format!("Timer running — {}", t),
+            _ => "Timer running".to_string(),
+        }
+    } else {
+        "Timer is not running".to_string()
+    };
+    items.timer_status.set_text(text).map_err(|e| e.to_string())?;
+    items
+        .continue_item
+        .set_enabled(!running)
+        .map_err(|e| e.to_string())?;
+    items
+        .stop_item
+        .set_enabled(running)
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
 
 #[cfg(target_os = "macos")]
 fn set_dock_visible(app: &tauri::AppHandle, visible: bool) {
@@ -103,7 +136,10 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_http::init())
-        .invoke_handler(tauri::generate_handler![wait_for_oauth_callback])
+        .invoke_handler(tauri::generate_handler![
+            wait_for_oauth_callback,
+            set_timer_status
+        ])
         .setup(move |app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -134,6 +170,9 @@ pub fn run() {
             let new_item = MenuItemBuilder::with_id("new", "New")
                 .accelerator("CmdOrCtrl+N")
                 .build(app)?;
+            let continue_item = MenuItemBuilder::with_id("continue", "Continue")
+                .accelerator("CmdOrCtrl+P")
+                .build(app)?;
             let stop_item = MenuItemBuilder::with_id("stop", "Stop")
                 .accelerator("CmdOrCtrl+S")
                 .enabled(false)
@@ -160,6 +199,7 @@ pub fn run() {
                 .item(&timer_status)
                 .item(&sep)
                 .item(&new_item)
+                .item(&continue_item)
                 .item(&stop_item)
                 .item(&sep2)
                 .item(&show_item)
@@ -167,6 +207,12 @@ pub fn run() {
                 .item(&sep3)
                 .item(&quit_item)
                 .build()?;
+
+            app.manage(TrayMenuItems {
+                timer_status: timer_status.clone(),
+                continue_item: continue_item.clone(),
+                stop_item: stop_item.clone(),
+            });
 
             TrayIconBuilder::new()
                 .tooltip("QTE Time Tracker")
@@ -183,6 +229,12 @@ pub fn run() {
                                 #[cfg(target_os = "macos")]
                                 set_dock_visible(app, true);
                             }
+                        }
+                        "continue" => {
+                            let _ = app.emit("tray-continue-last", ());
+                        }
+                        "stop" => {
+                            let _ = app.emit("tray-stop-timer", ());
                         }
                         "sync" => {
                             let _ = app.emit("sync-data", ());
