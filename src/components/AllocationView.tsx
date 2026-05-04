@@ -126,6 +126,7 @@ function BarVisual({ data, maxMinutes }: { data: BarData; maxMinutes: number }) 
         {data.allocated > 0 && (
           <div className={overAllocated ? "text-danger" : ""}>{Math.round(usagePct)}%</div>
         )}
+        <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2 w-2 h-2 bg-bg-dark rotate-45" />
       </div>
     </div>
   );
