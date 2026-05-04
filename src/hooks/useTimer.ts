@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useApp, useApi } from "../store/context";
 
 export function useTimer() {
@@ -127,6 +128,45 @@ export function useTimer() {
     },
     [dispatch]
   );
+
+  const startLastTask = useCallback(() => {
+    if (timer.isRunning) return;
+    const latest = state.entries.reduce<(typeof state.entries)[number] | null>(
+      (best, e) => (best === null || e.startTime > best.startTime ? e : best),
+      null
+    );
+    if (!latest) return;
+    dispatch({
+      type: "SET_TIMER",
+      payload: {
+        description: latest.description,
+        projectId: latest.projectId,
+        taskId: latest.taskId ?? null,
+        isRunning: true,
+        startTime: new Date().toISOString(),
+      },
+    });
+  }, [dispatch, state.entries, timer.isRunning]);
+
+  // Tray menu Start/Stop buttons emit these events; keep refs so we register
+  // the listeners only once but always invoke the latest closure.
+  const stopRef = useRef(stop);
+  const startLastRef = useRef(startLastTask);
+  stopRef.current = stop;
+  startLastRef.current = startLastTask;
+
+  useEffect(() => {
+    const unlistenStop = listen("tray-stop-timer", () => {
+      void stopRef.current();
+    });
+    const unlistenStart = listen("tray-start-last", () => {
+      startLastRef.current();
+    });
+    return () => {
+      unlistenStop.then((fn) => fn()).catch(() => {});
+      unlistenStart.then((fn) => fn()).catch(() => {});
+    };
+  }, []);
 
   return {
     isRunning: timer.isRunning,

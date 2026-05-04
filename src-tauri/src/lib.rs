@@ -8,6 +8,8 @@ use tauri::{
 
 struct TrayMenuItems {
     timer_status: MenuItem<Wry>,
+    start_item: MenuItem<Wry>,
+    stop_item: MenuItem<Wry>,
 }
 
 #[tauri::command]
@@ -25,7 +27,16 @@ fn set_timer_status(
     } else {
         "Timer is not running".to_string()
     };
-    items.timer_status.set_text(text).map_err(|e| e.to_string())
+    items.timer_status.set_text(text).map_err(|e| e.to_string())?;
+    items
+        .start_item
+        .set_enabled(!running)
+        .map_err(|e| e.to_string())?;
+    items
+        .stop_item
+        .set_enabled(running)
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -159,6 +170,9 @@ pub fn run() {
             let new_item = MenuItemBuilder::with_id("new", "New")
                 .accelerator("CmdOrCtrl+N")
                 .build(app)?;
+            let start_item = MenuItemBuilder::with_id("start", "Start")
+                .accelerator("CmdOrCtrl+P")
+                .build(app)?;
             let stop_item = MenuItemBuilder::with_id("stop", "Stop")
                 .accelerator("CmdOrCtrl+S")
                 .enabled(false)
@@ -185,6 +199,7 @@ pub fn run() {
                 .item(&timer_status)
                 .item(&sep)
                 .item(&new_item)
+                .item(&start_item)
                 .item(&stop_item)
                 .item(&sep2)
                 .item(&show_item)
@@ -195,6 +210,8 @@ pub fn run() {
 
             app.manage(TrayMenuItems {
                 timer_status: timer_status.clone(),
+                start_item: start_item.clone(),
+                stop_item: stop_item.clone(),
             });
 
             TrayIconBuilder::new()
@@ -212,6 +229,12 @@ pub fn run() {
                                 #[cfg(target_os = "macos")]
                                 set_dock_visible(app, true);
                             }
+                        }
+                        "start" => {
+                            let _ = app.emit("tray-start-last", ());
+                        }
+                        "stop" => {
+                            let _ = app.emit("tray-stop-timer", ());
                         }
                         "sync" => {
                             let _ = app.emit("sync-data", ());
