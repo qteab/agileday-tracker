@@ -258,9 +258,7 @@ export function AllocationView() {
             </div>
           )}
           {allocations
-            .filter((a) => a.endDate >= range.start)
-            .map((alloc, i, arr) => {
-              // Calculate allocated and tracked for this project in the current range
+            .map((alloc) => {
               const days: string[] = [];
               const start = new Date(range.start + "T12:00:00");
               const end = new Date(range.end + "T12:00:00");
@@ -280,6 +278,10 @@ export function AllocationView() {
                     e.projectId === alloc.projectId && e.date >= range.start && e.date <= range.end
                 )
                 .reduce((s, e) => s + e.minutes, 0);
+              return { alloc, allocMinutes, tracked };
+            })
+            .filter(({ allocMinutes, tracked }) => allocMinutes > 0 || tracked > 0)
+            .map(({ alloc, allocMinutes, tracked }, i, arr) => {
               const project = state.projects.find((p) => p.id === alloc.projectId);
               const pct = allocMinutes > 0 ? Math.min((tracked / allocMinutes) * 100, 100) : 0;
 
