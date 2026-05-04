@@ -203,7 +203,13 @@ export function AllocationView() {
               disabled={refreshing || !state.employee}
               title={
                 fetchedAt
-                  ? `Last refreshed ${new Date(fetchedAt).toLocaleString()}`
+                  ? `Last refreshed ${new Date(fetchedAt).toLocaleString(undefined, {
+                      year: "numeric",
+                      month: "numeric",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}`
                   : "Refresh allocations"
               }
               className="p-1 rounded text-text-muted hover:text-text hover:bg-bg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
