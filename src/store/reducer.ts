@@ -1,4 +1,4 @@
-import type { Employee, Project, Task, TimeEntry } from "../api/types";
+import type { Allocation, Employee, Project, Task, TimeEntry } from "../api/types";
 
 export interface TimerState {
   isRunning: boolean;
@@ -14,6 +14,8 @@ export interface AppState {
   myProjectIds: string[];
   tasks: Task[];
   entries: TimeEntry[];
+  allocations: Allocation[];
+  allocationsFetchedAt: number | null;
   timer: TimerState;
   loading: boolean;
   error: string | null;
@@ -25,6 +27,8 @@ export const initialState: AppState = {
   myProjectIds: [],
   tasks: [],
   entries: [],
+  allocations: [],
+  allocationsFetchedAt: null,
   timer: {
     isRunning: false,
     description: "",
@@ -42,6 +46,8 @@ export type AppAction =
   | { type: "SET_MY_PROJECT_IDS"; payload: string[] }
   | { type: "SET_TASKS"; payload: Task[] }
   | { type: "SET_ENTRIES"; payload: TimeEntry[] }
+  | { type: "SET_ALLOCATIONS"; payload: { allocations: Allocation[]; fetchedAt: number } }
+  | { type: "CLEAR_ALLOCATIONS" }
   | { type: "ADD_ENTRY"; payload: TimeEntry }
   | { type: "UPDATE_ENTRY"; payload: { id: string; updates: Partial<TimeEntry> } }
   | { type: "DELETE_ENTRY"; payload: string }
@@ -62,6 +68,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, tasks: action.payload };
     case "SET_ENTRIES":
       return { ...state, entries: action.payload };
+    case "SET_ALLOCATIONS":
+      return {
+        ...state,
+        allocations: action.payload.allocations,
+        allocationsFetchedAt: action.payload.fetchedAt,
+      };
+    case "CLEAR_ALLOCATIONS":
+      return { ...state, allocations: [], allocationsFetchedAt: null };
     case "ADD_ENTRY":
       return { ...state, entries: [action.payload, ...state.entries] };
     case "UPDATE_ENTRY":
