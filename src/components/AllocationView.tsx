@@ -312,7 +312,7 @@ export function AllocationView() {
                       />
                     </div>
                     <span className="text-[10px] text-text-muted tabular-nums w-8 text-right">
-                      {Math.round(alloc.percentage)}%
+                      {Math.round(pct)}%
                     </span>
                   </div>
                 </div>
