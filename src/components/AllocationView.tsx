@@ -5,7 +5,14 @@ import type { Allocation } from "../api/types";
 type Period = "week" | "month";
 
 const WORKDAY_MINUTES = 480; // 8 hours
+const WEEK_CAPACITY_MINUTES = 2400; // 40 hours
 const ALLOCATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
+}
 
 function getWeekRange(ref: Date): { start: string; end: string; label: string } {
   const day = ref.getDay();
@@ -13,10 +20,16 @@ function getWeekRange(ref: Date): { start: string; end: string; label: string } 
   monday.setDate(ref.getDate() - ((day + 6) % 7));
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
+  const sameMonth = monday.getMonth() === sunday.getMonth();
+  const startOrd = ordinal(monday.getDate());
+  const endOrd = sameMonth
+    ? ordinal(sunday.getDate())
+    : `${ordinal(sunday.getDate())} ${sunday.toLocaleDateString("en-US", { month: "short" })}`;
+  const startBase = monday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   return {
     start: monday.toISOString().split("T")[0],
     end: sunday.toISOString().split("T")[0],
-    label: `Week of ${monday.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
+    label: `Week of ${startBase} (${startOrd} - ${endOrd})`,
   };
 }
 
@@ -40,7 +53,7 @@ function getWeekDays(ref: Date): string[] {
   const day = ref.getDay();
   const monday = new Date(ref);
   monday.setDate(ref.getDate() - ((day + 6) % 7));
-  return Array.from({ length: 7 }, (_, i) => {
+  return Array.from({ length: 5 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
     return d.toISOString().split("T")[0];
@@ -85,30 +98,37 @@ interface BarData {
   tracked: number;
 }
 
-function Bar({ data, maxMinutes }: { data: BarData; maxMinutes: number }) {
+function BarVisual({ data, maxMinutes }: { data: BarData; maxMinutes: number }) {
   const allocatedPct = maxMinutes > 0 ? (data.allocated / maxMinutes) * 100 : 0;
   const trackedPct = maxMinutes > 0 ? (data.tracked / maxMinutes) * 100 : 0;
   const overAllocated = data.tracked > data.allocated && data.allocated > 0;
+  const usagePct = data.allocated > 0 ? (data.tracked / data.allocated) * 100 : 0;
 
   return (
-    <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
-      <div className="flex items-end gap-0.5 h-32 w-full justify-center">
-        <div className="relative w-5 bg-bg rounded-t" style={{ height: "100%" }}>
-          <div
-            className="absolute bottom-0 left-0 right-0 bg-primary/20 rounded-t transition-all"
-            style={{ height: `${allocatedPct}%` }}
-          />
-        </div>
-        <div className="relative w-5 bg-bg rounded-t" style={{ height: "100%" }}>
-          <div
-            className={`absolute bottom-0 left-0 right-0 rounded-t transition-all ${
-              overAllocated ? "bg-danger/70" : "bg-primary"
-            }`}
-            style={{ height: `${Math.min(trackedPct, 100)}%` }}
-          />
-        </div>
+    <div className="group relative flex items-end gap-0.5 flex-1 h-full justify-center min-w-0">
+      <div className="relative w-5 bg-bg rounded-t" style={{ height: "100%" }}>
+        <div
+          className="absolute bottom-0 left-0 right-0 bg-primary/20 rounded-t transition-all"
+          style={{ height: `${allocatedPct}%` }}
+        />
       </div>
-      <span className="text-[10px] text-text-muted">{data.label}</span>
+      <div className="relative w-5 bg-bg rounded-t" style={{ height: "100%" }}>
+        <div
+          className={`absolute bottom-0 left-0 right-0 rounded-t transition-all ${
+            overAllocated ? "bg-danger/70" : "bg-primary"
+          }`}
+          style={{ height: `${Math.min(trackedPct, 100)}%` }}
+        />
+      </div>
+      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1.5 rounded-md bg-bg-dark text-bg-card text-[10px] leading-tight whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10">
+        <div className="font-semibold mb-0.5">{data.label}</div>
+        <div>Allocated: {formatHours(data.allocated)}</div>
+        <div>Tracked: {formatHours(data.tracked)}</div>
+        {data.allocated > 0 && (
+          <div className={overAllocated ? "text-danger" : ""}>{Math.round(usagePct)}%</div>
+        )}
+        <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2 w-2 h-2 bg-bg-dark rotate-45" />
+      </div>
     </div>
   );
 }
@@ -189,7 +209,12 @@ export function AllocationView() {
 
   const totalAllocated = barData.reduce((s, d) => s + d.allocated, 0);
   const totalTracked = barData.reduce((s, d) => s + d.tracked, 0);
-  const maxMinutes = Math.max(...barData.map((d) => Math.max(d.allocated, d.tracked)), 1);
+  const referenceMinutes = period === "week" ? WORKDAY_MINUTES : WEEK_CAPACITY_MINUTES;
+  const referenceLabel = period === "week" ? "8h" : "40h";
+  const maxMinutes = Math.max(
+    ...barData.map((d) => Math.max(d.allocated, d.tracked)),
+    referenceMinutes
+  );
 
   return (
     <div className="flex-1 overflow-y-auto pt-2 pb-4">
@@ -272,10 +297,32 @@ export function AllocationView() {
           </div>
 
           {/* Chart */}
-          <div className="flex items-end gap-1">
-            {barData.map((d) => (
-              <Bar key={d.label} data={d} maxMinutes={maxMinutes} />
-            ))}
+          <div className="pr-6">
+            <div className="relative flex items-end gap-1 h-32">
+              {barData.map((d) => (
+                <BarVisual key={d.label} data={d} maxMinutes={maxMinutes} />
+              ))}
+              <div
+                className="absolute left-0 -right-6 border-t border-dashed border-text-muted/50 pointer-events-none"
+                style={{ bottom: `${(referenceMinutes / maxMinutes) * 100}%` }}
+              />
+              <span
+                className="absolute -right-6 text-[9px] text-text-muted leading-none pointer-events-none"
+                style={{ bottom: `calc(${(referenceMinutes / maxMinutes) * 100}% + 3px)` }}
+              >
+                {referenceLabel}
+              </span>
+            </div>
+            <div className="flex gap-1 mt-1">
+              {barData.map((d) => (
+                <span
+                  key={d.label}
+                  className="flex-1 text-center text-[10px] text-text-muted min-w-0"
+                >
+                  {d.label}
+                </span>
+              ))}
+            </div>
           </div>
 
           {/* Legend */}
@@ -298,7 +345,7 @@ export function AllocationView() {
         {/* Per-project breakdown */}
         <div className="px-3 py-2">
           <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">
-            By Project
+            Allocation by project ({period === "week" ? "this week" : "this month"})
           </span>
         </div>
         <div className="bg-bg-card rounded-xl shadow-sm overflow-hidden">
@@ -362,7 +409,7 @@ export function AllocationView() {
                       />
                     </div>
                     <span className="text-[10px] text-text-muted tabular-nums w-8 text-right">
-                      {Math.round(alloc.percentage)}%
+                      {Math.round(pct)}%
                     </span>
                   </div>
                 </div>
