@@ -36,7 +36,9 @@ export function TimeEntry({ entry, onContinue }: TimeEntryProps) {
             {entry.description || <span className="text-text-muted">+ Add description</span>}
           </p>
           <div className="flex items-center gap-1.5 mt-0.5">
-            <BillableIndicator projectType={entry.projectType ?? project?.projectType} />
+            <BillableIndicator
+              billable={entry.taskId ? state.taskBillableById[entry.taskId] : undefined}
+            />
             {project && (
               <>
                 <span

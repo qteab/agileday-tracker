@@ -13,6 +13,8 @@ export interface AppState {
   projects: Project[];
   myProjectIds: string[];
   tasks: Task[];
+  /** Per-task billable flag, used to render billable indicators on entries. */
+  taskBillableById: Record<string, boolean>;
   entries: TimeEntry[];
   allocations: Allocation[];
   allocationsFetchedAt: number | null;
@@ -26,6 +28,7 @@ export const initialState: AppState = {
   projects: [],
   myProjectIds: [],
   tasks: [],
+  taskBillableById: {},
   entries: [],
   allocations: [],
   allocationsFetchedAt: null,
@@ -45,6 +48,7 @@ export type AppAction =
   | { type: "SET_PROJECTS"; payload: Project[] }
   | { type: "SET_MY_PROJECT_IDS"; payload: string[] }
   | { type: "SET_TASKS"; payload: Task[] }
+  | { type: "MERGE_TASK_BILLABLE"; payload: Record<string, boolean> }
   | { type: "SET_ENTRIES"; payload: TimeEntry[] }
   | { type: "SET_ALLOCATIONS"; payload: { allocations: Allocation[]; fetchedAt: number } }
   | { type: "CLEAR_ALLOCATIONS" }
@@ -66,6 +70,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, myProjectIds: action.payload };
     case "SET_TASKS":
       return { ...state, tasks: action.payload };
+    case "MERGE_TASK_BILLABLE":
+      return {
+        ...state,
+        taskBillableById: { ...state.taskBillableById, ...action.payload },
+      };
     case "SET_ENTRIES":
       return { ...state, entries: action.payload };
     case "SET_ALLOCATIONS":

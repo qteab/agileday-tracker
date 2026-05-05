@@ -231,6 +231,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const entries = await api!.getTimeEntries(employee.id, fmt(past), fmt(future));
         if (cancelled) return;
         dispatch({ type: "SET_ENTRIES", payload: entries });
+
+        // Hydrate per-task billable flags so the UI can label entries as
+        // billable/non-billable. We fetch tasks for every project that has
+        // entries — these results are cached on the provider side and the
+        // requests run in parallel.
+        const projectIdsWithEntries = [...new Set(entries.map((e) => e.projectId))];
+        Promise.all(projectIdsWithEntries.map((id) => api!.getTasks(id).catch(() => []))).then(
+          (taskLists) => {
+            if (cancelled) return;
+            const map: Record<string, boolean> = {};
+            for (const tasks of taskLists) {
+              for (const t of tasks) map[t.id] = t.billable;
+            }
+            dispatch({ type: "MERGE_TASK_BILLABLE", payload: map });
+          }
+        );
       } catch (err) {
         if (cancelled) return;
         const msg = err instanceof Error ? err.message : "Failed to connect to AgileDay";

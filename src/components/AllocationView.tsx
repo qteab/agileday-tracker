@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useApp, useApi } from "../store/context";
-import { isBillableProjectType } from "./BillableIndicator";
 import type { Allocation } from "../api/types";
 
 type Period = "week" | "month";
@@ -301,9 +300,12 @@ export function AllocationView() {
     let nonBillable = 0;
     for (const e of state.entries) {
       if (e.date < range.start || e.date > range.end) continue;
-      const project = state.projects.find((p) => p.id === e.projectId);
-      const type = e.projectType ?? project?.projectType;
-      if (isBillableProjectType(type)) billable += e.minutes;
+      // Bucket as billable strictly when the task is known billable; tasks
+      // that aren't loaded yet (or entries without a taskId) fall into
+      // non-billable until task data arrives. This keeps segment widths
+      // summing to the displayed total.
+      const isBillable = e.taskId ? state.taskBillableById[e.taskId] === true : false;
+      if (isBillable) billable += e.minutes;
       else nonBillable += e.minutes;
     }
     const segs: BarSegment[] = [];
@@ -317,7 +319,7 @@ export function AllocationView() {
         minutes: nonBillable,
       });
     return segs;
-  }, [state.entries, state.projects, range.start, range.end]);
+  }, [state.entries, state.taskBillableById, range.start, range.end]);
 
   const billableMinutes = billableSegments.find((s) => s.key === "billable")?.minutes ?? 0;
   const nonBillableMinutes = billableSegments.find((s) => s.key === "non-billable")?.minutes ?? 0;

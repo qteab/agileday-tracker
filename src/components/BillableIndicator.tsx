@@ -1,17 +1,10 @@
-import type { ProjectType } from "../api/types";
-
-export function isBillableProjectType(type: ProjectType | undefined): boolean {
-  return type === "EXTERNAL";
-}
-
 interface BillableIndicatorProps {
-  projectType: ProjectType | undefined;
+  billable: boolean | undefined;
   className?: string;
 }
 
-export function BillableIndicator({ projectType, className = "" }: BillableIndicatorProps) {
-  if (!projectType) return null;
-  const billable = isBillableProjectType(projectType);
+export function BillableIndicator({ billable, className = "" }: BillableIndicatorProps) {
+  if (billable === undefined) return null;
   const label = billable ? "Billable" : "Non-billable";
 
   return (
