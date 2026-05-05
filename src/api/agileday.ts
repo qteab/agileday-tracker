@@ -1,5 +1,5 @@
 import type { ApiProvider } from "./provider";
-import type { Allocation, Employee, Project, Task, TimeEntry } from "./types";
+import type { Allocation, Employee, Project, ProjectType, Task, TimeEntry } from "./types";
 import type { AuthConfig, AuthState } from "./auth";
 import { isTokenExpired, refreshAccessToken, tokenResponseToAuthState } from "./auth";
 
@@ -238,6 +238,7 @@ export function createAgileDayProvider(
         date: string;
         project: string;
         projectId: string;
+        projectType?: ProjectType;
         customer: string;
         minutes: number;
         status: string;
@@ -263,6 +264,15 @@ export function createAgileDayProvider(
         summaryEntries.push(...data.entries);
       }
 
+      // Build a projectId -> projectType lookup from summary entries (the summary
+      // endpoint reliably exposes projectType, the /updated endpoint does not).
+      const projectTypeById = new Map<string, ProjectType>();
+      for (const s of summaryEntries) {
+        if (s.projectType && !projectTypeById.has(s.projectId)) {
+          projectTypeById.set(s.projectId, s.projectType);
+        }
+      }
+
       // 3. Build result: use detailed entries as primary (they have descriptions + IDs)
       const result: TimeEntry[] = detailedEntries
         .filter((e) => e.date >= startDate && e.date <= endDate)
@@ -271,6 +281,7 @@ export function createAgileDayProvider(
           description: e.description ?? "",
           projectId: e.projectId,
           projectName: e.projectName,
+          projectType: projectTypeById.get(e.projectId),
           taskId: e.taskId,
           date: e.date,
           startTime: `${e.date}T09:00:00.000Z`,
@@ -307,6 +318,7 @@ export function createAgileDayProvider(
             description: "",
             projectId: s.projectId,
             projectName: s.project,
+            projectType: s.projectType,
             date: s.date,
             startTime: `${s.date}T09:00:00.000Z`,
             minutes: s.minutes - detailedMinutes,
@@ -539,14 +551,27 @@ export function createAgileDayProvider(
       }));
     },
 
-    async getMyProjectIds(employeeId: string): Promise<string[]> {
+    async getMyProjects(employeeId: string) {
       const filter = JSON.stringify({ candidate: { in: [employeeId] } });
       const data = await apiFetch<{
-        openings: Array<{ projectlikeId: string; status: string }>;
+        openings: Array<{
+          projectlikeId: string;
+          projectlikeType?: ProjectType | null;
+          status: string;
+        }>;
       }>(`/v2/opening?limit=100&filter=${encodeURIComponent(filter)}`);
 
-      const uniqueIds = [...new Set(data.openings.map((o) => o.projectlikeId))];
-      return uniqueIds;
+      const byId = new Map<string, ProjectType | undefined>();
+      for (const o of data.openings) {
+        const prev = byId.get(o.projectlikeId);
+        // Prefer non-null type if multiple openings exist for the same project
+        if (prev === undefined && o.projectlikeType) {
+          byId.set(o.projectlikeId, o.projectlikeType);
+        } else if (!byId.has(o.projectlikeId)) {
+          byId.set(o.projectlikeId, o.projectlikeType ?? undefined);
+        }
+      }
+      return [...byId.entries()].map(([id, projectType]) => ({ id, projectType }));
     },
   };
 }

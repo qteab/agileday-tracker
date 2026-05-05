@@ -11,8 +11,11 @@ export function TimeEntryList({ onContinue }: TimeEntryListProps) {
   const { state } = useApp();
 
   const groupedByDay = useMemo(() => {
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const groups = new Map<string, TimeEntry[]>();
     for (const entry of state.entries) {
+      if (entry.date > today) continue;
       const existing = groups.get(entry.date);
       if (existing) {
         existing.push(entry);

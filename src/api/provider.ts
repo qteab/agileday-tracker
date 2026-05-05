@@ -1,4 +1,9 @@
-import type { Allocation, Employee, Project, Task, TimeEntry } from "./types";
+import type { Allocation, Employee, Project, ProjectType, Task, TimeEntry } from "./types";
+
+export interface MyProjectInfo {
+  id: string;
+  projectType?: ProjectType;
+}
 
 export interface ApiProvider {
   getCurrentEmployee(): Promise<Employee>;
@@ -12,5 +17,5 @@ export interface ApiProvider {
   updateTimeEntry(employeeId: string, id: string, updates: Partial<TimeEntry>): Promise<TimeEntry>;
   deleteTimeEntry(ids: string[]): Promise<void>;
   getAllocations(employeeId: string): Promise<Allocation[]>;
-  getMyProjectIds(employeeId: string): Promise<string[]>;
+  getMyProjects(employeeId: string): Promise<MyProjectInfo[]>;
 }

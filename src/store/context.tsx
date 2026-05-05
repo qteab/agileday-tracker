@@ -206,23 +206,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         dispatch({ type: "SET_EMPLOYEE", payload: employee });
 
-        const [projects, myProjectIds] = await Promise.all([
+        const [projects, myProjects] = await Promise.all([
           api!.getProjects(),
-          api!.getMyProjectIds(employee.id),
+          api!.getMyProjects(employee.id),
         ]);
         if (cancelled) return;
-        dispatch({ type: "SET_PROJECTS", payload: projects });
-        dispatch({ type: "SET_MY_PROJECT_IDS", payload: myProjectIds });
+        const typeById = new Map(myProjects.map((p) => [p.id, p.projectType]));
+        const enrichedProjects = projects.map((p) =>
+          typeById.has(p.id) ? { ...p, projectType: typeById.get(p.id) } : p
+        );
+        dispatch({ type: "SET_PROJECTS", payload: enrichedProjects });
+        dispatch({ type: "SET_MY_PROJECT_IDS", payload: myProjects.map((p) => p.id) });
 
-        // Use local dates (not UTC) to avoid timezone issues
+        // Use local dates (not UTC) to avoid timezone issues. Window extends
+        // 30 days ahead so future-logged entries (e.g. vacation) show up in
+        // the allocation view's weekly/monthly totals.
+        const fmt = (d: Date) =>
+          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
         const now = new Date();
-        const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
         const past = new Date(now);
         past.setDate(past.getDate() - 30);
-        const startDate = `${past.getFullYear()}-${String(past.getMonth() + 1).padStart(2, "0")}-${String(past.getDate()).padStart(2, "0")}`;
-        const entries = await api!.getTimeEntries(employee.id, startDate, endDate);
+        const future = new Date(now);
+        future.setDate(future.getDate() + 30);
+        const entries = await api!.getTimeEntries(employee.id, fmt(past), fmt(future));
         if (cancelled) return;
         dispatch({ type: "SET_ENTRIES", payload: entries });
+
+        // Hydrate per-task billable flags so the UI can label entries as
+        // billable/non-billable. We fetch tasks for every project that has
+        // entries — these results are cached on the provider side and the
+        // requests run in parallel.
+        const projectIdsWithEntries = [...new Set(entries.map((e) => e.projectId))];
+        Promise.all(projectIdsWithEntries.map((id) => api!.getTasks(id).catch(() => []))).then(
+          (taskLists) => {
+            if (cancelled) return;
+            const map: Record<string, boolean> = {};
+            for (const tasks of taskLists) {
+              for (const t of tasks) map[t.id] = t.billable;
+            }
+            dispatch({ type: "MERGE_TASK_BILLABLE", payload: map });
+          }
+        );
       } catch (err) {
         if (cancelled) return;
         const msg = err instanceof Error ? err.message : "Failed to connect to AgileDay";
