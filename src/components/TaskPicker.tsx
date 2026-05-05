@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useApp, useApi } from "../store/context";
+import { BillableIndicator } from "./BillableIndicator";
 
 interface TaskPickerProps {
   projectId: string | null;
@@ -80,11 +81,12 @@ export function TaskPicker({ projectId, selectedId, onSelect }: TaskPickerProps)
                   onSelect(task.id);
                   setOpen(false);
                 }}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-bg transition-colors ${
+                className={`w-full px-3 py-2 text-sm hover:bg-bg transition-colors flex items-center gap-2 ${
                   task.id === selectedId ? "bg-bg" : ""
                 }`}
               >
-                {task.name}
+                <BillableIndicator billable={task.billable} />
+                <span className="truncate text-left flex-1">{task.name}</span>
               </button>
             ))}
         </div>
