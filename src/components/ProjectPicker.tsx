@@ -20,19 +20,27 @@ export function ProjectPicker({ selectedId, onSelect }: ProjectPickerProps) {
     [state.projects, state.myProjectIds]
   );
 
-  const searchResults = useMemo(() => {
-    if (!search.trim()) return [];
+  const { mySearchResults, otherSearchResults } = useMemo(() => {
+    if (!search.trim()) return { mySearchResults: [], otherSearchResults: [] };
     const q = search.toLowerCase();
-    return state.projects
-      .filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          (p.customerName && p.customerName.toLowerCase().includes(q))
-      )
-      .slice(0, 20);
-  }, [search, state.projects]);
+    const matches = state.projects.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        (p.customerName && p.customerName.toLowerCase().includes(q))
+    );
+    const my: typeof matches = [];
+    const other: typeof matches = [];
+    for (const p of matches) {
+      if (state.myProjectIds.includes(p.id)) {
+        my.push(p);
+      } else {
+        other.push(p);
+      }
+    }
+    return { mySearchResults: my.slice(0, 20), otherSearchResults: other.slice(0, 20) };
+  }, [search, state.projects, state.myProjectIds]);
 
-  const displayProjects = search.trim() ? searchResults : myProjects;
+  const displayProjects = search.trim() ? mySearchResults : myProjects;
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -97,18 +105,17 @@ export function ProjectPicker({ selectedId, onSelect }: ProjectPickerProps) {
             />
           </div>
 
-          {/* Section label */}
-          <div className="px-3 py-1.5 text-[10px] font-semibold text-text-muted uppercase tracking-wide">
-            {search.trim()
-              ? `Results (${searchResults.length})`
-              : `My projects (${myProjects.length})`}
-          </div>
-
           {/* Project list */}
           <div className="max-h-64 overflow-y-auto pb-1">
+            {/* My projects section */}
+            <div className="px-3 py-1.5 text-[10px] font-semibold text-text-muted uppercase tracking-wide">
+              {search.trim()
+                ? `My projects (${mySearchResults.length})`
+                : `My projects (${myProjects.length})`}
+            </div>
             {displayProjects.length === 0 && (
               <div className="px-3 py-3 text-xs text-text-muted text-center">
-                {search.trim() ? "No projects found" : "No allocated projects"}
+                {search.trim() ? "No allocated projects found" : "No allocated projects"}
               </div>
             )}
             {displayProjects.map((project) => (
@@ -135,6 +142,39 @@ export function ProjectPicker({ selectedId, onSelect }: ProjectPickerProps) {
                 )}
               </button>
             ))}
+
+            {/* Other projects section (only shown when searching) */}
+            {search.trim() && otherSearchResults.length > 0 && (
+              <>
+                <div className="px-3 py-1.5 mt-1 text-[10px] font-semibold text-text-muted uppercase tracking-wide border-t border-divider pt-2">
+                  Other projects ({otherSearchResults.length})
+                </div>
+                {otherSearchResults.map((project) => (
+                  <button
+                    key={project.id}
+                    onClick={() => {
+                      onSelect(project.id);
+                      setOpen(false);
+                      setSearch("");
+                    }}
+                    className={`w-full text-left px-3 py-2.5 flex items-center gap-2.5 hover:bg-bg transition-colors text-sm ${
+                      project.id === selectedId ? "bg-bg" : ""
+                    }`}
+                  >
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: project.color }}
+                    />
+                    <span className="truncate flex-1">{project.name}</span>
+                    {project.customerName && (
+                      <span className="text-text-muted text-xs shrink-0 max-w-[40%] truncate text-right">
+                        {project.customerName}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         </div>
       )}
