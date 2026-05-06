@@ -217,6 +217,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         );
         dispatch({ type: "SET_PROJECTS", payload: enrichedProjects });
         dispatch({ type: "SET_MY_PROJECT_IDS", payload: myProjects.map((p) => p.id) });
+        const openingMap: Record<string, string> = {};
+        for (const p of myProjects) {
+          if (p.openingId) openingMap[p.id] = p.openingId;
+        }
+        dispatch({ type: "SET_PROJECT_OPENING_MAP", payload: openingMap });
 
         // Use local dates (not UTC) to avoid timezone issues. Window extends
         // 30 days ahead so future-logged entries (e.g. vacation) show up in

@@ -3,6 +3,7 @@ import type { Allocation, Employee, Project, ProjectType, Task, TimeEntry } from
 export interface MyProjectInfo {
   id: string;
   projectType?: ProjectType;
+  openingId?: string;
 }
 
 export interface ApiProvider {

@@ -123,7 +123,11 @@ export function createMockProvider(
     },
 
     async getMyProjects(_employeeId: string) {
-      return projects.map((p) => ({ id: p.id, projectType: p.projectType }));
+      return projects.map((p) => ({
+        id: p.id,
+        projectType: p.projectType,
+        openingId: `opening-${p.id}`,
+      }));
     },
   };
 }

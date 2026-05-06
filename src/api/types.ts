@@ -26,6 +26,7 @@ export interface TimeEntry {
   projectId: string;
   projectName?: string;
   projectType?: ProjectType;
+  openingId?: string;
   taskId?: string;
   date: string; // YYYY-MM-DD
   startTime: string; // ISO timestamp

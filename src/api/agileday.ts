@@ -387,6 +387,7 @@ export function createAgileDayProvider(
               minutes: newTotal,
               status: "SAVED",
               projectId: entry.projectId,
+              ...(entry.openingId ? { openingId: entry.openingId } : {}),
               ...(entry.taskId ? { taskId: entry.taskId } : {}),
               ...(desc ? { description: desc } : {}),
             },
@@ -438,6 +439,7 @@ export function createAgileDayProvider(
               minutes: entry.minutes,
               status: "SAVED",
               projectId: entry.projectId,
+              ...(entry.openingId ? { openingId: entry.openingId } : {}),
               ...(entry.taskId ? { taskId: entry.taskId } : {}),
               ...(desc ? { description: desc } : {}),
             },
@@ -555,23 +557,31 @@ export function createAgileDayProvider(
       const filter = JSON.stringify({ candidate: { in: [employeeId] } });
       const data = await apiFetch<{
         openings: Array<{
+          id: string;
           projectlikeId: string;
           projectlikeType?: ProjectType | null;
           status: string;
         }>;
       }>(`/v2/opening?limit=100&filter=${encodeURIComponent(filter)}`);
 
-      const byId = new Map<string, ProjectType | undefined>();
+      const byId = new Map<string, { projectType?: ProjectType; openingId: string }>();
       for (const o of data.openings) {
         const prev = byId.get(o.projectlikeId);
-        // Prefer non-null type if multiple openings exist for the same project
-        if (prev === undefined && o.projectlikeType) {
-          byId.set(o.projectlikeId, o.projectlikeType);
-        } else if (!byId.has(o.projectlikeId)) {
-          byId.set(o.projectlikeId, o.projectlikeType ?? undefined);
+        if (!prev) {
+          byId.set(o.projectlikeId, {
+            projectType: o.projectlikeType ?? undefined,
+            openingId: o.id,
+          });
+        } else if (!prev.projectType && o.projectlikeType) {
+          // Prefer non-null type if multiple openings exist for the same project
+          prev.projectType = o.projectlikeType;
         }
       }
-      return [...byId.entries()].map(([id, projectType]) => ({ id, projectType }));
+      return [...byId.entries()].map(([id, info]) => ({
+        id,
+        projectType: info.projectType,
+        openingId: info.openingId,
+      }));
     },
   };
 }

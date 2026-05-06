@@ -57,6 +57,7 @@ export function useTimer() {
     const startLocal = new Date(startMs);
     const date = `${startLocal.getFullYear()}-${String(startLocal.getMonth() + 1).padStart(2, "0")}-${String(startLocal.getDate()).padStart(2, "0")}`;
     const project = state.projects.find((p) => p.id === projectId);
+    const openingId = projectId ? state.projectOpeningMap[projectId] : undefined;
 
     // Reset timer immediately so user can start a new one
     dispatch({ type: "RESET_TIMER" });
@@ -67,6 +68,7 @@ export function useTimer() {
       description,
       projectId: projectId!,
       projectName: project?.name,
+      openingId,
       taskId: taskId ?? undefined,
       date,
       startTime,
@@ -84,6 +86,7 @@ export function useTimer() {
         description,
         projectId: projectId!,
         projectName: project?.name,
+        openingId,
         taskId: taskId ?? undefined,
         date,
         startTime,
@@ -106,7 +109,7 @@ export function useTimer() {
         payload: `Failed to save time entry: ${reason}. Entry saved locally — use retry to sync.`,
       });
     }
-  }, [timer, employee, state.projects, dispatch, api]);
+  }, [timer, employee, state.projects, state.projectOpeningMap, dispatch, api]);
 
   const setDescription = useCallback(
     (description: string) => {
