@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useTimer, formatTime } from "../hooks/useTimer";
 import { useApp } from "../store/context";
 import { ProjectPicker } from "./ProjectPicker";
@@ -24,10 +24,14 @@ export function Timer() {
     setDescription,
     setProject,
     setTask,
+    setElapsedSeconds,
   } = useTimer();
   const { state } = useApp();
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [editingTime, setEditingTime] = useState(false);
+  const [timeInput, setTimeInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const timeInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
   // Build unique suggestions from existing entries
@@ -72,6 +76,36 @@ export function Timer() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  function parseTimeInput(input: string): number | null {
+    const trimmed = input.trim();
+    // h:mm:ss
+    const full = trimmed.match(/^(\d+):(\d{1,2}):(\d{1,2})$/);
+    if (full) {
+      return parseInt(full[1]) * 3600 + parseInt(full[2]) * 60 + parseInt(full[3]);
+    }
+    // m:ss or mm:ss
+    const short = trimmed.match(/^(\d{1,2}):(\d{1,2})$/);
+    if (short) {
+      return parseInt(short[1]) * 60 + parseInt(short[2]);
+    }
+    return null;
+  }
+
+  const startEditingTime = useCallback(() => {
+    if (!isRunning) return;
+    setTimeInput(formatTime(elapsed));
+    setEditingTime(true);
+    setTimeout(() => timeInputRef.current?.select(), 0);
+  }, [isRunning, elapsed]);
+
+  const commitTimeEdit = useCallback(() => {
+    const seconds = parseTimeInput(timeInput);
+    if (seconds !== null && seconds >= 0) {
+      setElapsedSeconds(seconds);
+    }
+    setEditingTime(false);
+  }, [timeInput, setElapsedSeconds]);
 
   function selectSuggestion(s: Suggestion) {
     setDescription(s.description);
@@ -138,9 +172,27 @@ export function Timer() {
           )}
         </div>
 
-        <span className="text-sm font-mono text-text-muted tabular-nums w-[72px] text-right">
-          {formatTime(elapsed)}
-        </span>
+        {editingTime ? (
+          <input
+            ref={timeInputRef}
+            type="text"
+            value={timeInput}
+            onChange={(e) => setTimeInput(e.target.value)}
+            onBlur={commitTimeEdit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitTimeEdit();
+              if (e.key === "Escape") setEditingTime(false);
+            }}
+            className="text-sm font-mono text-text tabular-nums w-[72px] text-right bg-transparent outline-none border-b border-primary"
+          />
+        ) : (
+          <span
+            onClick={startEditingTime}
+            className={`text-sm font-mono text-text-muted tabular-nums w-[72px] text-right ${isRunning ? "cursor-pointer hover:text-text" : ""}`}
+          >
+            {formatTime(elapsed)}
+          </span>
+        )}
 
         <button
           onClick={() => {

@@ -132,6 +132,15 @@ export function useTimer() {
     [dispatch]
   );
 
+  const setElapsedSeconds = useCallback(
+    (seconds: number) => {
+      if (!timer.isRunning) return;
+      const newStart = new Date(Date.now() - seconds * 1000).toISOString();
+      dispatch({ type: "SET_TIMER", payload: { startTime: newStart } });
+    },
+    [dispatch, timer.isRunning]
+  );
+
   const continueLastTask = useCallback(() => {
     if (timer.isRunning) return;
     const latest = state.entries.reduce<(typeof state.entries)[number] | null>(
@@ -182,6 +191,7 @@ export function useTimer() {
     setDescription,
     setProject,
     setTask,
+    setElapsedSeconds,
   };
 }
 
