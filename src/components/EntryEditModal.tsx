@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useApp, useApi } from "../store/context";
 import { ProjectPicker } from "./ProjectPicker";
-import { removeDescription } from "../api/agileday";
+import { mergeDescriptions, removeDescription } from "../api/agileday";
 import type { TimeEntry } from "../api/types";
 
 interface EntryEditModalProps {
@@ -69,8 +69,19 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
       });
 
       if (agileMatch) {
+        let updatedDescription: string;
+        if (groupMode) {
+          // Swap old description for new in the grouped string
+          const afterRemove = removeDescription(agileMatch.description, entry.description);
+          updatedDescription = description
+            ? mergeDescriptions(afterRemove, description)
+            : afterRemove;
+        } else {
+          updatedDescription = description;
+        }
+
         await api.updateTimeEntry(state.employee.id, agileMatch.id, {
-          description: groupMode ? agileMatch.description : description,
+          description: updatedDescription,
           projectId,
           minutes: groupTotal,
         });
