@@ -48,6 +48,16 @@ export interface AllocationPeriod {
   startDate: string;
 }
 
+export interface UserSettings {
+  /** When true, all sessions for the same project+task+date merge into one
+   *  AgileDay entry with descriptions concatenated as bullet lines. */
+  groupDescriptions: boolean;
+}
+
+export const DEFAULT_SETTINGS: UserSettings = {
+  groupDescriptions: false,
+};
+
 export interface Allocation {
   projectId: string;
   projectName: string;

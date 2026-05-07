@@ -26,6 +26,37 @@ function assignProjectColor(index: number): string {
   return PROJECT_COLORS[index % PROJECT_COLORS.length];
 }
 
+/**
+ * Merge a new description line into an existing grouped description.
+ * Each line is prefixed with "- ". Duplicate lines are skipped.
+ * Returns the merged description string.
+ */
+export function mergeDescriptions(existing: string, incoming: string): string {
+  if (!incoming) return existing;
+  if (!existing) return `- ${incoming}`;
+
+  // Parse existing lines — handle both "- foo" prefixed and plain text
+  const existingLines = existing
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  // Normalize: strip leading "- " for comparison
+  const normalize = (line: string) => (line.startsWith("- ") ? line.slice(2) : line);
+  const existingNormalized = new Set(existingLines.map(normalize));
+
+  const incomingNormalized = normalize(incoming);
+  if (existingNormalized.has(incomingNormalized)) {
+    // Duplicate — return existing unchanged
+    return existing;
+  }
+
+  // Ensure existing lines are all prefixed
+  const prefixed = existingLines.map((l) => (l.startsWith("- ") ? l : `- ${l}`));
+  prefixed.push(`- ${incomingNormalized}`);
+  return prefixed.join("\n");
+}
+
 export interface AgileDayConfig {
   /** e.g. "https://qvik.agileday.io/api" */
   apiBaseUrl: string;
@@ -333,7 +364,8 @@ export function createAgileDayProvider(
 
     async createTimeEntry(
       employeeId: string,
-      entry: Omit<TimeEntry, "id" | "syncStatus">
+      entry: Omit<TimeEntry, "id" | "syncStatus">,
+      options?: { groupDescriptions?: boolean }
     ): Promise<TimeEntry> {
       type RawEntry = {
         id: string;
@@ -346,20 +378,27 @@ export function createAgileDayProvider(
       };
 
       const desc = entry.description ?? "";
+      const groupMode = options?.groupDescriptions ?? false;
 
-      // 1. Query for existing SAVED entries with same project+date+description
+      // 1. Query for existing SAVED entries with same project+date (+description if not grouping)
       const updatedAfter = new Date(entry.date + "T00:00:00Z").toISOString();
       const allRecent = await apiFetch<RawEntry[]>(
         `/v1/time_entry/employee/id/${employeeId}/updated?updatedAfter=${updatedAfter}`
       ).catch(() => [] as RawEntry[]);
 
-      const matches = allRecent.filter(
-        (e) =>
-          e.projectId === entry.projectId &&
-          e.date === entry.date &&
-          (e.description ?? "") === desc &&
-          e.status === "SAVED"
-      );
+      const matches = allRecent.filter((e) => {
+        if (e.projectId !== entry.projectId || e.date !== entry.date || e.status !== "SAVED") {
+          return false;
+        }
+        if (groupMode) {
+          // In group mode, match by project+task+date only (ignore description)
+          const eTask = e.taskId ?? "";
+          const entryTask = entry.taskId ?? "";
+          return eTask === entryTask;
+        }
+        // Default mode: must also match description
+        return (e.description ?? "") === desc;
+      });
 
       let created: RawEntry;
 
@@ -367,9 +406,20 @@ export function createAgileDayProvider(
         // 2. One match — PATCH to add this session's minutes
         const existing = matches[0];
         const newTotal = existing.minutes + entry.minutes;
+        const patch: Record<string, unknown> = { id: existing.id, minutes: newTotal };
+
+        // In group mode, append the new description to the existing one
+        if (groupMode && desc) {
+          const existingDesc = existing.description ?? descriptionCache.get(existing.id) ?? "";
+          const mergedDesc = mergeDescriptions(existingDesc, desc);
+          if (mergedDesc !== existingDesc) {
+            patch.description = mergedDesc;
+          }
+        }
+
         const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
           method: "PATCH",
-          body: JSON.stringify([{ id: existing.id, minutes: newTotal }]),
+          body: JSON.stringify([patch]),
         });
         if (results.length === 0) throw new Error("No entry returned from API");
         created = results[0];
@@ -377,6 +427,17 @@ export function createAgileDayProvider(
         // 3. Multiple matches — consolidate: create new with total, delete old
         const totalExisting = matches.reduce((s, e) => s + e.minutes, 0);
         const newTotal = totalExisting + entry.minutes;
+
+        // In group mode, merge all existing descriptions with the new one
+        let consolidatedDesc = desc;
+        if (groupMode) {
+          let merged = "";
+          for (const m of matches) {
+            const mDesc = m.description ?? descriptionCache.get(m.id) ?? "";
+            merged = mergeDescriptions(merged, mDesc);
+          }
+          consolidatedDesc = mergeDescriptions(merged, desc);
+        }
 
         // Create the consolidated entry first (safer — if delete fails, we have duplicates not data loss)
         const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
@@ -389,7 +450,7 @@ export function createAgileDayProvider(
               projectId: entry.projectId,
               ...(entry.openingId ? { openingId: entry.openingId } : {}),
               ...(entry.taskId ? { taskId: entry.taskId } : {}),
-              ...(desc ? { description: desc } : {}),
+              ...(consolidatedDesc ? { description: consolidatedDesc } : {}),
             },
           ]),
         });
@@ -449,12 +510,17 @@ export function createAgileDayProvider(
         created = results[0];
       }
 
+      // Resolve the final description that's on the API entry
+      const finalDesc = groupMode
+        ? (created.description ?? descriptionCache.get(created.id) ?? desc)
+        : desc;
+
       // Cache for description lookups on reload
-      descriptionCache.set(created.id, desc);
+      descriptionCache.set(created.id, finalDesc);
 
       return {
         id: created.id,
-        description: desc,
+        description: finalDesc,
         projectId: created.projectId,
         projectName: entry.projectName,
         taskId: created.taskId,

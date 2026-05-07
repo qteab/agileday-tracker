@@ -1,4 +1,5 @@
-import type { Allocation, Employee, Project, Task, TimeEntry } from "../api/types";
+import type { Allocation, Employee, Project, Task, TimeEntry, UserSettings } from "../api/types";
+import { DEFAULT_SETTINGS } from "../api/types";
 
 export interface TimerState {
   isRunning: boolean;
@@ -20,6 +21,7 @@ export interface AppState {
   allocations: Allocation[];
   allocationsFetchedAt: number | null;
   timer: TimerState;
+  settings: UserSettings;
   loading: boolean;
   error: string | null;
 }
@@ -41,6 +43,7 @@ export const initialState: AppState = {
     taskId: null,
     startTime: null,
   },
+  settings: DEFAULT_SETTINGS,
   loading: false,
   error: null,
 };
@@ -60,6 +63,7 @@ export type AppAction =
   | { type: "DELETE_ENTRY"; payload: string }
   | { type: "SET_TIMER"; payload: Partial<TimerState> }
   | { type: "RESET_TIMER" }
+  | { type: "SET_SETTINGS"; payload: UserSettings }
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "SET_ERROR"; payload: string | null };
 
@@ -108,6 +112,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, timer: { ...state.timer, ...action.payload } };
     case "RESET_TIMER":
       return { ...state, timer: initialState.timer };
+    case "SET_SETTINGS":
+      return { ...state, settings: action.payload };
     case "SET_LOADING":
       return { ...state, loading: action.payload };
     case "SET_ERROR":

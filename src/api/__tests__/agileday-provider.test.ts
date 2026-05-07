@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from "vitest";
-import { createAgileDayProvider, type AgileDayConfig } from "../agileday";
+import { createAgileDayProvider, mergeDescriptions, type AgileDayConfig } from "../agileday";
 import type { ApiProvider } from "../provider";
 import type { AuthState } from "../auth";
 
@@ -492,5 +492,270 @@ describe("security", () => {
 
     const [, opts] = mockFetch.mock.calls[0];
     expect(opts.headers["Content-Type"]).toBe("application/json");
+  });
+});
+
+// --- mergeDescriptions utility ---
+
+describe("mergeDescriptions", () => {
+  it("returns prefixed incoming when existing is empty", () => {
+    expect(mergeDescriptions("", "task 1")).toBe("- task 1");
+  });
+
+  it("returns existing unchanged when incoming is empty", () => {
+    expect(mergeDescriptions("- task 1", "")).toBe("- task 1");
+  });
+
+  it("appends new description as a bullet line", () => {
+    expect(mergeDescriptions("- task 1", "task 2")).toBe("- task 1\n- task 2");
+  });
+
+  it("deduplicates matching descriptions", () => {
+    expect(mergeDescriptions("- task 1", "task 1")).toBe("- task 1");
+  });
+
+  it("handles plain text existing (no dash prefix)", () => {
+    expect(mergeDescriptions("task 1", "task 2")).toBe("- task 1\n- task 2");
+  });
+
+  it("handles multiple existing lines", () => {
+    const existing = "- task 1\n- task 2";
+    expect(mergeDescriptions(existing, "task 3")).toBe("- task 1\n- task 2\n- task 3");
+  });
+
+  it("deduplicates against any existing line", () => {
+    const existing = "- task 1\n- task 2";
+    expect(mergeDescriptions(existing, "task 2")).toBe("- task 1\n- task 2");
+  });
+});
+
+// --- createTimeEntry with groupDescriptions ---
+
+describe("createTimeEntry with groupDescriptions", () => {
+  it("matches by project+task+date only, ignoring description", async () => {
+    // /updated returns an entry with different description but same project+task+date
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "existing-1",
+          date: "2026-04-24",
+          minutes: 30,
+          status: "SAVED",
+          description: "- task 1",
+          projectId: "p1",
+          taskId: "t1",
+        },
+      ])
+    );
+    // PATCH response
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "existing-1",
+          date: "2026-04-24",
+          minutes: 90,
+          status: "SAVED",
+          description: "- task 1\n- task 2",
+          projectId: "p1",
+          taskId: "t1",
+        },
+      ])
+    );
+
+    const entry = await provider.createTimeEntry(
+      "emp-1",
+      {
+        description: "task 2",
+        projectId: "p1",
+        taskId: "t1",
+        date: "2026-04-24",
+        startTime: "2026-04-24T09:00:00Z",
+        minutes: 60,
+        status: "SAVED",
+      },
+      { groupDescriptions: true }
+    );
+
+    // Should PATCH, not POST
+    const [, opts] = mockFetch.mock.calls[1];
+    expect(opts.method).toBe("PATCH");
+    expect(entry.minutes).toBe(90);
+
+    // Verify the PATCH body includes updated description
+    const body = JSON.parse(opts.body);
+    expect(body[0].description).toBe("- task 1\n- task 2");
+  });
+
+  it("creates new entry when no match exists in group mode", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse([])); // /updated: no matches
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "new-1",
+          date: "2026-04-24",
+          minutes: 60,
+          status: "SAVED",
+          description: "task 1",
+          projectId: "p1",
+          taskId: "t1",
+        },
+      ])
+    );
+
+    const entry = await provider.createTimeEntry(
+      "emp-1",
+      {
+        description: "task 1",
+        projectId: "p1",
+        taskId: "t1",
+        date: "2026-04-24",
+        startTime: "2026-04-24T09:00:00Z",
+        minutes: 60,
+        status: "SAVED",
+      },
+      { groupDescriptions: true }
+    );
+
+    const [, opts] = mockFetch.mock.calls[1];
+    expect(opts.method).toBe("POST");
+    expect(entry.id).toBe("new-1");
+  });
+
+  it("does not append empty description in group mode", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "existing-1",
+          date: "2026-04-24",
+          minutes: 30,
+          status: "SAVED",
+          description: "- task 1",
+          projectId: "p1",
+          taskId: "t1",
+        },
+      ])
+    );
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "existing-1",
+          date: "2026-04-24",
+          minutes: 90,
+          status: "SAVED",
+          description: "- task 1",
+          projectId: "p1",
+          taskId: "t1",
+        },
+      ])
+    );
+
+    await provider.createTimeEntry(
+      "emp-1",
+      {
+        description: "",
+        projectId: "p1",
+        taskId: "t1",
+        date: "2026-04-24",
+        startTime: "2026-04-24T09:00:00Z",
+        minutes: 60,
+        status: "SAVED",
+      },
+      { groupDescriptions: true }
+    );
+
+    const body = JSON.parse(mockFetch.mock.calls[1][1].body);
+    // Should not include description field since it's empty
+    expect(body[0].description).toBeUndefined();
+  });
+
+  it("does not group across different tasks", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "existing-1",
+          date: "2026-04-24",
+          minutes: 30,
+          status: "SAVED",
+          description: "task 1",
+          projectId: "p1",
+          taskId: "t1",
+        },
+      ])
+    );
+    // No match for taskId "t2", so POST
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "new-1",
+          date: "2026-04-24",
+          minutes: 60,
+          status: "SAVED",
+          description: "task 2",
+          projectId: "p1",
+          taskId: "t2",
+        },
+      ])
+    );
+
+    await provider.createTimeEntry(
+      "emp-1",
+      {
+        description: "task 2",
+        projectId: "p1",
+        taskId: "t2",
+        date: "2026-04-24",
+        startTime: "2026-04-24T09:00:00Z",
+        minutes: 60,
+        status: "SAVED",
+      },
+      { groupDescriptions: true }
+    );
+
+    const [, opts] = mockFetch.mock.calls[1];
+    expect(opts.method).toBe("POST");
+  });
+
+  it("default mode (no option) still matches by description", async () => {
+    // Entry with different description should NOT match in default mode
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "existing-1",
+          date: "2026-04-24",
+          minutes: 30,
+          status: "SAVED",
+          description: "task 1",
+          projectId: "p1",
+          taskId: "t1",
+        },
+      ])
+    );
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "new-1",
+          date: "2026-04-24",
+          minutes: 60,
+          status: "SAVED",
+          description: "task 2",
+          projectId: "p1",
+          taskId: "t1",
+        },
+      ])
+    );
+
+    await provider.createTimeEntry("emp-1", {
+      description: "task 2",
+      projectId: "p1",
+      taskId: "t1",
+      date: "2026-04-24",
+      startTime: "2026-04-24T09:00:00Z",
+      minutes: 60,
+      status: "SAVED",
+    });
+
+    // Should POST (not PATCH) since description doesn't match
+    const [, opts] = mockFetch.mock.calls[1];
+    expect(opts.method).toBe("POST");
   });
 });

@@ -389,3 +389,77 @@ describe("error handling", () => {
     await expect(failProvider.deleteTimeEntry(["any-id"])).rejects.toThrow("Store write failed");
   });
 });
+
+// --- groupDescriptions option ---
+
+describe("createTimeEntry with groupDescriptions", () => {
+  it("merges into existing entry with same project+task+date", async () => {
+    // Seed an existing entry
+    await provider.createTimeEntry("emp1", makeEntry({ description: "task 1", taskId: "t1" }));
+
+    // Create with groupDescriptions — should merge
+    const result = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task 2", taskId: "t1", minutes: 30 }),
+      { groupDescriptions: true }
+    );
+
+    expect(result.minutes).toBe(90); // 60 + 30
+    expect(result.description).toBe("- task 1\n- task 2");
+
+    // Only one entry in the store
+    const entries = await store.getEntries();
+    expect(entries).toHaveLength(1);
+  });
+
+  it("creates new entry when no match in group mode", async () => {
+    const result = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task 1", taskId: "t1" }),
+      { groupDescriptions: true }
+    );
+
+    expect(result.description).toBe("task 1");
+    const entries = await store.getEntries();
+    expect(entries).toHaveLength(1);
+  });
+
+  it("does not merge across different tasks in group mode", async () => {
+    await provider.createTimeEntry("emp1", makeEntry({ description: "task 1", taskId: "t1" }));
+
+    await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task 2", taskId: "t2", minutes: 30 }),
+      { groupDescriptions: true }
+    );
+
+    const entries = await store.getEntries();
+    expect(entries).toHaveLength(2);
+  });
+
+  it("deduplicates matching descriptions in group mode", async () => {
+    await provider.createTimeEntry("emp1", makeEntry({ description: "task 1", taskId: "t1" }));
+
+    const result = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task 1", taskId: "t1", minutes: 30 }),
+      { groupDescriptions: true }
+    );
+
+    expect(result.minutes).toBe(90);
+    expect(result.description).toBe("task 1"); // not duplicated, original kept as-is
+  });
+
+  it("does not change description when incoming is empty in group mode", async () => {
+    await provider.createTimeEntry("emp1", makeEntry({ description: "task 1", taskId: "t1" }));
+
+    const result = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "", taskId: "t1", minutes: 15 }),
+      { groupDescriptions: true }
+    );
+
+    expect(result.minutes).toBe(75);
+    expect(result.description).toBe("task 1"); // unchanged
+  });
+});

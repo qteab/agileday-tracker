@@ -82,18 +82,22 @@ export function useTimer() {
     try {
       // Send only THIS session's minutes — the provider handles
       // finding existing entries and adding to their total
-      await api.createTimeEntry(employee.id, {
-        description,
-        projectId: projectId!,
-        projectName: project?.name,
-        openingId,
-        taskId: taskId ?? undefined,
-        date,
-        startTime,
-        endTime,
-        minutes,
-        status: "SAVED",
-      });
+      await api.createTimeEntry(
+        employee.id,
+        {
+          description,
+          projectId: projectId!,
+          projectName: project?.name,
+          openingId,
+          taskId: taskId ?? undefined,
+          date,
+          startTime,
+          endTime,
+          minutes,
+          status: "SAVED",
+        },
+        { groupDescriptions: state.settings.groupDescriptions }
+      );
       dispatch({
         type: "UPDATE_ENTRY",
         payload: { id: localEntry.id, updates: { syncStatus: "synced" } },
@@ -109,7 +113,15 @@ export function useTimer() {
         payload: `Failed to save time entry: ${reason}. Entry saved locally — use retry to sync.`,
       });
     }
-  }, [timer, employee, state.projects, state.projectOpeningMap, dispatch, api]);
+  }, [
+    timer,
+    employee,
+    state.projects,
+    state.projectOpeningMap,
+    state.settings.groupDescriptions,
+    dispatch,
+    api,
+  ]);
 
   const setDescription = useCallback(
     (description: string) => {

@@ -186,6 +186,10 @@ pub fn run() {
                 .accelerator("CmdOrCtrl+R")
                 .build(app)?;
 
+            let settings_item = MenuItemBuilder::with_id("settings", "Settings")
+                .accelerator("CmdOrCtrl+,")
+                .build(app)?;
+
             let quit_item = MenuItemBuilder::with_id("quit", "Quit")
                 .accelerator("CmdOrCtrl+Q")
                 .build(app)?;
@@ -204,6 +208,7 @@ pub fn run() {
                 .item(&sep2)
                 .item(&show_item)
                 .item(&sync_item)
+                .item(&settings_item)
                 .item(&sep3)
                 .item(&quit_item)
                 .build()?;
@@ -238,6 +243,15 @@ pub fn run() {
                         }
                         "sync" => {
                             let _ = app.emit("sync-data", ());
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                                #[cfg(target_os = "macos")]
+                                set_dock_visible(app, true);
+                            }
+                        }
+                        "settings" => {
+                            let _ = app.emit("tray-open-settings", ());
                             if let Some(window) = app.get_webview_window("main") {
                                 let _ = window.show();
                                 let _ = window.set_focus();

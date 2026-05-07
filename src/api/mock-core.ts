@@ -1,5 +1,6 @@
 import type { ApiProvider } from "./provider";
 import type { Allocation, Employee, Project, Task, TimeEntry } from "./types";
+import { mergeDescriptions } from "./agileday";
 
 export const MOCK_PROJECTS: Project[] = [
   { id: "p1", name: "Fokus", customerName: "QTE", color: "#E5B80B", projectType: "INTERNAL" },
@@ -92,8 +93,29 @@ export function createMockProvider(
       return entries.filter((e) => e.date >= startDate && e.date <= endDate);
     },
 
-    async createTimeEntry(_employeeId: string, entry) {
+    async createTimeEntry(_employeeId: string, entry, options) {
       const entries = await store.getEntries();
+      const groupMode = options?.groupDescriptions ?? false;
+      const desc = entry.description ?? "";
+
+      if (groupMode) {
+        const match = entries.find(
+          (e) =>
+            e.projectId === entry.projectId &&
+            e.date === entry.date &&
+            (e.taskId ?? "") === (entry.taskId ?? "") &&
+            e.status === "SAVED"
+        );
+        if (match) {
+          match.minutes += entry.minutes;
+          if (desc) {
+            match.description = mergeDescriptions(match.description, desc);
+          }
+          await store.setEntries(entries);
+          return { ...match };
+        }
+      }
+
       const newEntry: TimeEntry = {
         ...entry,
         id: crypto.randomUUID(),

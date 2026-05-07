@@ -1,11 +1,13 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 import { Timer } from "./components/Timer";
 import { TabSwitcher } from "./components/TabSwitcher";
 import { TimeEntryList } from "./components/TimeEntryList";
 import { AllocationView } from "./components/AllocationView";
 import { LoginScreen } from "./components/LoginScreen";
 import { UpdateChecker } from "./components/UpdateChecker";
+import { SettingsView } from "./components/SettingsView";
 import { useApp } from "./store/context";
 import type { TimeEntry } from "./api/types";
 
@@ -30,8 +32,19 @@ export function App() {
 }
 
 function AuthenticatedApp() {
-  const { state, dispatch, logout } = useApp();
+  const { state, dispatch } = useApp();
   const [activeTab, setActiveTab] = useState<"list" | "allocation">("list");
+  const [showSettings, setShowSettings] = useState(false);
+
+  // Listen for tray "Settings" menu item
+  useEffect(() => {
+    const unlisten = listen("tray-open-settings", () => {
+      setShowSettings(true);
+    });
+    return () => {
+      unlisten.then((fn) => fn()).catch(() => {});
+    };
+  }, []);
 
   const handleContinue = useCallback(
     (entry: TimeEntry) => {
@@ -66,16 +79,22 @@ function AuthenticatedApp() {
           QTE Time Tracker
         </span>
         <button
-          onClick={logout}
-          className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-danger transition-colors rounded-lg hover:bg-bg"
-          title="Sign out"
+          onClick={() => setShowSettings(true)}
+          className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text transition-colors rounded-lg hover:bg-bg"
+          title="Settings"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth={2}
-              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+            />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
             />
           </svg>
         </button>
@@ -104,16 +123,26 @@ function AuthenticatedApp() {
         </div>
       )}
 
-      {/* Timer */}
-      <div className="bg-bg-card border-b border-border">
-        <Timer />
-      </div>
+      {showSettings ? (
+        <SettingsView onBack={() => setShowSettings(false)} />
+      ) : (
+        <>
+          {/* Timer */}
+          <div className="bg-bg-card border-b border-border">
+            <Timer />
+          </div>
 
-      {/* Tab switcher */}
-      <TabSwitcher active={activeTab} onChange={setActiveTab} />
+          {/* Tab switcher */}
+          <TabSwitcher active={activeTab} onChange={setActiveTab} />
 
-      {/* Tab content */}
-      {activeTab === "list" ? <TimeEntryList onContinue={handleContinue} /> : <AllocationView />}
+          {/* Tab content */}
+          {activeTab === "list" ? (
+            <TimeEntryList onContinue={handleContinue} />
+          ) : (
+            <AllocationView />
+          )}
+        </>
+      )}
     </div>
   );
 }
