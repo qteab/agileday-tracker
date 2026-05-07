@@ -7,7 +7,7 @@
 - [x] Spec complete
 - [x] Plan complete
 - [x] Implementation complete
-- [ ] Reviewed
+- [x] Reviewed
 
 ## User Stories
 
@@ -25,7 +25,7 @@
 - [ ] AC-5: If the new description is empty, the existing entry's description is unchanged (only minutes are added)
 - [ ] AC-6: If the existing entry's description is empty and the new one is not, the entry's description becomes `- new description`
 - [ ] AC-7: A "Settings" item in the system tray menu (between Sync and Quit) opens the settings view in the app window
-- [ ] AC-8: The Settings view contains a toggle for "Group descriptions" with a text explanation of each mode
+- [ ] AC-8: The Settings view contains a mode selector for "Group descriptions" with a text explanation of each mode
 - [ ] AC-9: The Settings view includes simple visual illustrations showing the difference between the two modes
 - [ ] AC-10: The setting persists across app restarts via Tauri store
 - [ ] AC-11: Changing the setting takes effect immediately for the next timer stop (no restart required)
