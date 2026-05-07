@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from "vitest";
-import { createAgileDayProvider, mergeDescriptions, type AgileDayConfig } from "../agileday";
+import {
+  createAgileDayProvider,
+  mergeDescriptions,
+  removeDescription,
+  type AgileDayConfig,
+} from "../agileday";
 import type { ApiProvider } from "../provider";
 import type { AuthState } from "../auth";
 
@@ -526,6 +531,38 @@ describe("mergeDescriptions", () => {
   it("deduplicates against any existing line", () => {
     const existing = "- task 1\n- task 2";
     expect(mergeDescriptions(existing, "task 2")).toBe("- task 1\n- task 2");
+  });
+});
+
+// --- removeDescription utility ---
+
+describe("removeDescription", () => {
+  it("removes a matching line from grouped description", () => {
+    expect(removeDescription("- task 1\n- task 2\n- task 3", "task 2")).toBe("- task 1\n- task 3");
+  });
+
+  it("removes dash-prefixed input", () => {
+    expect(removeDescription("- task 1\n- task 2", "- task 1")).toBe("- task 2");
+  });
+
+  it("returns empty string when last line is removed", () => {
+    expect(removeDescription("- task 1", "task 1")).toBe("");
+  });
+
+  it("returns existing unchanged when toRemove is empty", () => {
+    expect(removeDescription("- task 1", "")).toBe("- task 1");
+  });
+
+  it("returns existing unchanged when no match found", () => {
+    expect(removeDescription("- task 1\n- task 2", "task 3")).toBe("- task 1\n- task 2");
+  });
+
+  it("handles plain text existing", () => {
+    expect(removeDescription("task 1\ntask 2", "task 1")).toBe("- task 2");
+  });
+
+  it("returns empty for empty existing", () => {
+    expect(removeDescription("", "task 1")).toBe("");
   });
 });
 

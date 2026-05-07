@@ -57,6 +57,29 @@ export function mergeDescriptions(existing: string, incoming: string): string {
   return prefixed.join("\n");
 }
 
+/**
+ * Remove a description line from a grouped description string.
+ * Returns the updated description with the line removed.
+ * If only one line remains, it stays dash-prefixed.
+ * If nothing remains, returns empty string.
+ */
+export function removeDescription(existing: string, toRemove: string): string {
+  if (!existing || !toRemove) return existing;
+
+  const lines = existing
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const normalize = (line: string) => (line.startsWith("- ") ? line.slice(2) : line);
+  const target = normalize(toRemove);
+
+  const filtered = lines.filter((l) => normalize(l) !== target);
+
+  if (filtered.length === 0) return "";
+  return filtered.map((l) => (l.startsWith("- ") ? l : `- ${l}`)).join("\n");
+}
+
 export interface AgileDayConfig {
   /** e.g. "https://qvik.agileday.io/api" */
   apiBaseUrl: string;
