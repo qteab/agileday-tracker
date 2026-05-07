@@ -32,40 +32,20 @@ export function SettingsView({ onBack }: SettingsViewProps) {
       </div>
 
       <div className="px-4 py-4 space-y-6">
-        {/* Group descriptions toggle */}
+        {/* Description grouping mode */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex-1 pr-4">
-              <h3 className="text-sm font-medium text-text">Group descriptions</h3>
-              <p className="text-xs text-text-muted mt-1">
-                When enabled, all time entries for the same project, task, and date are merged into
-                a single AgileDay entry with descriptions listed as bullet points.
-              </p>
-            </div>
-            <button
-              role="switch"
-              aria-checked={groupDescriptions}
-              aria-label="Group descriptions"
-              onClick={() =>
-                updateSettings({ ...state.settings, groupDescriptions: !groupDescriptions })
-              }
-              className={`relative shrink-0 w-11 h-6 rounded-full transition-colors ${
-                groupDescriptions ? "bg-primary" : "bg-border"
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                  groupDescriptions ? "translate-x-5" : "translate-x-0"
-                }`}
-              />
-            </button>
+          <div>
+            <h3 className="text-sm font-medium text-text">Description mode</h3>
+            <p className="text-xs text-text-muted mt-1">
+              Choose how time entries are saved to AgileDay for the same project, task, and date.
+            </p>
           </div>
 
-          {/* Visual comparison */}
-          <div className="grid grid-cols-2 gap-3 mt-3">
+          <div className="grid grid-cols-2 gap-3">
             <IllustrationCard
               label="Separate (default)"
               active={!groupDescriptions}
+              onClick={() => updateSettings({ ...state.settings, groupDescriptions: false })}
               lines={[
                 { desc: "Code review", time: "01:01" },
                 { desc: "Bug fix", time: "00:45" },
@@ -75,6 +55,7 @@ export function SettingsView({ onBack }: SettingsViewProps) {
             <IllustrationCard
               label="Grouped"
               active={groupDescriptions}
+              onClick={() => updateSettings({ ...state.settings, groupDescriptions: true })}
               lines={[{ desc: "- Code review\n- Bug fix\n- Meetings", time: "02:56" }]}
             />
           </div>
@@ -135,16 +116,19 @@ export function SettingsView({ onBack }: SettingsViewProps) {
 function IllustrationCard({
   label,
   active,
+  onClick,
   lines,
 }: {
   label: string;
   active: boolean;
+  onClick: () => void;
   lines: Array<{ desc: string; time: string }>;
 }) {
   return (
-    <div
-      className={`rounded-lg border p-3 text-xs transition-colors ${
-        active ? "border-primary bg-primary/5" : "border-border bg-bg"
+    <button
+      onClick={onClick}
+      className={`rounded-lg border p-3 text-xs text-left transition-colors cursor-pointer ${
+        active ? "border-primary bg-primary/5" : "border-border bg-bg hover:border-text-muted"
       }`}
     >
       <div className={`font-medium mb-2 ${active ? "text-primary" : "text-text-muted"}`}>
@@ -158,6 +142,6 @@ function IllustrationCard({
           </div>
         ))}
       </div>
-    </div>
+    </button>
   );
 }
