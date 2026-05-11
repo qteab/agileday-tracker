@@ -36,14 +36,17 @@ You can start and stop as many times as you want during the day. Each session is
 
 ### How time entries sync to AgileDay
 
-The app keeps things clean on your AgileDay timecard:
+The app follows the [Qte Time Logging Policy](specs/agileday-tracker/Time%20logging%20policy.docx): **one entry per project+task per day**, with descriptions merged.
 
-- **Same description + same project + same day = one entry.** If you track "code review" on Fokus three times today, AgileDay shows one "code review" entry with the combined total — not three separate rows.
-- **Different descriptions = separate entries.** "code review" and "bug fix" on the same project create two entries, even on the same day.
-- **New day = new entry.** Tracking the same task tomorrow creates a fresh entry for that day.
+- **All sessions on the same project+task+day merge into one entry.** If you track "code review" and then "bug fix" on the same project today, AgileDay shows one entry with both descriptions listed as bullet points (`- code review` / `- bug fix`) and the combined total.
+- **Different projects or tasks = separate entries.** Work on Project A and Project B creates two entries, even on the same day.
+- **New day = new entry.** Tracking the same project tomorrow creates a fresh entry for that day.
+- **Duplicate descriptions are deduplicated.** Tracking "code review" twice on the same project+task+day doesn't add the description again — only the minutes are added.
 - **Submitted entries are locked.** Once you submit your timecard in AgileDay, those entries can't be edited from the app. You can still use the play button to start a new session for today.
 
-Behind the scenes: when you stop the timer, the app checks if an entry with the same description, project, and date already exists in AgileDay. If it does, the minutes are added to it. If multiple duplicates somehow exist, they're automatically consolidated into one.
+**Empty description warning:** If you stop the timer without a description, the app asks for confirmation — the customer sees the description on their invoice.
+
+Behind the scenes: when you stop the timer, the app checks if a SAVED entry with the same project, task, and date already exists in AgileDay. If it does, the minutes are added and the description is merged. If multiple duplicates somehow exist, they're automatically consolidated into one.
 
 ### Viewing your entries
 
@@ -60,17 +63,38 @@ Switch between **List** and **Allocation** using the tabs below the timer.
 
 The Allocation tab shows how your tracked time compares to your allocated time per project. You can toggle between **Week** and **Month** views.
 
+### Finalizing your timesheet
+
+The Qte Time Logging Policy requires entries rounded to the nearest 15 minutes before submission. The app has a **Finalize** view to help with this.
+
+1. Click the **clipboard-check icon** in the title bar (or use **Cmd+F**, or the tray menu → **Finalize Timesheet**)
+2. You'll see **summary cards for each week**, showing total hours, entry count, and status:
+   - **Active** — has entries that need rounding
+   - **Rounded** — all project totals are already multiples of 15 minutes
+   - **Submitted** — all entries submitted in AgileDay (read-only)
+3. Click a week to see the **detail view** with entries grouped by day
+4. Click **Round All** to apply rounding — this is a two-click process with a confirmation prompt
+
+**How rounding works:** The app sums all SAVED entries per project for the week, then rounds that total up to the nearest 15 minutes. The difference is added to the largest entry for that project. Other entries stay unchanged. The adjusted entry is highlighted in the detail view.
+
+After rounding, submit your timesheet in AgileDay. The app doesn't handle submission — that's your final review step.
+
+Click the **(?)** button in the finalize view for a full explanation with examples.
+
 ### Menu bar controls
 
 Click the teddy bear icon in the menu bar to access:
 
 - **New** — open the app and start tracking
 - **Show** — bring the app window to the front
-- **Quit** — close the app completely
+- **Sync** (Cmd+R) — reload entries from AgileDay
+- **Finalize Timesheet** (Cmd+F) — open the finalize view
+- **Settings** (Cmd+,) — account info and sign-out
+- **Quit** (Cmd+Q) — close the app completely
 
-### Signing out
+### Settings
 
-Click the **sign-out icon** (top-right corner of the app window) to disconnect from AgileDay. You'll need to sign in again to continue tracking.
+Click the **gear icon** (top-right corner) or use the tray menu → **Settings**. From here you can see your account info and sign out.
 
 ## Updates
 
@@ -130,7 +154,7 @@ This is the same check CI runs on every push. PRs that fail checks won't be merg
 |---------|-------------|
 | `npm run dev` | Vite dev server (port 1420) |
 | `npm run tauri dev` | Full app in dev mode |
-| `npm run test` | Run all tests (68 tests) |
+| `npm run test` | Run all tests (131 tests) |
 | `npm run lint` | ESLint |
 | `npm run format` | Prettier (auto-fix) |
 | `npm run check` | All of the above |
@@ -144,6 +168,9 @@ This project is set up to work well with AI coding assistants (Claude Code, Curs
 - **`specs/agileday-tracker/spec.md`** — Acceptance criteria (48 ACs).
 - **`specs/agileday-tracker/entry-sync.md`** — How time entries sync between the app and AgileDay. Read this before touching the create/edit/delete flow.
 - **`specs/agileday-tracker/openapi.yaml`** — AgileDay's REST API spec.
+- **`specs/agileday-tracker/Time logging policy.docx`** — Qte company time-logging policy. The app enforces grouped descriptions and 15-minute rounding to comply with this.
+- **`specs/feat-description-grouping-setting/`** — Spec for the grouped description behavior.
+- **`specs/feat-timesheet-rounding/`** — Spec for the finalize/rounding feature.
 
 If you're using an AI assistant, point it to these files first. They contain the decisions and constraints that aren't obvious from the code alone.
 
