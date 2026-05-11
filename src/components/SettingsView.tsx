@@ -6,8 +6,7 @@ interface SettingsViewProps {
 }
 
 export function SettingsView({ onBack }: SettingsViewProps) {
-  const { state, updateSettings, logout } = useApp();
-  const { groupDescriptions } = state.settings;
+  const { state, logout } = useApp();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   return (
@@ -32,38 +31,6 @@ export function SettingsView({ onBack }: SettingsViewProps) {
       </div>
 
       <div className="px-4 py-4 space-y-6">
-        {/* Description grouping mode */}
-        <div className="space-y-3">
-          <div>
-            <h3 className="text-sm font-medium text-text">Description mode</h3>
-            <p className="text-xs text-text-muted mt-1">
-              Choose how time entries are saved to AgileDay for the same project, task, and date.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <IllustrationCard
-              label="Separate (default)"
-              active={!groupDescriptions}
-              onClick={() => updateSettings({ ...state.settings, groupDescriptions: false })}
-              lines={[
-                { desc: "Code review", time: "01:01" },
-                { desc: "Bug fix", time: "00:45" },
-                { desc: "Meetings", time: "01:10" },
-              ]}
-            />
-            <IllustrationCard
-              label="Grouped"
-              active={groupDescriptions}
-              onClick={() => updateSettings({ ...state.settings, groupDescriptions: true })}
-              lines={[{ desc: "- Code review\n- Bug fix\n- Meetings", time: "02:56" }]}
-            />
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div className="border-t border-border" />
-
         {/* Account / Sign out */}
         <div>
           <h3 className="text-sm font-medium text-text mb-1">Account</h3>
@@ -110,38 +77,5 @@ export function SettingsView({ onBack }: SettingsViewProps) {
         </div>
       </div>
     </div>
-  );
-}
-
-function IllustrationCard({
-  label,
-  active,
-  onClick,
-  lines,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  lines: Array<{ desc: string; time: string }>;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-lg border p-3 text-xs text-left transition-colors cursor-pointer ${
-        active ? "border-primary bg-primary/5" : "border-border bg-bg hover:border-text-muted"
-      }`}
-    >
-      <div className={`font-medium mb-2 ${active ? "text-primary" : "text-text-muted"}`}>
-        {label}
-      </div>
-      <div className="space-y-1.5">
-        {lines.map((line, i) => (
-          <div key={i} className="flex justify-between items-start gap-2">
-            <span className="text-text-muted whitespace-pre-line leading-tight">{line.desc}</span>
-            <span className="text-text shrink-0 tabular-nums">{line.time}</span>
-          </div>
-        ))}
-      </div>
-    </button>
   );
 }

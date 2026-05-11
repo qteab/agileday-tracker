@@ -93,27 +93,25 @@ export function createMockProvider(
       return entries.filter((e) => e.date >= startDate && e.date <= endDate);
     },
 
-    async createTimeEntry(_employeeId: string, entry, options) {
+    async createTimeEntry(_employeeId: string, entry) {
       const entries = await store.getEntries();
-      const groupMode = options?.groupDescriptions ?? false;
       const desc = entry.description ?? "";
 
-      if (groupMode) {
-        const match = entries.find(
-          (e) =>
-            e.projectId === entry.projectId &&
-            e.date === entry.date &&
-            (e.taskId ?? "") === (entry.taskId ?? "") &&
-            e.status === "SAVED"
-        );
-        if (match) {
-          match.minutes += entry.minutes;
-          if (desc) {
-            match.description = mergeDescriptions(match.description, desc);
-          }
-          await store.setEntries(entries);
-          return { ...match };
+      // Match by project+task+date (grouped mode — always active)
+      const match = entries.find(
+        (e) =>
+          e.projectId === entry.projectId &&
+          e.date === entry.date &&
+          (e.taskId ?? "") === (entry.taskId ?? "") &&
+          e.status === "SAVED"
+      );
+      if (match) {
+        match.minutes += entry.minutes;
+        if (desc) {
+          match.description = mergeDescriptions(match.description, desc);
         }
+        await store.setEntries(entries);
+        return { ...match };
       }
 
       const newEntry: TimeEntry = {

@@ -1,142 +1,138 @@
-# Implementation Plan: Description Grouping Setting
+# Implementation Plan: Remove Grouping Toggle — Grouped Mode Only
 
 ## Approach
 
-Users interact with AgileDay time entries in two ways: (A) one entry per unique description on a project+date, and (B) all descriptions for a project+date merged into a single entry with concatenated comments. The app currently only supports mode A — entries with the same description consolidate, but different descriptions stay separate.
+The Qte time-logging policy (v1.0, 2026-05-07) mandates **"one entry per customer per day"** with a single comment listing activities on separate lines. This aligns exactly with our existing "grouped" mode. The "separate" mode (one AgileDay entry per description) directly contradicts the policy.
 
-This feature adds a user preference toggle to switch between these modes. When "Group descriptions" is enabled, stopping a timer will match existing entries by project+task+date only (ignoring description), and append the new description to the existing entry's comment field as a bullet point (e.g., `- task 1\n- task 2`). When disabled (default), the current behavior is preserved.
+This change removes the grouping toggle from settings, makes grouped mode the hardcoded default, and strips all conditional branching (`if (groupMode) ... else ...`) throughout the codebase. The `UserSettings` type, `settings-store.ts`, and the settings-related state/context code are removed since the only setting was `groupDescriptions`. The SettingsView keeps its account/sign-out section but loses the mode selector.
 
-The setting is stored via Tauri's plugin-store (same mechanism as timer persistence) and exposed through a new Settings view accessible from a gear icon in the title bar. The settings page includes a visual toggle with inline illustrations showing the difference between the two modes.
+Cross-referencing the policy against our integration surfaces two additional items worth noting but **out of scope** for this PR:
+- **15-minute rounding**: The policy says "round each entry up to the nearest 15 minutes." Our app currently stores exact minutes. This is a separate feature.
+- **Empty comment validation**: The policy says "a billable session with no comment is not acceptable." We could warn on empty descriptions, but that's a separate UX decision.
 
 ## File Changes
 
-### New Files
-| File | Purpose |
-|------|---------|
-| `src/store/settings-store.ts` | Persistence layer for user settings via Tauri store |
-| `src/components/SettingsView.tsx` | Settings page UI with grouping toggle and visual explanation |
+### Removed Files
+| File | Reason |
+|------|--------|
+| `src/store/settings-store.ts` | Only setting was `groupDescriptions`; no longer needed |
 
 ### Modified Files
 | File | Changes |
 |------|---------|
-| `src/api/agileday.ts` | `createTimeEntry` gains `groupDescriptions` parameter; when true, matches by project+date only and concatenates descriptions |
-| `src/api/provider.ts` | `ApiProvider.createTimeEntry` signature adds optional `options?: { groupDescriptions?: boolean }` |
-| `src/api/mock-core.ts` | Update mock to support `groupDescriptions` option |
-| `src/api/types.ts` | Add `UserSettings` interface |
-| `src/hooks/useTimer.ts` | Pass `groupDescriptions` setting to `createTimeEntry` |
-| `src/store/context.tsx` | Load/expose settings state, add settings to context |
-| `src/store/reducer.ts` | Add `settings` to `AppState`, add `SET_SETTINGS` action |
-| `src/App.tsx` | Add settings view state, render SettingsView when active, listen for tray event |
-| `src-tauri/src/lib.rs` | Add "Settings" menu item between Sync and Quit |
+| `src/api/types.ts` | Remove `UserSettings` interface and `DEFAULT_SETTINGS` constant |
+| `src/api/provider.ts` | Remove `options?: { groupDescriptions?: boolean }` from `createTimeEntry` signature |
+| `src/api/agileday.ts` | Remove `groupMode` conditional branches — always use grouped logic. Keep `mergeDescriptions` and `removeDescription` (still needed) |
+| `src/api/mock-core.ts` | Remove `groupDescriptions` option handling — always group |
+| `src/store/reducer.ts` | Remove `settings` field from `AppState`, `SET_SETTINGS` action, `DEFAULT_SETTINGS` import |
+| `src/store/context.tsx` | Remove `updateSettings`, `loadSettings`/`saveSettings` imports, settings load effect, settings from context value |
+| `src/hooks/useTimer.ts` | Remove `{ groupDescriptions: ... }` option from `createTimeEntry` call, remove `state.settings` from deps |
+| `src/components/EntryEditModal.tsx` | Remove `groupMode` variable — always use grouped matching/merging logic |
+| `src/components/SettingsView.tsx` | Remove mode selector cards and `IllustrationCard`. Keep account section |
+| `src/App.tsx` | Remove `updateSettings` from context usage if it was destructured |
+| `src-tauri/src/lib.rs` | No change needed — Settings tray menu item stays (still has account/sign-out) |
+| `src/api/__tests__/agileday-provider.test.ts` | Remove "default mode" tests that assert description-matching. Update grouped tests to not pass `groupDescriptions` option |
+| `src/api/__tests__/mock-provider.test.ts` | Same — remove separate-mode tests, update grouped tests |
+| `specs/agileday-tracker/entry-sync.md` | Update Group definition: `projectId + taskId + date` (not description). Update all sections to reflect grouped-only behavior |
+| `specs/feat-description-grouping-setting/spec.md` | Mark as superseded or update to reflect grouped-only |
 
 ## Data Model
 
-```typescript
-// In types.ts
-export interface UserSettings {
-  groupDescriptions: boolean; // false = separate entries (default), true = merge into one
-}
+The `UserSettings` type and `DEFAULT_SETTINGS` constant are deleted entirely:
 
-// Default
-export const DEFAULT_SETTINGS: UserSettings = {
-  groupDescriptions: false,
-};
+```typescript
+// REMOVED from src/api/types.ts:
+// export interface UserSettings { groupDescriptions: boolean; }
+// export const DEFAULT_SETTINGS: UserSettings = { groupDescriptions: false };
 ```
 
-## Description Grouping Logic
-
-When `groupDescriptions: true` and timer stops:
-
-1. Query existing entries for same `projectId + date + status=SAVED` (ignore description)
-2. If match found:
-   - If existing description is empty: set it to new description
-   - If new description is empty: keep existing
-   - If both non-empty: append new description as new line (`existing + "\n" + new`)
-   - PATCH with updated minutes + updated description
-3. If no match: create new entry as normal
-
-When `groupDescriptions: false` (default): current behavior unchanged.
+`AppState.settings` field removed from reducer. `createTimeEntry` no longer takes an `options` parameter.
 
 ## Tasks
 
-- [x] 1. Add `UserSettings` type and defaults to types.ts
+- [x] 1. **Remove `UserSettings` type and defaults from `types.ts`**
   - Files: `src/api/types.ts`
-  - Details: Add interface and default constant
+  - Details: Delete `UserSettings` interface and `DEFAULT_SETTINGS` export
 
-- [x]2. Create settings persistence store
-  - Files: `src/store/settings-store.ts`
-  - Details: `loadSettings()` and `saveSettings()` using Tauri plugin-store, mirroring timer-store.ts pattern
-
-- [x]3. Add settings to app state and reducer
-  - Files: `src/store/reducer.ts`
-  - Details: Add `settings: UserSettings` to `AppState`, `SET_SETTINGS` action, `UPDATE_SETTINGS` action
-
-- [x]4. Wire settings into context provider
-  - Files: `src/store/context.tsx`
-  - Details: Load settings on mount, expose `updateSettings` function, persist on change
-
-- [x]5. Update ApiProvider interface
+- [x] 2. **Remove `options` parameter from `ApiProvider.createTimeEntry`**
   - Files: `src/api/provider.ts`
-  - Details: Add optional `options` parameter to `createTimeEntry`
+  - Details: Signature becomes `createTimeEntry(employeeId, entry): Promise<TimeEntry>`
 
-- [x]6. Implement grouped description logic in AgileDay provider
+- [x] 3. **Simplify `agileday.ts` — always use grouped logic**
   - Files: `src/api/agileday.ts`
-  - Details: When `groupDescriptions` is true, match by project+date only, concatenate descriptions on PATCH
+  - Details: Remove `groupMode` variable and all `if (groupMode)` / `else` branches. The grouped path becomes the only path. Keep `mergeDescriptions` and `removeDescription` unchanged.
 
-- [x]7. Update mock provider for compatibility
+- [x] 4. **Simplify `mock-core.ts` — always use grouped logic**
   - Files: `src/api/mock-core.ts`
-  - Details: Support `groupDescriptions` option in mock createTimeEntry
+  - Details: Remove `options?.groupDescriptions` handling, always match by `projectId + taskId + date`
 
-- [x]8. Pass setting from useTimer to API
+- [x] 5. **Remove settings from state layer**
+  - Files: `src/store/reducer.ts`, `src/store/settings-store.ts`
+  - Details: Remove `settings` from `AppState`, `SET_SETTINGS` action, `DEFAULT_SETTINGS` import. Delete `settings-store.ts`
+
+- [x] 6. **Remove settings from context**
+  - Files: `src/store/context.tsx`
+  - Details: Remove `updateSettings`, settings load effect, `loadSettings`/`saveSettings` imports, `UserSettings` import, `updateSettings` from context value and provider
+
+- [x] 7. **Simplify `useTimer.ts` — remove settings dependency**
   - Files: `src/hooks/useTimer.ts`
-  - Details: Read `groupDescriptions` from state, pass to `api.createTimeEntry`
+  - Details: Remove `{ groupDescriptions: state.settings.groupDescriptions }` from `createTimeEntry` call. Remove `state.settings.groupDescriptions` from `useCallback` deps
 
-- [x]9. Build Settings view component
+- [x] 8. **Simplify `EntryEditModal.tsx` — always use grouped logic**
+  - Files: `src/components/EntryEditModal.tsx`
+  - Details: Remove `groupMode` variable. The grouped matching/merging code becomes the only code path in both `handleSave` and `handleDelete`
+
+- [x] 9. **Simplify `SettingsView.tsx` — remove mode selector**
   - Files: `src/components/SettingsView.tsx`
-  - Details: Toggle switch with label, inline SVG/CSS illustrations showing the two modes, description text
+  - Details: Remove `IllustrationCard` component, mode selector grid, and "Description mode" section. Keep header, account section, sign-out
 
-- [x]10. Add "Settings" tray menu item and event handler
-  - Files: `src-tauri/src/lib.rs`, `src/App.tsx`
-  - Details: Add "Settings" menu item (Cmd+,) between Sync and Quit in tray menu. Emit `tray-open-settings` event. In App.tsx, listen for event and show SettingsView. Add back button to return to normal view.
+- [x] 10. **Clean up `App.tsx`**
+  - Files: `src/App.tsx`
+  - Details: Remove `updateSettings` if destructured from context
 
-- [x]11. Write tests for grouped description consolidation
-  - Files: `src/api/__tests__/agileday-provider.test.ts`
-  - Details: Test cases for grouping mode: new entry, append to existing, empty descriptions, multiple matches
+- [x] 11. **Update tests — remove separate-mode tests, simplify grouped tests**
+  - Files: `src/api/__tests__/agileday-provider.test.ts`, `src/api/__tests__/mock-provider.test.ts`
+  - Details: Remove tests asserting "default mode matches by description". Update grouped-mode tests to not pass `groupDescriptions` option. Verify all remaining tests pass
 
-- [x]12. Write tests for settings persistence
-  - Files: `src/api/__tests__/mock-provider.test.ts`
-  - Details: Test mock provider respects groupDescriptions option
+- [x] 12. **Update `entry-sync.md` to reflect grouped-only behavior**
+  - Files: `specs/agileday-tracker/entry-sync.md`
+  - Details: Change Group definition from `description + projectId + date` to `projectId + taskId + date`. Update Create/Edit/Delete sections. Add reference to time-logging policy
 
-- [x]13. Update spec docs
+- [x] 13. **Update feature spec to reflect grouped-only**
   - Files: `specs/feat-description-grouping-setting/spec.md`
-  - Details: Document the feature acceptance criteria
+  - Details: Mark toggle-related ACs as removed/superseded. Update user stories
+
+- [x] 14. **Run full check suite**
+  - Command: `npm run check`
+  - Details: Verify typecheck, lint, format, and all tests pass
 
 ## Test Plan
 
 | Scenario | Type | File | Task # |
 |----------|------|------|--------|
-| Grouped mode: new entry (no existing) | unit | `agileday-provider.test.ts` | 11 |
-| Grouped mode: append description to existing entry | unit | `agileday-provider.test.ts` | 11 |
-| Grouped mode: empty new description | unit | `agileday-provider.test.ts` | 11 |
-| Grouped mode: empty existing description | unit | `agileday-provider.test.ts` | 11 |
-| Grouped mode: multiple existing matches | unit | `agileday-provider.test.ts` | 11 |
-| Default mode: behavior unchanged | unit | `agileday-provider.test.ts` | 11 |
-| Settings load/save persistence | unit | settings test | 12 |
-| Mock provider groupDescriptions | unit | `mock-provider.test.ts` | 12 |
+| Timer stop matches by project+task+date (always) | unit | `agileday-provider.test.ts` | 11 |
+| Timer stop merges descriptions | unit | `agileday-provider.test.ts` | 11 |
+| Timer stop creates new entry when no match | unit | `agileday-provider.test.ts` | 11 |
+| Empty description doesn't append | unit | `agileday-provider.test.ts` | 11 |
+| Different tasks stay separate | unit | `agileday-provider.test.ts` | 11 |
+| Mock provider groups by project+task+date | unit | `mock-provider.test.ts` | 11 |
+| `mergeDescriptions` / `removeDescription` unchanged | unit | `agileday-provider.test.ts` | 11 |
+| Full suite passes | all | `npm run check` | 14 |
 
 ## Risks & Edge Cases
 
-- **Existing grouped entries on AgileDay**: If user switches from grouped→separate mode, old grouped entries with multiline descriptions won't split. This is acceptable — the setting only affects future saves.
-- **Description deduplication**: If user tracks "code review" twice in grouped mode, we should avoid appending the same description again. Mitigation: check if description already exists in the concatenated string.
-- **Entry edit with grouped descriptions**: The EntryEditModal currently calculates group totals by matching description. In grouped mode, all entries for the project+date are in one AgileDay entry, so editing works naturally.
-- **Line separator**: Use `\n` for description concatenation. AgileDay's text field supports multiline.
+- **Existing users with `settings.json` containing `groupDescriptions: false`**: The setting file becomes orphaned but harmless — the app no longer reads it. No migration needed.
+- **Entries created in separate mode**: Already in AgileDay as individual entries. Future timer stops on the same project+task+date will merge into one of them (correct behavior).
+- **Policy gap — 15-minute rounding**: Not implemented here. Could cause policy non-compliance if users log e.g. 3-minute sessions. Flagged as follow-up.
 
 ## Acceptance Verification
 
 | # | Criterion | Task | Verification |
 |---|-----------|------|-------------|
-| AC-1 | Default behavior unchanged (separate entries per description) | 6 | Existing tests pass, new default-mode test |
-| AC-2 | Grouped mode consolidates all descriptions into one entry | 6, 11 | Unit test: stop timer twice with different descriptions → one entry with both |
-| AC-3 | Settings accessible from tray menu | 10 | Manual: tray "Settings" item opens settings view |
-| AC-4 | Toggle persists across app restarts | 2, 4 | Unit test: save + load settings |
-| AC-5 | Visual explanation on settings page | 9 | Manual: illustrations visible |
+| 1 | Grouped mode is always active (no toggle) | 1-8 | Timer stop → verify one AgileDay entry per project+task+date |
+| 2 | Settings page has no mode selector | 9 | Open settings → only account section visible |
+| 3 | Descriptions merge with `- ` prefix | 3 | Stop timer twice with different descriptions → verify `- desc1\n- desc2` format |
+| 4 | Edit swaps description in grouped entry | 8 | Edit a session's description → verify old removed, new added |
+| 5 | Delete removes description from grouped entry | 8 | Delete a session → verify its description removed from AgileDay entry |
+| 6 | All tests pass | 14 | `npm run check` exits 0 |
+| 7 | entry-sync.md reflects grouped-only | 12 | Read spec — Group defined as `projectId + taskId + date` |

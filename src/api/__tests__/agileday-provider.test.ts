@@ -566,9 +566,9 @@ describe("removeDescription", () => {
   });
 });
 
-// --- createTimeEntry with groupDescriptions ---
+// --- createTimeEntry grouping ---
 
-describe("createTimeEntry with groupDescriptions", () => {
+describe("createTimeEntry grouping", () => {
   it("matches by project+task+date only, ignoring description", async () => {
     // /updated returns an entry with different description but same project+task+date
     mockFetch.mockResolvedValueOnce(
@@ -599,19 +599,15 @@ describe("createTimeEntry with groupDescriptions", () => {
       ])
     );
 
-    const entry = await provider.createTimeEntry(
-      "emp-1",
-      {
-        description: "task 2",
-        projectId: "p1",
-        taskId: "t1",
-        date: "2026-04-24",
-        startTime: "2026-04-24T09:00:00Z",
-        minutes: 60,
-        status: "SAVED",
-      },
-      { groupDescriptions: true }
-    );
+    const entry = await provider.createTimeEntry("emp-1", {
+      description: "task 2",
+      projectId: "p1",
+      taskId: "t1",
+      date: "2026-04-24",
+      startTime: "2026-04-24T09:00:00Z",
+      minutes: 60,
+      status: "SAVED",
+    });
 
     // Should PATCH, not POST
     const [, opts] = mockFetch.mock.calls[1];
@@ -623,7 +619,7 @@ describe("createTimeEntry with groupDescriptions", () => {
     expect(body[0].description).toBe("- task 1\n- task 2");
   });
 
-  it("creates new entry when no match exists in group mode", async () => {
+  it("creates new entry when no match exists", async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse([])); // /updated: no matches
     mockFetch.mockResolvedValueOnce(
       jsonResponse([
@@ -639,26 +635,22 @@ describe("createTimeEntry with groupDescriptions", () => {
       ])
     );
 
-    const entry = await provider.createTimeEntry(
-      "emp-1",
-      {
-        description: "task 1",
-        projectId: "p1",
-        taskId: "t1",
-        date: "2026-04-24",
-        startTime: "2026-04-24T09:00:00Z",
-        minutes: 60,
-        status: "SAVED",
-      },
-      { groupDescriptions: true }
-    );
+    const entry = await provider.createTimeEntry("emp-1", {
+      description: "task 1",
+      projectId: "p1",
+      taskId: "t1",
+      date: "2026-04-24",
+      startTime: "2026-04-24T09:00:00Z",
+      minutes: 60,
+      status: "SAVED",
+    });
 
     const [, opts] = mockFetch.mock.calls[1];
     expect(opts.method).toBe("POST");
     expect(entry.id).toBe("new-1");
   });
 
-  it("does not append empty description in group mode", async () => {
+  it("does not append empty description", async () => {
     mockFetch.mockResolvedValueOnce(
       jsonResponse([
         {
@@ -686,23 +678,122 @@ describe("createTimeEntry with groupDescriptions", () => {
       ])
     );
 
-    await provider.createTimeEntry(
-      "emp-1",
-      {
-        description: "",
-        projectId: "p1",
-        taskId: "t1",
-        date: "2026-04-24",
-        startTime: "2026-04-24T09:00:00Z",
-        minutes: 60,
-        status: "SAVED",
-      },
-      { groupDescriptions: true }
-    );
+    await provider.createTimeEntry("emp-1", {
+      description: "",
+      projectId: "p1",
+      taskId: "t1",
+      date: "2026-04-24",
+      startTime: "2026-04-24T09:00:00Z",
+      minutes: 60,
+      status: "SAVED",
+    });
 
     const body = JSON.parse(mockFetch.mock.calls[1][1].body);
     // Should not include description field since it's empty
     expect(body[0].description).toBeUndefined();
+  });
+
+  it("matches entries without taskId (both undefined)", async () => {
+    // Both existing and new entry have no taskId — should match
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "existing-1",
+          date: "2026-04-24",
+          minutes: 30,
+          status: "SAVED",
+          description: "- meetings",
+          projectId: "p1",
+          // no taskId
+        },
+      ])
+    );
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "existing-1",
+          date: "2026-04-24",
+          minutes: 90,
+          status: "SAVED",
+          description: "- meetings\n- standup",
+          projectId: "p1",
+        },
+      ])
+    );
+
+    const entry = await provider.createTimeEntry("emp-1", {
+      description: "standup",
+      projectId: "p1",
+      // no taskId
+      date: "2026-04-24",
+      startTime: "2026-04-24T09:00:00Z",
+      minutes: 60,
+      status: "SAVED",
+    });
+
+    const [, opts] = mockFetch.mock.calls[1];
+    expect(opts.method).toBe("PATCH");
+    expect(entry.minutes).toBe(90);
+    const body = JSON.parse(opts.body);
+    expect(body[0].description).toBe("- meetings\n- standup");
+  });
+
+  it("merges descriptions from multiple matches during consolidation", async () => {
+    // 2 existing entries with different descriptions on same project+task+date
+    // (plain text — as created by single sessions before grouping merged them)
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "dup-1",
+          date: "2026-04-24",
+          minutes: 20,
+          status: "SAVED",
+          description: "review",
+          projectId: "p1",
+          taskId: "t1",
+        },
+        {
+          id: "dup-2",
+          date: "2026-04-24",
+          minutes: 30,
+          status: "SAVED",
+          description: "planning",
+          projectId: "p1",
+          taskId: "t1",
+        },
+      ])
+    );
+    // POST consolidated
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "consolidated",
+          date: "2026-04-24",
+          minutes: 65,
+          status: "SAVED",
+          description: "- review\n- planning\n- coding",
+          projectId: "p1",
+          taskId: "t1",
+        },
+      ])
+    );
+    // DELETE old entries
+    mockFetch.mockResolvedValueOnce(jsonResponse([{ id: "dup-1" }]));
+    mockFetch.mockResolvedValueOnce(jsonResponse([{ id: "dup-2" }]));
+
+    await provider.createTimeEntry("emp-1", {
+      description: "coding",
+      projectId: "p1",
+      taskId: "t1",
+      date: "2026-04-24",
+      startTime: "2026-04-24T09:00:00Z",
+      minutes: 15,
+      status: "SAVED",
+    });
+
+    const postBody = JSON.parse(mockFetch.mock.calls[1][1].body);
+    expect(postBody[0].minutes).toBe(65); // 20+30+15
+    expect(postBody[0].description).toBe("- review\n- planning\n- coding");
   });
 
   it("does not group across different tasks", async () => {
@@ -734,64 +825,16 @@ describe("createTimeEntry with groupDescriptions", () => {
       ])
     );
 
-    await provider.createTimeEntry(
-      "emp-1",
-      {
-        description: "task 2",
-        projectId: "p1",
-        taskId: "t2",
-        date: "2026-04-24",
-        startTime: "2026-04-24T09:00:00Z",
-        minutes: 60,
-        status: "SAVED",
-      },
-      { groupDescriptions: true }
-    );
-
-    const [, opts] = mockFetch.mock.calls[1];
-    expect(opts.method).toBe("POST");
-  });
-
-  it("default mode (no option) still matches by description", async () => {
-    // Entry with different description should NOT match in default mode
-    mockFetch.mockResolvedValueOnce(
-      jsonResponse([
-        {
-          id: "existing-1",
-          date: "2026-04-24",
-          minutes: 30,
-          status: "SAVED",
-          description: "task 1",
-          projectId: "p1",
-          taskId: "t1",
-        },
-      ])
-    );
-    mockFetch.mockResolvedValueOnce(
-      jsonResponse([
-        {
-          id: "new-1",
-          date: "2026-04-24",
-          minutes: 60,
-          status: "SAVED",
-          description: "task 2",
-          projectId: "p1",
-          taskId: "t1",
-        },
-      ])
-    );
-
     await provider.createTimeEntry("emp-1", {
       description: "task 2",
       projectId: "p1",
-      taskId: "t1",
+      taskId: "t2",
       date: "2026-04-24",
       startTime: "2026-04-24T09:00:00Z",
       minutes: 60,
       status: "SAVED",
     });
 
-    // Should POST (not PATCH) since description doesn't match
     const [, opts] = mockFetch.mock.calls[1];
     expect(opts.method).toBe("POST");
   });

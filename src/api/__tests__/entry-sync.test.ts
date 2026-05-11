@@ -154,7 +154,7 @@ describe("Create (Timer Stop)", () => {
   });
 
   it("consolidates when multiple matches found: creates new + deletes old", async () => {
-    // /updated returns 3 duplicates
+    // /updated returns 3 duplicates with different descriptions (plain text, as created by single sessions)
     mockFetch.mockResolvedValueOnce(
       jsonResponse([
         {
@@ -170,7 +170,7 @@ describe("Create (Timer Stop)", () => {
           date: "2026-04-28",
           minutes: 3,
           status: "SAVED",
-          description: "review",
+          description: "planning",
           projectId: "p1",
         },
         {
@@ -178,12 +178,12 @@ describe("Create (Timer Stop)", () => {
           date: "2026-04-28",
           minutes: 4,
           status: "SAVED",
-          description: "review",
+          description: "dev",
           projectId: "p1",
         },
       ])
     );
-    // POST consolidated entry (2+3+4+5 = 14 min)
+    // POST consolidated entry (2+3+4+5 = 14 min, merged descriptions)
     mockFetch.mockResolvedValueOnce(
       jsonResponse([
         {
@@ -191,7 +191,7 @@ describe("Create (Timer Stop)", () => {
           date: "2026-04-28",
           minutes: 14,
           status: "SAVED",
-          description: "review",
+          description: "- review\n- planning\n- dev\n- testing",
           projectId: "p1",
         },
       ])
@@ -202,7 +202,7 @@ describe("Create (Timer Stop)", () => {
     mockFetch.mockResolvedValueOnce(jsonResponse([{ id: "dup-3" }]));
 
     const entry = await provider.createTimeEntry("emp-1", {
-      description: "review",
+      description: "testing",
       projectId: "p1",
       date: "2026-04-28",
       startTime: "2026-04-28T10:00:00Z",
@@ -214,6 +214,9 @@ describe("Create (Timer Stop)", () => {
     const postBody = JSON.parse(mockFetch.mock.calls[1][1].body);
     expect(postBody[0].minutes).toBe(14); // 2+3+4+5
 
+    // Descriptions from all duplicates + new are merged into dash-prefixed lines
+    expect(postBody[0].description).toBe("- review\n- planning\n- dev\n- testing");
+
     // 3 DELETE calls
     expect(mockFetch.mock.calls[2][0]).toContain("ids=dup-1");
     expect(mockFetch.mock.calls[3][0]).toContain("ids=dup-2");
@@ -223,8 +226,8 @@ describe("Create (Timer Stop)", () => {
     expect(entry.minutes).toBe(14);
   });
 
-  it("only matches entries with same description+project+date+SAVED status", async () => {
-    // /updated returns entries, but only one matches fully
+  it("only matches entries with same project+task+date+SAVED status", async () => {
+    // /updated returns entries: only one matches project+task+date+SAVED
     mockFetch.mockResolvedValueOnce(
       jsonResponse([
         {
@@ -236,14 +239,6 @@ describe("Create (Timer Stop)", () => {
           projectId: "p1",
         },
         {
-          id: "different-desc",
-          date: "2026-04-28",
-          minutes: 5,
-          status: "SAVED",
-          description: "other work",
-          projectId: "p1",
-        },
-        {
           id: "different-project",
           date: "2026-04-28",
           minutes: 5,
@@ -251,9 +246,18 @@ describe("Create (Timer Stop)", () => {
           description: "review",
           projectId: "p2",
         },
+        {
+          id: "different-task",
+          date: "2026-04-28",
+          minutes: 5,
+          status: "SAVED",
+          description: "other work",
+          projectId: "p1",
+          taskId: "t2",
+        },
       ])
     );
-    // No matches → POST new
+    // No matches (SUBMITTED, different project, different task) → POST new
     mockFetch.mockResolvedValueOnce(
       jsonResponse([
         {
@@ -263,6 +267,7 @@ describe("Create (Timer Stop)", () => {
           status: "SAVED",
           description: "review",
           projectId: "p1",
+          taskId: "t1",
         },
       ])
     );
@@ -270,18 +275,19 @@ describe("Create (Timer Stop)", () => {
     await provider.createTimeEntry("emp-1", {
       description: "review",
       projectId: "p1",
+      taskId: "t1",
       date: "2026-04-28",
       startTime: "2026-04-28T09:00:00Z",
       minutes: 5,
       status: "SAVED",
     });
 
-    // Should POST (no SAVED match for same desc+project)
+    // Should POST (no SAVED match for same project+task+date)
     expect(mockFetch.mock.calls[1][1].method).toBe("POST");
   });
 
-  it("different description creates separate entry even on same project+date", async () => {
-    // /updated returns an entry with different description
+  it("different description on same project+task+date merges into existing entry", async () => {
+    // /updated returns an entry with different description but same project+task+date
     mockFetch.mockResolvedValueOnce(
       jsonResponse([
         {
@@ -289,20 +295,20 @@ describe("Create (Timer Stop)", () => {
           date: "2026-04-28",
           minutes: 30,
           status: "SAVED",
-          description: "meetings",
+          description: "- meetings",
           projectId: "p1",
         },
       ])
     );
-    // POST new (different description)
+    // PATCH (merges descriptions)
     mockFetch.mockResolvedValueOnce(
       jsonResponse([
         {
-          id: "new-1",
+          id: "existing",
           date: "2026-04-28",
-          minutes: 15,
+          minutes: 45,
           status: "SAVED",
-          description: "code review",
+          description: "- meetings\n- code review",
           projectId: "p1",
         },
       ])
@@ -317,7 +323,11 @@ describe("Create (Timer Stop)", () => {
       status: "SAVED",
     });
 
-    expect(mockFetch.mock.calls[1][1].method).toBe("POST");
+    // Should PATCH (same project+task+date, descriptions are merged)
+    expect(mockFetch.mock.calls[1][1].method).toBe("PATCH");
+    const body = JSON.parse(mockFetch.mock.calls[1][1].body);
+    expect(body[0].minutes).toBe(45);
+    expect(body[0].description).toBe("- meetings\n- code review");
   });
 });
 
@@ -399,6 +409,73 @@ describe("Update (updateTimeEntry)", () => {
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body[0].minutes).toBe(12);
     expect(result.minutes).toBe(12);
+  });
+
+  it("swaps description when editing a session in a grouped entry", async () => {
+    // Simulates EntryEditModal.handleSave: removeDescription(old) + mergeDescriptions(new)
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "agile-1",
+          date: "2026-04-28",
+          minutes: 75,
+          status: "SAVED",
+          description: "- planning\n- new desc",
+          projectId: "p1",
+        },
+      ])
+    );
+
+    const result = await provider.updateTimeEntry("emp-1", "agile-1", {
+      description: "- planning\n- new desc", // old "code review" swapped for "new desc"
+      minutes: 75,
+    });
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body[0].description).toBe("- planning\n- new desc");
+    expect(result.description).toBe("- planning\n- new desc");
+  });
+});
+
+// =============================================================================
+// DELETE: Grouped session removal (mirrors EntryEditModal.handleDelete)
+// =============================================================================
+
+describe("Delete (grouped session removal)", () => {
+  it("PATCHes with reduced minutes and updated description when other sessions remain", async () => {
+    // Simulates: group has 3 sessions, user deletes one.
+    // EntryEditModal calculates remaining total and calls updateTimeEntry.
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "agile-1",
+          date: "2026-04-28",
+          minutes: 45,
+          status: "SAVED",
+          description: "- task 2\n- task 3",
+          projectId: "p1",
+        },
+      ])
+    );
+
+    const result = await provider.updateTimeEntry("emp-1", "agile-1", {
+      minutes: 45, // was 75, removed 30-min session
+      description: "- task 2\n- task 3", // "task 1" removed
+    });
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body[0].minutes).toBe(45);
+    expect(body[0].description).toBe("- task 2\n- task 3");
+    expect(result.minutes).toBe(45);
+  });
+
+  it("DELETEs entire entry when last session is removed", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse([{ id: "agile-1" }]));
+
+    await provider.deleteTimeEntry(["agile-1"]);
+
+    expect(mockFetch.mock.calls[0][0]).toContain("ids=agile-1");
+    expect(mockFetch.mock.calls[0][1].method).toBe("DELETE");
   });
 });
 

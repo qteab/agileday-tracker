@@ -45,16 +45,11 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
     const mins = parseInt(parts[0] || "0") * 60 + parseInt(parts[1] || "0");
 
     try {
-      const groupMode = state.settings.groupDescriptions;
-
       // Calculate group total: other sessions sharing the same AgileDay entry + this session's new value
       const otherSessions = state.entries.filter((e) => {
         if (e.id === entry.id || e.projectId !== entry.projectId || e.date !== entry.date)
           return false;
-        if (groupMode) {
-          return (e.taskId ?? "") === (entry.taskId ?? "");
-        }
-        return e.description === entry.description;
+        return (e.taskId ?? "") === (entry.taskId ?? "");
       });
       const groupTotal = otherSessions.reduce((s, e) => s + e.minutes, 0) + mins;
 
@@ -62,23 +57,15 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
       const allRecent = await api.getTimeEntries(state.employee.id, entry.date, entry.date);
       const agileMatch = allRecent.find((e) => {
         if (e.projectId !== entry.projectId || e.id.startsWith("summary-")) return false;
-        if (groupMode) {
-          return (e.taskId ?? "") === (entry.taskId ?? "");
-        }
-        return e.description === entry.description;
+        return (e.taskId ?? "") === (entry.taskId ?? "");
       });
 
       if (agileMatch) {
-        let updatedDescription: string;
-        if (groupMode) {
-          // Swap old description for new in the grouped string
-          const afterRemove = removeDescription(agileMatch.description, entry.description);
-          updatedDescription = description
-            ? mergeDescriptions(afterRemove, description)
-            : afterRemove;
-        } else {
-          updatedDescription = description;
-        }
+        // Swap old description for new in the grouped string
+        const afterRemove = removeDescription(agileMatch.description, entry.description);
+        const updatedDescription = description
+          ? mergeDescriptions(afterRemove, description)
+          : afterRemove;
 
         await api.updateTimeEntry(state.employee.id, agileMatch.id, {
           description: updatedDescription,
@@ -116,17 +103,12 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
     setDeleting(true);
     setDeleteError("");
 
-    const groupMode = state.settings.groupDescriptions;
-
     // Calculate remaining total BEFORE removing from local state.
-    // In group mode, all sessions for the same project+task+date share one AgileDay entry.
+    // All sessions for the same project+task+date share one AgileDay entry.
     const remaining = state.entries.filter((e) => {
       if (e.id === entry.id || e.projectId !== entry.projectId || e.date !== entry.date)
         return false;
-      if (groupMode) {
-        return (e.taskId ?? "") === (entry.taskId ?? "");
-      }
-      return e.description === entry.description;
+      return (e.taskId ?? "") === (entry.taskId ?? "");
     });
     const remainingMinutes = remaining.reduce((s, e) => s + e.minutes, 0);
 
@@ -135,18 +117,15 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
       const allRecent = await api.getTimeEntries(state.employee.id, entry.date, entry.date);
       const agileMatch = allRecent.find((e) => {
         if (e.projectId !== entry.projectId || e.id.startsWith("summary-")) return false;
-        if (groupMode) {
-          return (e.taskId ?? "") === (entry.taskId ?? "");
-        }
-        return e.description === entry.description;
+        return (e.taskId ?? "") === (entry.taskId ?? "");
       });
 
       if (agileMatch) {
         if (remainingMinutes > 0) {
           const updates: Partial<TimeEntry> = { minutes: remainingMinutes };
 
-          // In group mode, also remove this session's description from the grouped description
-          if (groupMode && entry.description) {
+          // Remove this session's description from the grouped description
+          if (entry.description) {
             updates.description = removeDescription(agileMatch.description, entry.description);
           }
 

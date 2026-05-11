@@ -23,8 +23,6 @@ import {
   DEFAULT_CONNECTION,
 } from "../api/auth-manager";
 import { loadTimerState, saveTimerState, clearTimerState } from "./timer-store";
-import { loadSettings, saveSettings } from "./settings-store";
-import type { UserSettings } from "../api/types";
 
 interface AppContextValue {
   state: AppState;
@@ -34,7 +32,6 @@ interface AppContextValue {
   isAuthLoading: boolean;
   logout: () => Promise<void>;
   onLogin: (auth: AuthState) => void;
-  updateSettings: (settings: UserSettings) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -93,18 +90,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "SET_ERROR", payload: null });
     dispatch({ type: "SET_LOADING", payload: false });
   }
-
-  function updateSettings(newSettings: UserSettings) {
-    dispatch({ type: "SET_SETTINGS", payload: newSettings });
-    saveSettings(newSettings).catch(() => {});
-  }
-
-  // Load persisted settings on mount
-  useEffect(() => {
-    loadSettings()
-      .then((saved) => dispatch({ type: "SET_SETTINGS", payload: saved }))
-      .catch(() => {});
-  }, []);
 
   // Listen for sync event from native menu
   useEffect(() => {
@@ -286,7 +271,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider
-      value={{ state, dispatch, api, isConnected, isAuthLoading, logout, onLogin, updateSettings }}
+      value={{ state, dispatch, api, isConnected, isAuthLoading, logout, onLogin }}
     >
       {children}
     </AppContext.Provider>

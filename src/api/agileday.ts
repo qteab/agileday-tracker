@@ -387,8 +387,7 @@ export function createAgileDayProvider(
 
     async createTimeEntry(
       employeeId: string,
-      entry: Omit<TimeEntry, "id" | "syncStatus">,
-      options?: { groupDescriptions?: boolean }
+      entry: Omit<TimeEntry, "id" | "syncStatus">
     ): Promise<TimeEntry> {
       type RawEntry = {
         id: string;
@@ -401,9 +400,8 @@ export function createAgileDayProvider(
       };
 
       const desc = entry.description ?? "";
-      const groupMode = options?.groupDescriptions ?? false;
 
-      // 1. Query for existing SAVED entries with same project+date (+description if not grouping)
+      // 1. Query for existing SAVED entries with same project+task+date
       const updatedAfter = new Date(entry.date + "T00:00:00Z").toISOString();
       const allRecent = await apiFetch<RawEntry[]>(
         `/v1/time_entry/employee/id/${employeeId}/updated?updatedAfter=${updatedAfter}`
@@ -413,14 +411,10 @@ export function createAgileDayProvider(
         if (e.projectId !== entry.projectId || e.date !== entry.date || e.status !== "SAVED") {
           return false;
         }
-        if (groupMode) {
-          // In group mode, match by project+task+date only (ignore description)
-          const eTask = e.taskId ?? "";
-          const entryTask = entry.taskId ?? "";
-          return eTask === entryTask;
-        }
-        // Default mode: must also match description
-        return (e.description ?? "") === desc;
+        // Match by project+task+date only (ignore description)
+        const eTask = e.taskId ?? "";
+        const entryTask = entry.taskId ?? "";
+        return eTask === entryTask;
       });
 
       let created: RawEntry;
@@ -431,8 +425,8 @@ export function createAgileDayProvider(
         const newTotal = existing.minutes + entry.minutes;
         const patch: Record<string, unknown> = { id: existing.id, minutes: newTotal };
 
-        // In group mode, append the new description to the existing one
-        if (groupMode && desc) {
+        // Append the new description to the existing one
+        if (desc) {
           const existingDesc = existing.description ?? descriptionCache.get(existing.id) ?? "";
           const mergedDesc = mergeDescriptions(existingDesc, desc);
           if (mergedDesc !== existingDesc) {
@@ -451,16 +445,13 @@ export function createAgileDayProvider(
         const totalExisting = matches.reduce((s, e) => s + e.minutes, 0);
         const newTotal = totalExisting + entry.minutes;
 
-        // In group mode, merge all existing descriptions with the new one
-        let consolidatedDesc = desc;
-        if (groupMode) {
-          let merged = "";
-          for (const m of matches) {
-            const mDesc = m.description ?? descriptionCache.get(m.id) ?? "";
-            merged = mergeDescriptions(merged, mDesc);
-          }
-          consolidatedDesc = mergeDescriptions(merged, desc);
+        // Merge all existing descriptions with the new one
+        let merged = "";
+        for (const m of matches) {
+          const mDesc = m.description ?? descriptionCache.get(m.id) ?? "";
+          merged = mergeDescriptions(merged, mDesc);
         }
+        const consolidatedDesc = mergeDescriptions(merged, desc);
 
         // Create the consolidated entry first (safer — if delete fails, we have duplicates not data loss)
         const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
@@ -534,9 +525,7 @@ export function createAgileDayProvider(
       }
 
       // Resolve the final description that's on the API entry
-      const finalDesc = groupMode
-        ? (created.description ?? descriptionCache.get(created.id) ?? desc)
-        : desc;
+      const finalDesc = created.description ?? descriptionCache.get(created.id) ?? desc;
 
       // Cache for description lookups on reload
       descriptionCache.set(created.id, finalDesc);

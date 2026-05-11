@@ -13,8 +13,7 @@ export interface ApiProvider {
   getTimeEntries(employeeId: string, startDate: string, endDate: string): Promise<TimeEntry[]>;
   createTimeEntry(
     employeeId: string,
-    entry: Omit<TimeEntry, "id" | "syncStatus">,
-    options?: { groupDescriptions?: boolean }
+    entry: Omit<TimeEntry, "id" | "syncStatus">
   ): Promise<TimeEntry>;
   updateTimeEntry(employeeId: string, id: string, updates: Partial<TimeEntry>): Promise<TimeEntry>;
   deleteTimeEntry(ids: string[]): Promise<void>;
