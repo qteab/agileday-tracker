@@ -89,12 +89,14 @@ export function TimeEntry({ entry, onContinue, onStop }: TimeEntryProps) {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                if (isThisRunning) { onStop(); } else { onContinue(entry); }
+                if (isThisRunning) {
+                  onStop();
+                } else {
+                  onContinue(entry);
+                }
               }}
               className={`w-6 h-6 flex items-center justify-center transition-all ${
-                isThisRunning
-                  ? "text-primary"
-                  : "text-text-muted hover:text-primary"
+                isThisRunning ? "text-primary" : "text-text-muted hover:text-primary"
               }`}
               title={isThisRunning ? "Stop timer" : "Continue this entry"}
             >

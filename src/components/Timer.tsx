@@ -35,7 +35,9 @@ export function Timer({ onStopRef }: TimerProps) {
   // Expose stop to parent via ref
   useEffect(() => {
     if (onStopRef) onStopRef.current = stop;
-    return () => { if (onStopRef) onStopRef.current = null; };
+    return () => {
+      if (onStopRef) onStopRef.current = null;
+    };
   }, [onStopRef, stop]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showEmptyConfirm, setShowEmptyConfirm] = useState(false);

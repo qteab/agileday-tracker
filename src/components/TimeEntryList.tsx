@@ -47,7 +47,13 @@ export function TimeEntryList({ onContinue, onStop }: TimeEntryListProps) {
   return (
     <div className="flex-1 overflow-y-auto pt-2 pb-4">
       {groupedByDay.map(([date, entries]) => (
-        <DayGroup key={date} date={date} entries={entries} onContinue={onContinue} onStop={onStop} />
+        <DayGroup
+          key={date}
+          date={date}
+          entries={entries}
+          onContinue={onContinue}
+          onStop={onStop}
+        />
       ))}
     </div>
   );
