@@ -6,7 +6,7 @@
 
 - [x] Spec complete
 - [x] Plan complete
-- [ ] Implementation complete
+- [x] Implementation complete
 - [ ] Reviewed
 
 ## User Stories
@@ -37,17 +37,17 @@
 - [ ] AC-11: The header shows the week label and the same status badge as the card
 - [ ] AC-12: Entries are grouped by day, with a day header showing the date and day total
 - [ ] AC-13: Day total is highlighted amber when it does not equal 480 minutes (8h)
-- [ ] AC-14: Each entry row shows: project color dot, project name, description (truncated), and minutes in "current → rounded" format (e.g. "47 → 60") or "60 (no change)" if already rounded
+- [ ] AC-14: Each entry row shows: project color dot, project name, description (truncated), and minutes. The entry absorbing the rounding difference is highlighted with "current → adjusted" format (e.g. "3:47 → 4:00"); other entries show their unchanged value
 - [ ] AC-15: SUBMITTED/APPROVED entries are visually distinct (muted/locked appearance)
 
 ### Rounding Logic
-- [ ] AC-16: `roundUpTo15(minutes)` rounds up to the nearest multiple of 15 (e.g. 1→15, 14→15, 15→15, 16→30)
-- [ ] AC-17: `roundUpTo15(0)` returns 0 (zero-minute entries are not rounded to 15)
+- [ ] AC-16: Rounding operates on **weekly project totals**: all SAVED entries for a project in a week are summed, then `ceilTo15()` rounds up to the nearest multiple of 15. The difference is added to the largest SAVED entry.
+- [ ] AC-17: `ceilTo15(0)` returns 0 (zero-total projects are not rounded to 15)
 - [ ] AC-18: Rounding applies only to SAVED entries — SUBMITTED/APPROVED entries are never modified
 
 ### Round All Action
 - [ ] AC-19: A "Round All" button is visible at the bottom of the week detail view
-- [ ] AC-20: Above the button, a warning text explains: "This will round all entries up to the nearest 15 minutes in AgileDay. Review the changes above first." An info tooltip (?) next to the warning quotes the rounding policy and gives examples (e.g. "47 min → 60 min, 60 min → 60 min, 1 min → 15 min")
+- [ ] AC-20: Above the button, a warning text explains the rounding action. An info button (?) opens a full-screen panel explaining the project-total rounding policy with examples
 - [ ] AC-21: The button is disabled when the week status is "Rounded" or "Submitted"
 - [ ] AC-22: Clicking "Round All" shows an inline "Are you sure?" confirmation (two-click process)
 - [ ] AC-23: Confirming triggers a single batch PATCH to AgileDay with rounded minutes for all entries that need rounding

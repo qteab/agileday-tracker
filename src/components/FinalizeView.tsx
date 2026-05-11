@@ -63,15 +63,22 @@ interface WeekSummary {
   totalMinutes: number;
   entryCount: number;
   projectsToRound: number;
+  unsavedCount: number;
   status: WeekStatus;
   entries: TimeEntry[];
 }
 
+/** Filter out unsaved entries — they don't exist in AgileDay and can't be rounded */
+function syncedOnly(entries: TimeEntry[]): TimeEntry[] {
+  return entries.filter((e) => e.syncStatus !== "unsaved");
+}
+
 function computeWeekStatus(entries: TimeEntry[]): WeekStatus {
-  if (entries.length === 0) return "rounded";
-  const allSubmitted = entries.every((e) => e.status === "SUBMITTED" || e.status === "APPROVED");
+  const synced = syncedOnly(entries);
+  if (synced.length === 0) return "rounded";
+  const allSubmitted = synced.every((e) => e.status === "SUBMITTED" || e.status === "APPROVED");
   if (allSubmitted) return "submitted";
-  const plan = buildRoundingPlan(entries);
+  const plan = buildRoundingPlan(synced);
   const needsRounding = plan.some((p) => p.difference > 0);
   return needsRounding ? "active" : "rounded";
 }
@@ -93,7 +100,8 @@ function buildWeekSummaries(entries: TimeEntry[]): WeekSummary[] {
     const monday = new Date(weekStartStr + "T12:00:00");
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
-    const plan = buildRoundingPlan(weekEntries);
+    const synced = syncedOnly(weekEntries);
+    const plan = buildRoundingPlan(synced);
 
     summaries.push({
       weekStart: weekStartStr,
@@ -102,6 +110,7 @@ function buildWeekSummaries(entries: TimeEntry[]): WeekSummary[] {
       totalMinutes: weekEntries.reduce((s, e) => s + e.minutes, 0),
       entryCount: weekEntries.length,
       projectsToRound: plan.filter((p) => p.difference > 0).length,
+      unsavedCount: weekEntries.length - synced.length,
       status: computeWeekStatus(weekEntries),
       entries: weekEntries,
     });
@@ -309,7 +318,9 @@ function WeekDetail({
   const [rounding, setRounding] = useState(false);
   const [error, setError] = useState("");
 
-  const projectPlans = useMemo(() => buildRoundingPlan(week.entries), [week.entries]);
+  const synced = useMemo(() => syncedOnly(week.entries), [week.entries]);
+  const unsavedCount = week.entries.length - synced.length;
+  const projectPlans = useMemo(() => buildRoundingPlan(synced), [synced]);
   const projectsToRound = projectPlans.filter((p) => p.difference > 0);
   const adjustedEntries = projectPlans.flatMap((p) => p.entries.filter((e) => e.isAdjusted));
   const canRound = projectsToRound.length > 0 && week.status !== "submitted";
@@ -325,6 +336,14 @@ function WeekDetail({
     }
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [allEntries]);
+
+  const projectColors = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of state.projects) {
+      map.set(p.id, p.color);
+    }
+    return map;
+  }, [state.projects]);
 
   async function handleRound() {
     if (!state.employee) return;
@@ -363,6 +382,27 @@ function WeekDetail({
   return (
     <div className="flex flex-col flex-1">
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+        {/* Unsaved warning */}
+        {unsavedCount > 0 && (
+          <div className="flex items-center gap-2 p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-800">
+            <svg
+              className="w-3.5 h-3.5 shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            {unsavedCount} unsaved {unsavedCount === 1 ? "entry is" : "entries are"} excluded — sync
+            to AgileDay first
+          </div>
+        )}
+
         {/* Project summaries */}
         {projectsToRound.length > 0 && (
           <div className="bg-amber-50 rounded-lg border border-amber-200 p-3 space-y-1">
@@ -399,7 +439,11 @@ function WeekDetail({
               </div>
               <div className="divide-y divide-border">
                 {entries.map((entry) => (
-                  <EntryRow key={entry.id} entry={entry} />
+                  <EntryRow
+                    key={entry.id}
+                    entry={entry}
+                    projectColor={projectColors.get(entry.projectId)}
+                  />
                 ))}
               </div>
             </div>
@@ -466,7 +510,7 @@ function WeekDetail({
 
 // --- Entry row ---
 
-function EntryRow({ entry }: { entry: RoundingEntry }) {
+function EntryRow({ entry, projectColor }: { entry: RoundingEntry; projectColor?: string }) {
   const isLocked = entry.status === "SUBMITTED" || entry.status === "APPROVED";
   const descPreview = entry.description
     .split("\n")
@@ -478,6 +522,9 @@ function EntryRow({ entry }: { entry: RoundingEntry }) {
     <div
       className={`flex items-center gap-2 px-3 py-2 ${isLocked ? "opacity-50" : ""} ${entry.isAdjusted ? "bg-primary/5" : ""}`}
     >
+      {projectColor && (
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: projectColor }} />
+      )}
       <div className="flex-1 min-w-0">
         <div className="text-xs font-medium text-text truncate">
           {entry.projectName ?? "Unknown project"}
