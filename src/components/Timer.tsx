@@ -12,7 +12,11 @@ interface Suggestion {
   taskId?: string;
 }
 
-export function Timer() {
+interface TimerProps {
+  onStopRef?: React.MutableRefObject<(() => void) | null>;
+}
+
+export function Timer({ onStopRef }: TimerProps) {
   const {
     isRunning,
     description,
@@ -27,6 +31,12 @@ export function Timer() {
     setElapsedSeconds,
   } = useTimer();
   const { state } = useApp();
+
+  // Expose stop to parent via ref
+  useEffect(() => {
+    if (onStopRef) onStopRef.current = stop;
+    return () => { if (onStopRef) onStopRef.current = null; };
+  }, [onStopRef, stop]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showEmptyConfirm, setShowEmptyConfirm] = useState(false);
   const [editingTime, setEditingTime] = useState(false);

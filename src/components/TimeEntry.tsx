@@ -8,13 +8,20 @@ import type { TimeEntry as TimeEntryType } from "../api/types";
 interface TimeEntryProps {
   entry: TimeEntryType;
   onContinue: (entry: TimeEntryType) => void;
+  onStop: () => void;
 }
 
-export function TimeEntry({ entry, onContinue }: TimeEntryProps) {
+export function TimeEntry({ entry, onContinue, onStop }: TimeEntryProps) {
   const { state } = useApp();
   const [editing, setEditing] = useState(false);
   const project = state.projects.find((p) => p.id === entry.projectId);
   const isSubmitted = entry.status === "SUBMITTED" || entry.status === "APPROVED";
+  const { timer } = state;
+  const isThisRunning =
+    timer.isRunning &&
+    timer.projectId === entry.projectId &&
+    timer.taskId === (entry.taskId ?? null) &&
+    timer.description === entry.description;
 
   return (
     <>
@@ -63,34 +70,46 @@ export function TimeEntry({ entry, onContinue }: TimeEntryProps) {
           </div>
         </div>
 
-        {entry.syncStatus === "unsaved" && (
-          <span className="text-xs text-danger font-medium shrink-0">Unsaved</span>
-        )}
-
-        {entry.syncStatus === "pending" && (
-          <span className="text-xs text-text-muted font-medium shrink-0">Saving...</span>
-        )}
-
-        <BillableIndicator
-          billable={entry.taskId ? state.taskBillableById[entry.taskId] : undefined}
-        />
-        <span className="text-sm text-text-muted tabular-nums shrink-0">
-          {formatMinutes(entry.minutes)}
-        </span>
-
-        {/* Play button on hover — always available (starts new entry for today) */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onContinue(entry);
-          }}
-          className="opacity-0 group-hover:opacity-100 w-8 h-8 rounded-full flex items-center justify-center text-primary hover:bg-primary/10 transition-all shrink-0"
-          title="Continue this entry"
-        >
-          <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-        </button>
+        <div className="flex flex-col items-end shrink-0 gap-0.5">
+          <div className="flex items-center gap-1.5">
+            {entry.syncStatus === "unsaved" && (
+              <span className="text-xs text-danger font-medium">Unsaved</span>
+            )}
+            {entry.syncStatus === "pending" && (
+              <span className="text-xs text-text-muted font-medium">Saving...</span>
+            )}
+            <BillableIndicator
+              billable={entry.taskId ? state.taskBillableById[entry.taskId] : undefined}
+            />
+            <span className="text-sm text-text-muted tabular-nums">
+              {formatMinutes(entry.minutes)}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                isThisRunning ? onStop() : onContinue(entry);
+              }}
+              className={`w-6 h-6 flex items-center justify-center transition-all ${
+                isThisRunning
+                  ? "text-primary"
+                  : "text-text-muted hover:text-primary"
+              }`}
+              title={isThisRunning ? "Stop timer" : "Continue this entry"}
+            >
+              {isThisRunning ? (
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <rect x="6" y="6" width="12" height="12" rx="1" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+            </button>
+          </div>
+        </div>
       </div>
 
       {editing && !isSubmitted && (

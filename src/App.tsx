@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { Timer } from "./components/Timer";
@@ -38,6 +38,7 @@ function AuthenticatedApp() {
   const [activeTab, setActiveTab] = useState<"list" | "allocation">("list");
   const [showSettings, setShowSettings] = useState(false);
   const [showFinalize, setShowFinalize] = useState(false);
+  const stopTimerRef = useRef<(() => void) | null>(null);
 
   // Listen for tray menu items
   useEffect(() => {
@@ -70,6 +71,10 @@ function AuthenticatedApp() {
     },
     [dispatch]
   );
+
+  const handleStop = useCallback(() => {
+    stopTimerRef.current?.();
+  }, []);
 
   return (
     <div className="flex flex-col h-screen bg-bg">
@@ -171,7 +176,7 @@ function AuthenticatedApp() {
         <>
           {/* Timer */}
           <div className="bg-bg-card border-b border-border">
-            <Timer />
+            <Timer onStopRef={stopTimerRef} />
           </div>
 
           {/* Tab switcher */}
@@ -179,7 +184,7 @@ function AuthenticatedApp() {
 
           {/* Tab content */}
           {activeTab === "list" ? (
-            <TimeEntryList onContinue={handleContinue} />
+            <TimeEntryList onContinue={handleContinue} onStop={handleStop} />
           ) : (
             <AllocationView />
           )}

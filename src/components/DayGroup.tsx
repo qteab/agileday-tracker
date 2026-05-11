@@ -7,6 +7,7 @@ interface DayGroupProps {
   date: string;
   entries: TimeEntryType[];
   onContinue: (entry: TimeEntryType) => void;
+  onStop: () => void;
 }
 
 function formatDate(dateStr: string): string {
@@ -61,10 +62,12 @@ function groupEntries(entries: TimeEntryType[]): GroupedEntry[] {
 function GroupedEntryRow({
   group,
   onContinue,
+  onStop,
   isLast,
 }: {
   group: GroupedEntry;
   onContinue: (entry: TimeEntryType) => void;
+  onStop: () => void;
   isLast: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -90,12 +93,10 @@ function GroupedEntryRow({
               {group.count}
             </span>
           </button>
-        ) : (
-          <div className="w-10 shrink-0" />
-        )}
+        ) : null}
 
         <div className="flex-1 min-w-0">
-          <TimeEntry entry={group.entry} onContinue={onContinue} />
+          <TimeEntry entry={group.entry} onContinue={onContinue} onStop={onStop} />
         </div>
       </div>
 
@@ -113,7 +114,7 @@ function GroupedEntryRow({
                 <div className="w-px h-full bg-primary/20" />
               </div>
               <div className="flex-1 min-w-0">
-                <TimeEntry entry={session} onContinue={onContinue} />
+                <TimeEntry entry={session} onContinue={onContinue} onStop={onStop} />
               </div>
             </div>
           ))}
@@ -123,7 +124,7 @@ function GroupedEntryRow({
   );
 }
 
-export function DayGroup({ date, entries, onContinue }: DayGroupProps) {
+export function DayGroup({ date, entries, onContinue, onStop }: DayGroupProps) {
   const totalMinutes = entries.reduce((sum, e) => sum + e.minutes, 0);
   const grouped = groupEntries(entries);
 
@@ -144,6 +145,7 @@ export function DayGroup({ date, entries, onContinue }: DayGroupProps) {
             key={g.entry.id}
             group={g}
             onContinue={onContinue}
+            onStop={onStop}
             isLast={i === grouped.length - 1}
           />
         ))}

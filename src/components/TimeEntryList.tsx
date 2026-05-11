@@ -5,9 +5,10 @@ import type { TimeEntry } from "../api/types";
 
 interface TimeEntryListProps {
   onContinue: (entry: TimeEntry) => void;
+  onStop: () => void;
 }
 
-export function TimeEntryList({ onContinue }: TimeEntryListProps) {
+export function TimeEntryList({ onContinue, onStop }: TimeEntryListProps) {
   const { state } = useApp();
 
   const groupedByDay = useMemo(() => {
@@ -46,7 +47,7 @@ export function TimeEntryList({ onContinue }: TimeEntryListProps) {
   return (
     <div className="flex-1 overflow-y-auto pt-2 pb-4">
       {groupedByDay.map(([date, entries]) => (
-        <DayGroup key={date} date={date} entries={entries} onContinue={onContinue} />
+        <DayGroup key={date} date={date} entries={entries} onContinue={onContinue} onStop={onStop} />
       ))}
     </div>
   );
