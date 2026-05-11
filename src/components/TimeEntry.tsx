@@ -36,9 +36,6 @@ export function TimeEntry({ entry, onContinue }: TimeEntryProps) {
             {entry.description || <span className="text-text-muted">+ Add description</span>}
           </p>
           <div className="flex items-center gap-1.5 mt-0.5">
-            <BillableIndicator
-              billable={entry.taskId ? state.taskBillableById[entry.taskId] : undefined}
-            />
             {project && (
               <>
                 <span
@@ -74,6 +71,9 @@ export function TimeEntry({ entry, onContinue }: TimeEntryProps) {
           <span className="text-xs text-text-muted font-medium shrink-0">Saving...</span>
         )}
 
+        <BillableIndicator
+          billable={entry.taskId ? state.taskBillableById[entry.taskId] : undefined}
+        />
         <span className="text-sm text-text-muted tabular-nums shrink-0">
           {formatMinutes(entry.minutes)}
         </span>

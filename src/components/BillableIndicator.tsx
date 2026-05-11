@@ -10,8 +10,8 @@ export function BillableIndicator({ billable, className = "" }: BillableIndicato
   return (
     <span
       aria-label={label}
-      className={`relative group inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] shrink-0 ${
-        billable ? "bg-primary text-white" : "bg-bg text-text-muted/60"
+      className={`relative group inline-flex items-center justify-center text-xs font-medium shrink-0 ${
+        billable ? "text-primary/70" : "text-text-muted/15"
       } ${className}`}
     >
       $
