@@ -9,6 +9,7 @@ import { LoginScreen } from "./components/LoginScreen";
 import { UpdateChecker } from "./components/UpdateChecker";
 import { SettingsView } from "./components/SettingsView";
 import { FinalizeView } from "./components/FinalizeView";
+import { SubmissionAlert } from "./components/SubmissionAlert";
 import { useApp } from "./store/context";
 import type { TimeEntry } from "./api/types";
 
@@ -132,6 +133,15 @@ function AuthenticatedApp() {
 
       {/* Update banner */}
       <UpdateChecker />
+
+      {/* Submission deadline alert */}
+      <SubmissionAlert
+        entries={state.entries}
+        onOpenFinalize={() => {
+          setShowSettings(false);
+          setShowFinalize(true);
+        }}
+      />
 
       {/* Error banner */}
       {state.error && (
