@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useApp, useApi } from "../store/context";
 import { buildRoundingPlan, type RoundingEntry } from "../api/rounding";
+import { getWeekStart, fmtDate, formatWeekLabel, syncedOnly } from "../utils/week";
 import type { TimeEntry } from "../api/types";
 
 interface FinalizeViewProps {
@@ -8,31 +9,6 @@ interface FinalizeViewProps {
 }
 
 const WORKDAY_MINUTES = 480;
-
-// --- Week utilities ---
-
-function getWeekStart(ref: Date): Date {
-  const day = ref.getDay();
-  const monday = new Date(ref);
-  monday.setDate(ref.getDate() - ((day + 6) % 7));
-  monday.setHours(0, 0, 0, 0);
-  return monday;
-}
-
-function formatWeekLabel(monday: Date): string {
-  const friday = new Date(monday);
-  friday.setDate(monday.getDate() + 4);
-  const monStr = monday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const friStr =
-    monday.getMonth() === friday.getMonth()
-      ? friday.toLocaleDateString("en-US", { day: "numeric" })
-      : friday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  return `${monStr} – ${friStr}`;
-}
-
-function fmtDate(d: Date): string {
-  return d.toISOString().split("T")[0];
-}
 
 function formatDayLabel(dateStr: string): string {
   const d = new Date(dateStr + "T12:00:00");
@@ -66,11 +42,6 @@ interface WeekSummary {
   unsavedCount: number;
   status: WeekStatus;
   entries: TimeEntry[];
-}
-
-/** Filter out unsaved entries — they don't exist in AgileDay and can't be rounded */
-function syncedOnly(entries: TimeEntry[]): TimeEntry[] {
-  return entries.filter((e) => e.syncStatus !== "unsaved");
 }
 
 function computeWeekStatus(entries: TimeEntry[]): WeekStatus {
