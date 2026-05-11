@@ -1,5 +1,6 @@
 import type { ApiProvider } from "./provider";
 import type { Allocation, Employee, Project, Task, TimeEntry } from "./types";
+import { mergeDescriptions } from "./agileday";
 
 export const MOCK_PROJECTS: Project[] = [
   { id: "p1", name: "Fokus", customerName: "QTE", color: "#E5B80B", projectType: "INTERNAL" },
@@ -94,6 +95,25 @@ export function createMockProvider(
 
     async createTimeEntry(_employeeId: string, entry) {
       const entries = await store.getEntries();
+      const desc = entry.description ?? "";
+
+      // Match by project+task+date (grouped mode — always active)
+      const match = entries.find(
+        (e) =>
+          e.projectId === entry.projectId &&
+          e.date === entry.date &&
+          (e.taskId ?? "") === (entry.taskId ?? "") &&
+          e.status === "SAVED"
+      );
+      if (match) {
+        match.minutes += entry.minutes;
+        if (desc) {
+          match.description = mergeDescriptions(match.description, desc);
+        }
+        await store.setEntries(entries);
+        return { ...match };
+      }
+
       const newEntry: TimeEntry = {
         ...entry,
         id: crypto.randomUUID(),
@@ -116,6 +136,19 @@ export function createMockProvider(
     async deleteTimeEntry(ids: string[]) {
       const entries = await store.getEntries();
       await store.setEntries(entries.filter((e) => !ids.includes(e.id)));
+    },
+
+    async batchUpdateEntries(_employeeId: string, updates) {
+      const entries = await store.getEntries();
+      const results: typeof entries = [];
+      for (const u of updates) {
+        const index = entries.findIndex((e) => e.id === u.id);
+        if (index === -1) throw new Error(`Entry ${u.id} not found`);
+        entries[index] = { ...entries[index], ...u };
+        results.push(entries[index]);
+      }
+      await store.setEntries(entries);
+      return results;
     },
 
     async getAllocations(_employeeId: string) {

@@ -6,6 +6,7 @@ import {
   MOCK_EMPLOYEE,
   type EntryStore,
 } from "../mock-core";
+import { mergeDescriptions, removeDescription } from "../agileday";
 import type { ApiProvider } from "../provider";
 import type { TimeEntry } from "../types";
 
@@ -189,8 +190,8 @@ describe("createTimeEntry", () => {
   });
 
   it("generates a unique ID for each entry", async () => {
-    const a = await provider.createTimeEntry("emp1", makeEntry());
-    const b = await provider.createTimeEntry("emp1", makeEntry());
+    const a = await provider.createTimeEntry("emp1", makeEntry({ taskId: "t1" }));
+    const b = await provider.createTimeEntry("emp1", makeEntry({ taskId: "t2" }));
     expect(a.id).not.toBe(b.id);
   });
 
@@ -201,8 +202,11 @@ describe("createTimeEntry", () => {
   });
 
   it("does not modify other existing entries", async () => {
-    const first = await provider.createTimeEntry("emp1", makeEntry({ description: "first" }));
-    await provider.createTimeEntry("emp1", makeEntry({ description: "second" }));
+    const first = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "first", taskId: "t1" })
+    );
+    await provider.createTimeEntry("emp1", makeEntry({ description: "second", taskId: "t2" }));
     const entries = await store.getEntries();
     const firstInStore = entries.find((e) => e.id === first.id);
     expect(firstInStore?.description).toBe("first");
@@ -213,8 +217,14 @@ describe("createTimeEntry", () => {
 
 describe("updateTimeEntry", () => {
   it("updates only the specified entry", async () => {
-    const a = await provider.createTimeEntry("emp1", makeEntry({ description: "entry A" }));
-    const b = await provider.createTimeEntry("emp1", makeEntry({ description: "entry B" }));
+    const a = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "entry A", taskId: "t1" })
+    );
+    const b = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "entry B", taskId: "t2" })
+    );
 
     await provider.updateTimeEntry("emp1", a.id, { description: "updated A" });
 
@@ -274,8 +284,14 @@ describe("updateTimeEntry", () => {
 
 describe("deleteTimeEntry", () => {
   it("deletes only the specified entry", async () => {
-    const a = await provider.createTimeEntry("emp1", makeEntry({ description: "keep" }));
-    const b = await provider.createTimeEntry("emp1", makeEntry({ description: "delete" }));
+    const a = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "keep", taskId: "t1" })
+    );
+    const b = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "delete", taskId: "t2" })
+    );
 
     await provider.deleteTimeEntry([b.id]);
 
@@ -286,9 +302,18 @@ describe("deleteTimeEntry", () => {
   });
 
   it("deletes multiple entries by IDs", async () => {
-    const a = await provider.createTimeEntry("emp1", makeEntry({ description: "del1" }));
-    const b = await provider.createTimeEntry("emp1", makeEntry({ description: "keep" }));
-    const c = await provider.createTimeEntry("emp1", makeEntry({ description: "del2" }));
+    const a = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "del1", taskId: "t1" })
+    );
+    const b = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "keep", taskId: "t2" })
+    );
+    const c = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "del2", taskId: "t3" })
+    );
 
     await provider.deleteTimeEntry([a.id, c.id]);
 
@@ -298,8 +323,8 @@ describe("deleteTimeEntry", () => {
   });
 
   it("does not delete entries with non-matching IDs", async () => {
-    await provider.createTimeEntry("emp1", makeEntry());
-    await provider.createTimeEntry("emp1", makeEntry());
+    await provider.createTimeEntry("emp1", makeEntry({ taskId: "t1" }));
+    await provider.createTimeEntry("emp1", makeEntry({ taskId: "t2" }));
 
     await provider.deleteTimeEntry(["nonexistent-id"]);
 
@@ -345,7 +370,7 @@ describe("error handling", () => {
   });
 
   it("updateTimeEntry error does not corrupt store", async () => {
-    const created = await provider.createTimeEntry("emp1", makeEntry());
+    const created = await provider.createTimeEntry("emp1", makeEntry({ taskId: "t1" }));
 
     try {
       await provider.updateTimeEntry("emp1", "bad-id", {});
@@ -387,5 +412,278 @@ describe("error handling", () => {
     const failProvider = createMockProvider(failingStore, MOCK_PROJECTS, MOCK_TASKS, MOCK_EMPLOYEE);
 
     await expect(failProvider.deleteTimeEntry(["any-id"])).rejects.toThrow("Store write failed");
+  });
+});
+
+// --- entry grouping ---
+
+describe("createTimeEntry grouping", () => {
+  it("merges into existing entry with same project+task+date", async () => {
+    // Seed an existing entry
+    await provider.createTimeEntry("emp1", makeEntry({ description: "task 1", taskId: "t1" }));
+
+    // Same project+task+date — should merge
+    const result = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task 2", taskId: "t1", minutes: 30 })
+    );
+
+    expect(result.minutes).toBe(90); // 60 + 30
+    expect(result.description).toBe("- task 1\n- task 2");
+
+    // Only one entry in the store
+    const entries = await store.getEntries();
+    expect(entries).toHaveLength(1);
+  });
+
+  it("creates new entry when no match exists", async () => {
+    const result = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task 1", taskId: "t1" })
+    );
+
+    expect(result.description).toBe("task 1");
+    const entries = await store.getEntries();
+    expect(entries).toHaveLength(1);
+  });
+
+  it("does not merge across different tasks", async () => {
+    await provider.createTimeEntry("emp1", makeEntry({ description: "task 1", taskId: "t1" }));
+
+    await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task 2", taskId: "t2", minutes: 30 })
+    );
+
+    const entries = await store.getEntries();
+    expect(entries).toHaveLength(2);
+  });
+
+  it("deduplicates matching descriptions", async () => {
+    await provider.createTimeEntry("emp1", makeEntry({ description: "task 1", taskId: "t1" }));
+
+    const result = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task 1", taskId: "t1", minutes: 30 })
+    );
+
+    expect(result.minutes).toBe(90);
+    expect(result.description).toBe("task 1"); // not duplicated, original kept as-is
+  });
+
+  it("matches entries without taskId (both undefined)", async () => {
+    await provider.createTimeEntry("emp1", makeEntry({ description: "task 1" })); // no taskId
+
+    const result = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task 2", minutes: 30 }) // no taskId
+    );
+
+    expect(result.minutes).toBe(90); // 60 + 30
+    expect(result.description).toBe("- task 1\n- task 2");
+
+    const entries = await store.getEntries();
+    expect(entries).toHaveLength(1);
+  });
+
+  it("does not change description when incoming is empty", async () => {
+    await provider.createTimeEntry("emp1", makeEntry({ description: "task 1", taskId: "t1" }));
+
+    const result = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "", taskId: "t1", minutes: 15 })
+    );
+
+    expect(result.minutes).toBe(75);
+    expect(result.description).toBe("task 1"); // unchanged
+  });
+});
+
+// --- Grouped mode: delete and edit scenarios ---
+// These simulate the same logic as EntryEditModal's handleDelete / handleSave,
+// exercising the full provider round-trip.
+
+describe("grouped mode: delete session from grouped entry", () => {
+  it("subtracts minutes and removes description when deleting one session", async () => {
+    // Create a grouped entry with two descriptions
+    await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task 1", taskId: "t1", minutes: 30 })
+    );
+    const grouped = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task 2", taskId: "t1", minutes: 45 })
+    );
+
+    expect(grouped.minutes).toBe(75);
+    expect(grouped.description).toBe("- task 1\n- task 2");
+
+    // Simulate deleting the "task 1" session (30 min) — mirrors EntryEditModal.handleDelete
+    const remainingMinutes = 45; // only "task 2" remains
+    const updatedDesc = removeDescription(grouped.description, "task 1");
+
+    const updated = await provider.updateTimeEntry("emp1", grouped.id, {
+      minutes: remainingMinutes,
+      description: updatedDesc,
+    });
+
+    expect(updated.minutes).toBe(45);
+    expect(updated.description).toBe("- task 2");
+  });
+
+  it("deletes entire entry when last session is removed", async () => {
+    const entry = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "only task", taskId: "t1", minutes: 30 })
+    );
+
+    // Simulate deleting the only session — should delete the whole entry
+    await provider.deleteTimeEntry([entry.id]);
+
+    const entries = await store.getEntries();
+    expect(entries).toHaveLength(0);
+  });
+
+  it("handles deleting session with empty description from grouped entry", async () => {
+    await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task 1", taskId: "t1", minutes: 30 })
+    );
+    const grouped = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "", taskId: "t1", minutes: 15 })
+    );
+
+    // Delete the empty-description session — description stays as original
+    // (removeDescription with empty toRemove is a no-op)
+    const updatedDesc = removeDescription(grouped.description, "");
+    const updated = await provider.updateTimeEntry("emp1", grouped.id, {
+      minutes: 30,
+      description: updatedDesc,
+    });
+
+    expect(updated.minutes).toBe(30);
+    expect(updated.description).toBe("task 1"); // original single-line format preserved
+  });
+});
+
+describe("grouped mode: edit session in grouped entry", () => {
+  it("swaps description when editing a session", async () => {
+    await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "old name", taskId: "t1", minutes: 30 })
+    );
+    const grouped = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "other task", taskId: "t1", minutes: 45 })
+    );
+
+    expect(grouped.description).toBe("- old name\n- other task");
+
+    // Simulate editing "old name" → "new name" — mirrors EntryEditModal.handleSave
+    const afterRemove = removeDescription(grouped.description, "old name");
+    const newDesc = mergeDescriptions(afterRemove, "new name");
+
+    const updated = await provider.updateTimeEntry("emp1", grouped.id, {
+      description: newDesc,
+      minutes: grouped.minutes, // no time change
+    });
+
+    expect(updated.description).toBe("- other task\n- new name");
+    expect(updated.minutes).toBe(75);
+  });
+
+  it("updates minutes when editing duration of one session", async () => {
+    await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task 1", taskId: "t1", minutes: 30 })
+    );
+    const grouped = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task 2", taskId: "t1", minutes: 45 })
+    );
+
+    expect(grouped.minutes).toBe(75);
+
+    // Simulate changing "task 1" from 30 min to 60 min
+    // New total = 60 (edited) + 45 (other) = 105
+    const updated = await provider.updateTimeEntry("emp1", grouped.id, {
+      minutes: 105,
+    });
+
+    expect(updated.minutes).toBe(105);
+    expect(updated.description).toBe("- task 1\n- task 2"); // description unchanged
+  });
+
+  it("clears description line when editing to empty", async () => {
+    await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task 1", taskId: "t1", minutes: 30 })
+    );
+    const grouped = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task 2", taskId: "t1", minutes: 45 })
+    );
+
+    // Simulate editing "task 1" description to empty
+    const afterRemove = removeDescription(grouped.description, "task 1");
+    // Empty incoming — just use afterRemove
+    const updated = await provider.updateTimeEntry("emp1", grouped.id, {
+      description: afterRemove,
+    });
+
+    expect(updated.description).toBe("- task 2");
+  });
+});
+
+// --- batchUpdateEntries ---
+
+describe("batchUpdateEntries", () => {
+  it("updates multiple entries in one call", async () => {
+    const a = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task A", taskId: "t1" })
+    );
+    const b = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task B", taskId: "t2" })
+    );
+
+    const results = await provider.batchUpdateEntries("emp1", [
+      { id: a.id, minutes: 120 },
+      { id: b.id, minutes: 90 },
+    ]);
+
+    expect(results).toHaveLength(2);
+    expect(results[0].minutes).toBe(120);
+    expect(results[1].minutes).toBe(90);
+
+    const entries = await store.getEntries();
+    expect(entries.find((e) => e.id === a.id)?.minutes).toBe(120);
+    expect(entries.find((e) => e.id === b.id)?.minutes).toBe(90);
+  });
+
+  it("throws on non-existent entry ID", async () => {
+    await expect(
+      provider.batchUpdateEntries("emp1", [{ id: "bad-id", minutes: 60 }])
+    ).rejects.toThrow("Entry bad-id not found");
+  });
+
+  it("returns empty array for empty updates", async () => {
+    const results = await provider.batchUpdateEntries("emp1", []);
+    expect(results).toEqual([]);
+  });
+
+  it("preserves fields not included in the update", async () => {
+    const entry = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "original", taskId: "t1", minutes: 47 })
+    );
+
+    const [result] = await provider.batchUpdateEntries("emp1", [{ id: entry.id, minutes: 60 }]);
+
+    expect(result.minutes).toBe(60);
+    expect(result.description).toBe("original");
+    expect(result.projectId).toBe("p1");
   });
 });

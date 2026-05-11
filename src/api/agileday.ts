@@ -26,6 +26,60 @@ function assignProjectColor(index: number): string {
   return PROJECT_COLORS[index % PROJECT_COLORS.length];
 }
 
+/**
+ * Merge a new description line into an existing grouped description.
+ * Each line is prefixed with "- ". Duplicate lines are skipped.
+ * Returns the merged description string.
+ */
+export function mergeDescriptions(existing: string, incoming: string): string {
+  if (!incoming) return existing;
+  if (!existing) return `- ${incoming}`;
+
+  // Parse existing lines — handle both "- foo" prefixed and plain text
+  const existingLines = existing
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  // Normalize: strip leading "- " for comparison
+  const normalize = (line: string) => (line.startsWith("- ") ? line.slice(2) : line);
+  const existingNormalized = new Set(existingLines.map(normalize));
+
+  const incomingNormalized = normalize(incoming);
+  if (existingNormalized.has(incomingNormalized)) {
+    // Duplicate — return existing unchanged
+    return existing;
+  }
+
+  // Ensure existing lines are all prefixed
+  const prefixed = existingLines.map((l) => (l.startsWith("- ") ? l : `- ${l}`));
+  prefixed.push(`- ${incomingNormalized}`);
+  return prefixed.join("\n");
+}
+
+/**
+ * Remove a description line from a grouped description string.
+ * Returns the updated description with the line removed.
+ * If only one line remains, it stays dash-prefixed.
+ * If nothing remains, returns empty string.
+ */
+export function removeDescription(existing: string, toRemove: string): string {
+  if (!existing || !toRemove) return existing;
+
+  const lines = existing
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const normalize = (line: string) => (line.startsWith("- ") ? line.slice(2) : line);
+  const target = normalize(toRemove);
+
+  const filtered = lines.filter((l) => normalize(l) !== target);
+
+  if (filtered.length === 0) return "";
+  return filtered.map((l) => (l.startsWith("- ") ? l : `- ${l}`)).join("\n");
+}
+
 export interface AgileDayConfig {
   /** e.g. "https://qvik.agileday.io/api" */
   apiBaseUrl: string;
@@ -347,19 +401,21 @@ export function createAgileDayProvider(
 
       const desc = entry.description ?? "";
 
-      // 1. Query for existing SAVED entries with same project+date+description
+      // 1. Query for existing SAVED entries with same project+task+date
       const updatedAfter = new Date(entry.date + "T00:00:00Z").toISOString();
       const allRecent = await apiFetch<RawEntry[]>(
         `/v1/time_entry/employee/id/${employeeId}/updated?updatedAfter=${updatedAfter}`
       ).catch(() => [] as RawEntry[]);
 
-      const matches = allRecent.filter(
-        (e) =>
-          e.projectId === entry.projectId &&
-          e.date === entry.date &&
-          (e.description ?? "") === desc &&
-          e.status === "SAVED"
-      );
+      const matches = allRecent.filter((e) => {
+        if (e.projectId !== entry.projectId || e.date !== entry.date || e.status !== "SAVED") {
+          return false;
+        }
+        // Match by project+task+date only (ignore description)
+        const eTask = e.taskId ?? "";
+        const entryTask = entry.taskId ?? "";
+        return eTask === entryTask;
+      });
 
       let created: RawEntry;
 
@@ -367,9 +423,20 @@ export function createAgileDayProvider(
         // 2. One match — PATCH to add this session's minutes
         const existing = matches[0];
         const newTotal = existing.minutes + entry.minutes;
+        const patch: Record<string, unknown> = { id: existing.id, minutes: newTotal };
+
+        // Append the new description to the existing one
+        if (desc) {
+          const existingDesc = existing.description ?? descriptionCache.get(existing.id) ?? "";
+          const mergedDesc = mergeDescriptions(existingDesc, desc);
+          if (mergedDesc !== existingDesc) {
+            patch.description = mergedDesc;
+          }
+        }
+
         const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
           method: "PATCH",
-          body: JSON.stringify([{ id: existing.id, minutes: newTotal }]),
+          body: JSON.stringify([patch]),
         });
         if (results.length === 0) throw new Error("No entry returned from API");
         created = results[0];
@@ -377,6 +444,14 @@ export function createAgileDayProvider(
         // 3. Multiple matches — consolidate: create new with total, delete old
         const totalExisting = matches.reduce((s, e) => s + e.minutes, 0);
         const newTotal = totalExisting + entry.minutes;
+
+        // Merge all existing descriptions with the new one
+        let merged = "";
+        for (const m of matches) {
+          const mDesc = m.description ?? descriptionCache.get(m.id) ?? "";
+          merged = mergeDescriptions(merged, mDesc);
+        }
+        const consolidatedDesc = mergeDescriptions(merged, desc);
 
         // Create the consolidated entry first (safer — if delete fails, we have duplicates not data loss)
         const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
@@ -389,7 +464,7 @@ export function createAgileDayProvider(
               projectId: entry.projectId,
               ...(entry.openingId ? { openingId: entry.openingId } : {}),
               ...(entry.taskId ? { taskId: entry.taskId } : {}),
-              ...(desc ? { description: desc } : {}),
+              ...(consolidatedDesc ? { description: consolidatedDesc } : {}),
             },
           ]),
         });
@@ -449,12 +524,15 @@ export function createAgileDayProvider(
         created = results[0];
       }
 
+      // Resolve the final description that's on the API entry
+      const finalDesc = created.description ?? descriptionCache.get(created.id) ?? desc;
+
       // Cache for description lookups on reload
-      descriptionCache.set(created.id, desc);
+      descriptionCache.set(created.id, finalDesc);
 
       return {
         id: created.id,
-        description: desc,
+        description: finalDesc,
         projectId: created.projectId,
         projectName: entry.projectName,
         taskId: created.taskId,
@@ -521,6 +599,51 @@ export function createAgileDayProvider(
       if (ids.length === 0) return;
       const idsParam = ids.join(",");
       await apiFetch(`/v1/time_entry?ids=${idsParam}`, { method: "DELETE" });
+    },
+
+    async batchUpdateEntries(
+      employeeId: string,
+      updates: Array<{ id: string } & Partial<TimeEntry>>
+    ): Promise<TimeEntry[]> {
+      if (updates.length === 0) return [];
+
+      const body = updates.map((u) => {
+        const patch: Record<string, unknown> = { id: u.id };
+        if (u.minutes !== undefined) patch.minutes = u.minutes;
+        if (u.description !== undefined) patch.description = u.description;
+        if (u.projectId) patch.projectId = u.projectId;
+        if (u.taskId) patch.taskId = u.taskId;
+        if (u.status) patch.status = u.status;
+        if (u.date) patch.date = u.date;
+        return patch;
+      });
+
+      type RawEntry = {
+        id: string;
+        date: string;
+        minutes: number;
+        status: string;
+        description?: string;
+        projectId: string;
+        taskId?: string;
+      };
+
+      const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      });
+
+      return results.map((r) => ({
+        id: r.id,
+        description: r.description ?? "",
+        projectId: r.projectId,
+        taskId: r.taskId,
+        date: r.date,
+        startTime: "",
+        minutes: r.minutes,
+        status: r.status as TimeEntry["status"],
+        syncStatus: "synced" as const,
+      }));
     },
 
     async getAllocations(employeeId: string): Promise<Allocation[]> {

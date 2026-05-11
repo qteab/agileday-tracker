@@ -28,11 +28,14 @@ export function Timer() {
   } = useTimer();
   const { state } = useApp();
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showEmptyConfirm, setShowEmptyConfirm] = useState(false);
   const [editingTime, setEditingTime] = useState(false);
   const [timeInput, setTimeInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const timeInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  const emptyDescription = isRunning && !description.trim();
 
   // Build unique suggestions from existing entries
   const suggestions = useMemo(() => {
@@ -129,7 +132,7 @@ export function Timer() {
             }}
             onFocus={() => setShowSuggestions(true)}
             placeholder="What are you working on?"
-            className="w-full bg-transparent text-sm text-text placeholder:text-text-muted outline-none"
+            className={`w-full bg-transparent text-sm text-text placeholder:text-text-muted outline-none ${emptyDescription ? "placeholder:text-amber-500" : ""}`}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !isRunning && projectId && taskId) {
                 setShowSuggestions(false);
@@ -198,7 +201,11 @@ export function Timer() {
           onClick={() => {
             setShowSuggestions(false);
             if (isRunning) {
-              stop();
+              if (!description.trim()) {
+                setShowEmptyConfirm(true);
+              } else {
+                stop();
+              }
             } else {
               start();
             }
@@ -223,6 +230,53 @@ export function Timer() {
           )}
         </button>
       </div>
+
+      {/* Empty description warning */}
+      {emptyDescription && !showEmptyConfirm && (
+        <div className="flex items-center gap-2 px-4 py-1.5 text-xs text-amber-700 bg-amber-50">
+          <svg
+            className="w-3.5 h-3.5 shrink-0"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+            />
+          </svg>
+          <span>No description — the customer sees this on the invoice</span>
+        </div>
+      )}
+
+      {/* Empty description confirmation */}
+      {showEmptyConfirm && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-t border-amber-200">
+          <span className="text-xs text-amber-800 flex-1">
+            Save without a description? The customer will see a blank line on their invoice.
+          </span>
+          <button
+            onClick={() => {
+              setShowEmptyConfirm(false);
+              stop();
+            }}
+            className="px-3 py-1 text-xs font-medium text-white bg-danger rounded-lg hover:bg-danger/90 transition-colors"
+          >
+            Save anyway
+          </button>
+          <button
+            onClick={() => {
+              setShowEmptyConfirm(false);
+              inputRef.current?.focus();
+            }}
+            className="px-3 py-1 text-xs font-medium text-amber-800 bg-amber-100 rounded-lg hover:bg-amber-200 transition-colors"
+          >
+            Add description
+          </button>
+        </div>
+      )}
 
       {/* Project & task row */}
       <div className="flex items-center gap-1 px-3 pb-3">
