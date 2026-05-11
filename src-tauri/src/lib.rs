@@ -186,6 +186,10 @@ pub fn run() {
                 .accelerator("CmdOrCtrl+R")
                 .build(app)?;
 
+            let finalize_item = MenuItemBuilder::with_id("finalize", "Finalize Timesheet")
+                .accelerator("CmdOrCtrl+F")
+                .build(app)?;
+
             let settings_item = MenuItemBuilder::with_id("settings", "Settings")
                 .accelerator("CmdOrCtrl+,")
                 .build(app)?;
@@ -208,6 +212,7 @@ pub fn run() {
                 .item(&sep2)
                 .item(&show_item)
                 .item(&sync_item)
+                .item(&finalize_item)
                 .item(&settings_item)
                 .item(&sep3)
                 .item(&quit_item)
@@ -243,6 +248,15 @@ pub fn run() {
                         }
                         "sync" => {
                             let _ = app.emit("sync-data", ());
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                                #[cfg(target_os = "macos")]
+                                set_dock_visible(app, true);
+                            }
+                        }
+                        "finalize" => {
+                            let _ = app.emit("tray-open-finalize", ());
                             if let Some(window) = app.get_webview_window("main") {
                                 let _ = window.show();
                                 let _ = window.set_focus();

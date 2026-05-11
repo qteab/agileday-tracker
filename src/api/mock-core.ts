@@ -138,6 +138,19 @@ export function createMockProvider(
       await store.setEntries(entries.filter((e) => !ids.includes(e.id)));
     },
 
+    async batchUpdateEntries(_employeeId: string, updates) {
+      const entries = await store.getEntries();
+      const results: typeof entries = [];
+      for (const u of updates) {
+        const index = entries.findIndex((e) => e.id === u.id);
+        if (index === -1) throw new Error(`Entry ${u.id} not found`);
+        entries[index] = { ...entries[index], ...u };
+        results.push(entries[index]);
+      }
+      await store.setEntries(entries);
+      return results;
+    },
+
     async getAllocations(_employeeId: string) {
       return allocations;
     },

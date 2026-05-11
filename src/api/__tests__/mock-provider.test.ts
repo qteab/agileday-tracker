@@ -635,3 +635,55 @@ describe("grouped mode: edit session in grouped entry", () => {
     expect(updated.description).toBe("- task 2");
   });
 });
+
+// --- batchUpdateEntries ---
+
+describe("batchUpdateEntries", () => {
+  it("updates multiple entries in one call", async () => {
+    const a = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task A", taskId: "t1" })
+    );
+    const b = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "task B", taskId: "t2" })
+    );
+
+    const results = await provider.batchUpdateEntries("emp1", [
+      { id: a.id, minutes: 120 },
+      { id: b.id, minutes: 90 },
+    ]);
+
+    expect(results).toHaveLength(2);
+    expect(results[0].minutes).toBe(120);
+    expect(results[1].minutes).toBe(90);
+
+    const entries = await store.getEntries();
+    expect(entries.find((e) => e.id === a.id)?.minutes).toBe(120);
+    expect(entries.find((e) => e.id === b.id)?.minutes).toBe(90);
+  });
+
+  it("throws on non-existent entry ID", async () => {
+    await expect(
+      provider.batchUpdateEntries("emp1", [{ id: "bad-id", minutes: 60 }])
+    ).rejects.toThrow("Entry bad-id not found");
+  });
+
+  it("returns empty array for empty updates", async () => {
+    const results = await provider.batchUpdateEntries("emp1", []);
+    expect(results).toEqual([]);
+  });
+
+  it("preserves fields not included in the update", async () => {
+    const entry = await provider.createTimeEntry(
+      "emp1",
+      makeEntry({ description: "original", taskId: "t1", minutes: 47 })
+    );
+
+    const [result] = await provider.batchUpdateEntries("emp1", [{ id: entry.id, minutes: 60 }]);
+
+    expect(result.minutes).toBe(60);
+    expect(result.description).toBe("original");
+    expect(result.projectId).toBe("p1");
+  });
+});

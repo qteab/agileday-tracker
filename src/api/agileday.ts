@@ -601,6 +601,51 @@ export function createAgileDayProvider(
       await apiFetch(`/v1/time_entry?ids=${idsParam}`, { method: "DELETE" });
     },
 
+    async batchUpdateEntries(
+      employeeId: string,
+      updates: Array<{ id: string } & Partial<TimeEntry>>
+    ): Promise<TimeEntry[]> {
+      if (updates.length === 0) return [];
+
+      const body = updates.map((u) => {
+        const patch: Record<string, unknown> = { id: u.id };
+        if (u.minutes !== undefined) patch.minutes = u.minutes;
+        if (u.description !== undefined) patch.description = u.description;
+        if (u.projectId) patch.projectId = u.projectId;
+        if (u.taskId) patch.taskId = u.taskId;
+        if (u.status) patch.status = u.status;
+        if (u.date) patch.date = u.date;
+        return patch;
+      });
+
+      type RawEntry = {
+        id: string;
+        date: string;
+        minutes: number;
+        status: string;
+        description?: string;
+        projectId: string;
+        taskId?: string;
+      };
+
+      const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      });
+
+      return results.map((r) => ({
+        id: r.id,
+        description: r.description ?? "",
+        projectId: r.projectId,
+        taskId: r.taskId,
+        date: r.date,
+        startTime: "",
+        minutes: r.minutes,
+        status: r.status as TimeEntry["status"],
+        syncStatus: "synced" as const,
+      }));
+    },
+
     async getAllocations(employeeId: string): Promise<Allocation[]> {
       const filter = JSON.stringify({ candidate: { in: [employeeId] } });
       const data = await apiFetch<{

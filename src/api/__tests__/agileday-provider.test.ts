@@ -839,3 +839,65 @@ describe("createTimeEntry grouping", () => {
     expect(opts.method).toBe("POST");
   });
 });
+
+// --- batchUpdateEntries ---
+
+describe("batchUpdateEntries", () => {
+  it("sends a single PATCH with array body containing multiple entries", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        { id: "e1", date: "2026-05-05", minutes: 60, status: "SAVED", projectId: "p1" },
+        { id: "e2", date: "2026-05-05", minutes: 45, status: "SAVED", projectId: "p2" },
+      ])
+    );
+
+    const results = await provider.batchUpdateEntries("emp-1", [
+      { id: "e1", minutes: 60 },
+      { id: "e2", minutes: 45 },
+    ]);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toContain("/v1/time_entry/employee/id/emp-1");
+    expect(opts.method).toBe("PATCH");
+
+    const body = JSON.parse(opts.body);
+    expect(body).toHaveLength(2);
+    expect(body[0]).toEqual({ id: "e1", minutes: 60 });
+    expect(body[1]).toEqual({ id: "e2", minutes: 45 });
+
+    expect(results).toHaveLength(2);
+    expect(results[0].minutes).toBe(60);
+    expect(results[1].minutes).toBe(45);
+  });
+
+  it("returns mapped TimeEntry objects", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: "e1",
+          date: "2026-05-05",
+          minutes: 60,
+          status: "SAVED",
+          description: "work",
+          projectId: "p1",
+          taskId: "t1",
+        },
+      ])
+    );
+
+    const results = await provider.batchUpdateEntries("emp-1", [{ id: "e1", minutes: 60 }]);
+
+    expect(results[0].id).toBe("e1");
+    expect(results[0].syncStatus).toBe("synced");
+    expect(results[0].description).toBe("work");
+  });
+
+  it("throws on empty API response", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse([]));
+
+    // Should still return empty array (no entries updated)
+    const results = await provider.batchUpdateEntries("emp-1", [{ id: "e1", minutes: 60 }]);
+    expect(results).toHaveLength(0);
+  });
+});
