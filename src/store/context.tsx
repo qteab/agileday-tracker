@@ -23,6 +23,7 @@ import {
   DEFAULT_CONNECTION,
 } from "../api/auth-manager";
 import { loadTimerState, saveTimerState, clearTimerState } from "./timer-store";
+import { loadFlexConfig } from "./flex-store";
 
 interface AppContextValue {
   state: AppState;
@@ -236,6 +237,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const entries = await api!.getTimeEntries(employee.id, fmt(past), fmt(future));
         if (cancelled) return;
         dispatch({ type: "SET_ENTRIES", payload: entries });
+
+        // Load flex config and fetch holidays + extended entries if needed
+        loadFlexConfig()
+          .then(async (flexConfig) => {
+            if (cancelled || !flexConfig) return;
+            dispatch({ type: "SET_FLEX_CONFIG", payload: flexConfig });
+
+            // Fetch holidays for the flex date range (by year)
+            const startYear = new Date(flexConfig.startDate + "T12:00:00").getFullYear();
+            const currentYear = new Date().getFullYear();
+            try {
+              const allHolidays = [];
+              for (let year = startYear; year <= currentYear; year++) {
+                const yearHolidays = await api!.getHolidays(
+                  "SE",
+                  `${year}-01-01`,
+                  `${year + 1}-01-01`
+                );
+                allHolidays.push(...yearHolidays);
+              }
+              if (!cancelled) {
+                dispatch({ type: "SET_HOLIDAYS", payload: allHolidays });
+              }
+            } catch {
+              // Holiday fetch failed — flex will calculate without holidays
+            }
+
+            // If start date is older than our entry window, fetch the gap
+            const pastStr = fmt(past);
+            if (flexConfig.startDate < pastStr) {
+              try {
+                const flexEntries = await api!.getTimeEntries(
+                  employee.id,
+                  flexConfig.startDate,
+                  pastStr
+                );
+                if (!cancelled) {
+                  dispatch({ type: "SET_FLEX_ENTRIES", payload: flexEntries });
+                }
+              } catch {
+                // Extended fetch failed — flex will use available entries only
+              }
+            }
+          })
+          .catch(() => {
+            // Flex config load failed — flex feature just won't be configured
+          });
 
         // Hydrate per-task billable flags so the UI can label entries as
         // billable/non-billable. We fetch tasks for every project that has

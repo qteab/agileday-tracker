@@ -1,4 +1,5 @@
-import type { Allocation, Employee, Project, Task, TimeEntry } from "../api/types";
+import type { Allocation, Employee, Holiday, Project, Task, TimeEntry } from "../api/types";
+import type { FlexConfig } from "./flex-store";
 
 export interface TimerState {
   isRunning: boolean;
@@ -20,6 +21,9 @@ export interface AppState {
   allocations: Allocation[];
   allocationsFetchedAt: number | null;
   timer: TimerState;
+  flexConfig: FlexConfig | null;
+  flexEntries: TimeEntry[] | null;
+  holidays: Holiday[];
   loading: boolean;
   error: string | null;
 }
@@ -41,6 +45,9 @@ export const initialState: AppState = {
     taskId: null,
     startTime: null,
   },
+  flexConfig: null,
+  flexEntries: null,
+  holidays: [],
   loading: false,
   error: null,
 };
@@ -60,6 +67,9 @@ export type AppAction =
   | { type: "DELETE_ENTRY"; payload: string }
   | { type: "SET_TIMER"; payload: Partial<TimerState> }
   | { type: "RESET_TIMER" }
+  | { type: "SET_FLEX_CONFIG"; payload: FlexConfig | null }
+  | { type: "SET_FLEX_ENTRIES"; payload: TimeEntry[] | null }
+  | { type: "SET_HOLIDAYS"; payload: Holiday[] }
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "SET_ERROR"; payload: string | null };
 
@@ -108,6 +118,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, timer: { ...state.timer, ...action.payload } };
     case "RESET_TIMER":
       return { ...state, timer: initialState.timer };
+    case "SET_FLEX_CONFIG":
+      return { ...state, flexConfig: action.payload };
+    case "SET_FLEX_ENTRIES":
+      return { ...state, flexEntries: action.payload };
+    case "SET_HOLIDAYS":
+      return { ...state, holidays: action.payload };
     case "SET_LOADING":
       return { ...state, loading: action.payload };
     case "SET_ERROR":

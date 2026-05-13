@@ -1,5 +1,5 @@
 import type { ApiProvider } from "./provider";
-import type { Allocation, Employee, Project, ProjectType, Task, TimeEntry } from "./types";
+import type { Allocation, Employee, Holiday, Project, ProjectType, Task, TimeEntry } from "./types";
 import type { AuthConfig, AuthState } from "./auth";
 import { isTokenExpired, refreshAccessToken, tokenResponseToAuthState } from "./auth";
 
@@ -705,6 +705,13 @@ export function createAgileDayProvider(
         projectType: info.projectType,
         openingId: info.openingId,
       }));
+    },
+
+    async getHolidays(countryCode: string, startDate: string, endDate: string): Promise<Holiday[]> {
+      const data = await apiFetch<Array<{ date: string; name: string }>>(
+        `/v1/workpackages/${encodeURIComponent(countryCode)}/holidays?startDate=${startDate}&endDate=${endDate}`
+      );
+      return data.map((h) => ({ date: h.date, name: h.name }));
     },
   };
 }

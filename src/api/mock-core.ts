@@ -162,5 +162,9 @@ export function createMockProvider(
         openingId: `opening-${p.id}`,
       }));
     },
+
+    async getHolidays(_countryCode: string, _startDate: string, _endDate: string) {
+      return [];
+    },
   };
 }

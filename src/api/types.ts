@@ -62,3 +62,8 @@ export interface Allocation {
   /** Allocation periods with changing percentages */
   periods: AllocationPeriod[];
 }
+
+export interface Holiday {
+  date: string; // YYYY-MM-DD
+  name: string;
+}
