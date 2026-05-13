@@ -1,4 +1,4 @@
-import type { Allocation, Employee, Project, ProjectType, Task, TimeEntry } from "./types";
+import type { Allocation, Employee, Holiday, Project, ProjectType, Task, TimeEntry } from "./types";
 
 export interface MyProjectInfo {
   id: string;
@@ -23,4 +23,5 @@ export interface ApiProvider {
   ): Promise<TimeEntry[]>;
   getAllocations(employeeId: string): Promise<Allocation[]>;
   getMyProjects(employeeId: string): Promise<MyProjectInfo[]>;
+  getHolidays(countryCode: string, startDate: string, endDate: string): Promise<Holiday[]>;
 }

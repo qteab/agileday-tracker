@@ -7,9 +7,11 @@ import { TimeEntryList } from "./components/TimeEntryList";
 import { AllocationView } from "./components/AllocationView";
 import { LoginScreen } from "./components/LoginScreen";
 import { UpdateChecker } from "./components/UpdateChecker";
-import { SettingsView } from "./components/SettingsView";
+import { SettingsView, type SettingsTab } from "./components/SettingsView";
 import { FinalizeView } from "./components/FinalizeView";
 import { SubmissionAlert } from "./components/SubmissionAlert";
+import { FlexBadge } from "./components/FlexBadge";
+import { FlexSetupAlert } from "./components/FlexSetupAlert";
 import { useApp } from "./store/context";
 import type { TimeEntry } from "./api/types";
 
@@ -36,7 +38,7 @@ export function App() {
 function AuthenticatedApp() {
   const { state, dispatch } = useApp();
   const [activeTab, setActiveTab] = useState<"list" | "allocation">("list");
-  const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [showFinalize, setShowFinalize] = useState(false);
   const stopTimerRef = useRef<(() => void) | null>(null);
 
@@ -44,10 +46,10 @@ function AuthenticatedApp() {
   useEffect(() => {
     const unlistenSettings = listen("tray-open-settings", () => {
       setShowFinalize(false);
-      setShowSettings(true);
+      setSettingsTab("account");
     });
     const unlistenFinalize = listen("tray-open-finalize", () => {
-      setShowSettings(false);
+      setSettingsTab(null);
       setShowFinalize(true);
     });
     return () => {
@@ -93,9 +95,15 @@ function AuthenticatedApp() {
           QTE Time Tracker
         </span>
         <div className="flex items-center gap-1">
+          <FlexBadge
+            onClick={() => {
+              setShowFinalize(false);
+              setSettingsTab("flex");
+            }}
+          />
           <button
             onClick={() => {
-              setShowSettings(false);
+              setSettingsTab(null);
               setShowFinalize(true);
             }}
             className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text transition-colors rounded-lg hover:bg-bg"
@@ -113,7 +121,7 @@ function AuthenticatedApp() {
           <button
             onClick={() => {
               setShowFinalize(false);
-              setShowSettings(true);
+              setSettingsTab("account");
             }}
             className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text transition-colors rounded-lg hover:bg-bg"
             title="Settings"
@@ -143,8 +151,16 @@ function AuthenticatedApp() {
       <SubmissionAlert
         entries={state.entries}
         onOpenFinalize={() => {
-          setShowSettings(false);
+          setSettingsTab(null);
           setShowFinalize(true);
+        }}
+      />
+
+      {/* Flex setup prompt */}
+      <FlexSetupAlert
+        onOpenSettings={() => {
+          setShowFinalize(false);
+          setSettingsTab("flex");
         }}
       />
 
@@ -168,8 +184,8 @@ function AuthenticatedApp() {
         </div>
       )}
 
-      {showSettings ? (
-        <SettingsView onBack={() => setShowSettings(false)} />
+      {settingsTab ? (
+        <SettingsView onBack={() => setSettingsTab(null)} defaultTab={settingsTab} />
       ) : showFinalize ? (
         <FinalizeView onBack={() => setShowFinalize(false)} />
       ) : (
