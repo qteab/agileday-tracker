@@ -1,6 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useApp, useApi } from "../store/context";
-import { buildRoundingPlan, type RoundingEntry } from "../api/rounding";
+import {
+  buildRoundingPlan,
+  applyOverrides,
+  ceilTo15,
+  floorTo15,
+  type DayProjectRounding,
+} from "../api/rounding";
 import { getWeekStart, fmtDate, formatWeekLabel, syncedOnly } from "../utils/week";
 import type { TimeEntry } from "../api/types";
 
@@ -38,7 +44,7 @@ interface WeekSummary {
   label: string;
   totalMinutes: number;
   entryCount: number;
-  projectsToRound: number;
+  groupsToRound: number;
   unsavedCount: number;
   status: WeekStatus;
   entries: TimeEntry[];
@@ -80,7 +86,7 @@ function buildWeekSummaries(entries: TimeEntry[]): WeekSummary[] {
       label: formatWeekLabel(monday),
       totalMinutes: weekEntries.reduce((s, e) => s + e.minutes, 0),
       entryCount: weekEntries.length,
-      projectsToRound: plan.filter((p) => p.difference > 0).length,
+      groupsToRound: plan.filter((p) => p.difference > 0).length,
       unsavedCount: weekEntries.length - synced.length,
       status: computeWeekStatus(weekEntries),
       entries: weekEntries,
@@ -133,9 +139,9 @@ function RoundingInfoPanel({ onClose }: { onClose: () => void }) {
 
       <div className="px-4 py-4 space-y-4">
         <p className="text-sm text-text">
-          Rounding is applied per <strong>project weekly total</strong>, not per individual entry.
-          All entries for the same project in a week are summed, then rounded up to the nearest
-          15-minute increment. The difference is added to the largest entry.
+          Rounding is applied per <strong>project per day</strong>. Each day&apos;s entries for a
+          project are summed, then rounded up to the nearest 15-minute increment. The difference is
+          added to the largest entry for that project on that day.
         </p>
 
         <div>
@@ -144,14 +150,14 @@ function RoundingInfoPanel({ onClose }: { onClose: () => void }) {
           </h4>
           <div className="bg-white rounded-lg border border-border p-3 text-sm space-y-2">
             <p className="text-text-muted">
-              Project A has 3 entries this week: 2:30 + 3:47 + 1:45 = <strong>8:02</strong>
+              Project A on Monday: 2:30 + 1:17 = <strong>3:47</strong>
             </p>
             <p className="text-text-muted">
-              Rounded up to nearest 15 min: <strong>8:15</strong> (+13 min)
+              Rounded up to nearest 15 min: <strong>4:00</strong> (+13 min)
             </p>
             <p className="text-text-muted">
-              The 13 minutes are added to the largest entry (3:47 → 4:00). The other entries stay
-              unchanged.
+              The 13 minutes are added to the largest entry (2:30 → 2:43). You can manually adjust
+              the rounded total down to reduce the buffer.
             </p>
           </div>
         </div>
@@ -161,6 +167,46 @@ function RoundingInfoPanel({ onClose }: { onClose: () => void }) {
           minutes.&quot;
         </p>
       </div>
+    </div>
+  );
+}
+
+// --- Editable rounded total ---
+
+function RoundedTotalInput({
+  group,
+  onChange,
+}: {
+  group: DayProjectRounding;
+  onChange: (value: number) => void;
+}) {
+  const min = floorTo15(group.totalMinutes);
+  const max = ceilTo15(group.totalMinutes);
+
+  // If total is already a multiple of 15, no range to adjust
+  if (min === max) return null;
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        onClick={() => onChange(Math.max(min, group.roundedTotal - 15))}
+        disabled={group.roundedTotal <= min}
+        className="w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold text-text-muted bg-bg hover:bg-border transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        title="Decrease by 15 min"
+      >
+        −
+      </button>
+      <span className="text-xs tabular-nums font-medium text-primary min-w-[36px] text-center">
+        {fmtHM(group.roundedTotal)}
+      </span>
+      <button
+        onClick={() => onChange(Math.min(max, group.roundedTotal + 15))}
+        disabled={group.roundedTotal >= max}
+        className="w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold text-text-muted bg-bg hover:bg-border transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        title="Increase by 15 min"
+      >
+        +
+      </button>
     </div>
   );
 }
@@ -256,13 +302,10 @@ function WeekList({
             <span>
               {week.entryCount} {week.entryCount === 1 ? "entry" : "entries"}
             </span>
-            {week.projectsToRound > 0 && (
+            {week.groupsToRound > 0 && (
               <>
                 <span>·</span>
-                <span className="text-amber-600">
-                  {week.projectsToRound} {week.projectsToRound === 1 ? "project" : "projects"} to
-                  round
-                </span>
+                <span className="text-amber-600">{week.groupsToRound} to round</span>
               </>
             )}
           </div>
@@ -288,25 +331,34 @@ function WeekDetail({
   const [showConfirm, setShowConfirm] = useState(false);
   const [rounding, setRounding] = useState(false);
   const [error, setError] = useState("");
+  const [overrides, setOverrides] = useState<Map<string, number>>(new Map());
 
   const synced = useMemo(() => syncedOnly(week.entries), [week.entries]);
   const unsavedCount = week.entries.length - synced.length;
-  const projectPlans = useMemo(() => buildRoundingPlan(synced), [synced]);
-  const projectsToRound = projectPlans.filter((p) => p.difference > 0);
-  const adjustedEntries = projectPlans.flatMap((p) => p.entries.filter((e) => e.isAdjusted));
-  const canRound = projectsToRound.length > 0 && week.status !== "submitted";
+  const basePlan = useMemo(() => buildRoundingPlan(synced), [synced]);
+  const plan = useMemo(() => applyOverrides(basePlan, overrides), [basePlan, overrides]);
+  const groupsToRound = plan.filter((p) => p.difference !== 0);
+  const adjustedEntries = plan.flatMap((p) => p.entries.filter((e) => e.isAdjusted));
+  const canRound = groupsToRound.length > 0 && week.status !== "submitted";
 
-  // Flatten all entries and group by day for display
-  const allEntries = projectPlans.flatMap((p) => p.entries);
+  const handleOverride = useCallback((key: string, value: number) => {
+    setOverrides((prev) => {
+      const next = new Map(prev);
+      next.set(key, value);
+      return next;
+    });
+  }, []);
+
+  // Group plan entries by day for display
   const dayGroups = useMemo(() => {
-    const map = new Map<string, RoundingEntry[]>();
-    for (const entry of allEntries) {
-      const existing = map.get(entry.date) ?? [];
-      existing.push(entry);
-      map.set(entry.date, existing);
+    const map = new Map<string, DayProjectRounding[]>();
+    for (const group of plan) {
+      const existing = map.get(group.date) ?? [];
+      existing.push(group);
+      map.set(group.date, existing);
     }
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [allEntries]);
+  }, [plan]);
 
   const projectColors = useMemo(() => {
     const map = new Map<string, string>();
@@ -374,26 +426,16 @@ function WeekDetail({
           </div>
         )}
 
-        {/* Project summaries */}
-        {projectsToRound.length > 0 && (
-          <div className="bg-amber-50 rounded-lg border border-amber-200 p-3 space-y-1">
-            <p className="text-xs font-medium text-amber-800">Project totals to round</p>
-            {projectsToRound.map((p) => (
-              <div key={p.projectId} className="flex justify-between text-xs text-amber-700">
-                <span>{p.projectName ?? p.projectId}</span>
-                <span className="tabular-nums">
-                  {fmtHM(p.totalMinutes)} → {fmtHM(p.roundedTotal)}{" "}
-                  <span className="text-amber-500">(+{p.difference}m)</span>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-
         {/* Day groups */}
-        {dayGroups.map(([date, entries]) => {
-          const dayTotal = entries.reduce((s, e) => s + e.currentMinutes, 0);
-          const dayAdjusted = entries.reduce((s, e) => s + e.adjustedMinutes, 0);
+        {dayGroups.map(([date, projectGroups]) => {
+          const dayTotal = projectGroups.reduce(
+            (s, g) => s + g.entries.reduce((se, e) => se + e.currentMinutes, 0),
+            0
+          );
+          const dayAdjusted = projectGroups.reduce(
+            (s, g) => s + g.entries.reduce((se, e) => se + e.adjustedMinutes, 0),
+            0
+          );
           const hasChanges = dayTotal !== dayAdjusted;
           const adjustedOff = dayAdjusted !== WORKDAY_MINUTES;
 
@@ -409,11 +451,14 @@ function WeekDetail({
                 </span>
               </div>
               <div className="divide-y divide-border">
-                {entries.map((entry) => (
-                  <EntryRow
-                    key={entry.id}
-                    entry={entry}
-                    projectColor={projectColors.get(entry.projectId)}
+                {projectGroups.map((group) => (
+                  <ProjectGroupSection
+                    key={group.projectId}
+                    group={group}
+                    projectColor={projectColors.get(group.projectId)}
+                    onOverride={(value) =>
+                      handleOverride(`${group.projectId}:${group.date}`, value)
+                    }
                   />
                 ))}
               </div>
@@ -428,8 +473,8 @@ function WeekDetail({
 
         <div className="flex items-start gap-1.5 text-xs text-text-muted">
           <span>
-            This will round each project&apos;s weekly total up to the nearest 15 minutes by
-            adjusting one entry per project.
+            Rounds each project&apos;s daily total up to the nearest 15 minutes. Use the +/− buttons
+            to adjust.
           </span>
           <button
             onClick={onShowInfo}
@@ -442,9 +487,7 @@ function WeekDetail({
         {showConfirm ? (
           <div className="flex items-center gap-2">
             <span className="text-xs text-text-muted">
-              Adjust {adjustedEntries.length} {adjustedEntries.length === 1 ? "entry" : "entries"}{" "}
-              across {projectsToRound.length}{" "}
-              {projectsToRound.length === 1 ? "project" : "projects"}?
+              Adjust {adjustedEntries.length} {adjustedEntries.length === 1 ? "entry" : "entries"}?
             </span>
             <button
               onClick={handleRound}
@@ -469,9 +512,9 @@ function WeekDetail({
           >
             {week.status === "submitted"
               ? "Already submitted"
-              : projectsToRound.length === 0
-                ? "All projects rounded"
-                : `Round ${projectsToRound.length} ${projectsToRound.length === 1 ? "project" : "projects"}`}
+              : groupsToRound.length === 0
+                ? "All entries rounded"
+                : `Round ${groupsToRound.length} ${groupsToRound.length === 1 ? "group" : "groups"}`}
           </button>
         )}
       </div>
@@ -479,56 +522,56 @@ function WeekDetail({
   );
 }
 
-// --- Entry row ---
+// --- Project group within a day ---
 
-function EntryRow({ entry, projectColor }: { entry: RoundingEntry; projectColor?: string }) {
-  const isLocked = entry.status === "SUBMITTED" || entry.status === "APPROVED";
-  const descPreview = entry.description
-    .split("\n")
-    .map((l) => l.replace(/^- /, ""))
-    .filter(Boolean)
-    .join(", ");
+function ProjectGroupSection({
+  group,
+  projectColor,
+  onOverride,
+}: {
+  group: DayProjectRounding;
+  projectColor?: string;
+  onOverride: (value: number) => void;
+}) {
+  const needsRounding = ceilTo15(group.totalMinutes) !== group.totalMinutes;
+  const isLocked = group.entries.every((e) => e.status === "SUBMITTED" || e.status === "APPROVED");
 
   return (
     <div
-      className={`flex items-center gap-2 px-3 py-2 ${isLocked ? "opacity-50" : ""} ${entry.isAdjusted ? "bg-primary/5" : ""}`}
+      className={`flex items-center gap-2 px-3 py-2 ${isLocked ? "opacity-50" : ""} ${needsRounding ? "bg-primary/5" : ""}`}
     >
       {projectColor && (
         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: projectColor }} />
       )}
       <div className="flex-1 min-w-0">
         <div className="text-xs font-medium text-text truncate">
-          {entry.projectName ?? "Unknown project"}
+          {group.projectName ?? "Unknown project"}
         </div>
-        {descPreview && <div className="text-[11px] text-text-muted truncate">{descPreview}</div>}
       </div>
-      <div className="text-xs tabular-nums text-right shrink-0">
-        {entry.isAdjusted ? (
-          <span>
-            <span className="text-text-muted">{fmtHM(entry.currentMinutes)}</span>
-            <span className="text-text-muted mx-1">→</span>
-            <span className="text-primary font-medium">{fmtHM(entry.adjustedMinutes)}</span>
-          </span>
+      <div className="text-xs tabular-nums text-right shrink-0 flex items-center gap-2">
+        {needsRounding ? (
+          <>
+            <span className="text-text-muted">{fmtHM(group.totalMinutes)}</span>
+            <span className="text-text-muted">→</span>
+            <RoundedTotalInput group={group} onChange={onOverride} />
+          </>
         ) : (
-          <span className="text-text-muted">
-            {fmtHM(entry.currentMinutes)}
-            {isLocked && " "}
-            {isLocked && (
-              <svg
-                className="w-3 h-3 inline-block"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                />
-              </svg>
-            )}
-          </span>
+          <span className="text-text-muted">{fmtHM(group.totalMinutes)}</span>
+        )}
+        {isLocked && (
+          <svg
+            className="w-3 h-3 inline-block text-text-muted"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+            />
+          </svg>
         )}
       </div>
     </div>
