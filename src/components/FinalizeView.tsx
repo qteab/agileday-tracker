@@ -552,6 +552,7 @@ function ProjectGroupSection({
         {needsRounding ? (
           <>
             <span className="text-text-muted">{fmtHM(group.totalMinutes)}</span>
+            <span className="text-text-muted">→</span>
             <RoundedTotalInput group={group} onChange={onOverride} />
           </>
         ) : (
