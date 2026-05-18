@@ -5,6 +5,7 @@ import type { TimeEntry } from "../api/types";
 interface SubmissionAlertProps {
   entries: TimeEntry[];
   onOpenFinalize: () => void;
+  dismissedWeeks: Set<string>;
 }
 
 const ALERT_CONFIG: Record<AlertLevel, { bg: string; text: string; border: string }> = {
@@ -28,8 +29,8 @@ function buildMessage(weekCount: number, level: AlertLevel): string {
   return subject + suffix;
 }
 
-export function SubmissionAlert({ entries, onOpenFinalize }: SubmissionAlertProps) {
-  const [dismissed, setDismissed] = useState(false);
+export function SubmissionAlert({ entries, onOpenFinalize, dismissedWeeks }: SubmissionAlertProps) {
+  const [dismissedKey, setDismissedKey] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
 
   // Re-check every minute to catch 11:00 and 12:00 transitions
@@ -38,10 +39,20 @@ export function SubmissionAlert({ entries, onOpenFinalize }: SubmissionAlertProp
     return () => clearInterval(interval);
   }, []);
 
-  const unsubmittedWeeks = useMemo(() => getUnsubmittedWeeks(entries, now), [entries, now]);
+  const unsubmittedWeeks = useMemo(
+    () => getUnsubmittedWeeks(entries, now).filter((w) => !dismissedWeeks.has(w.start)),
+    [entries, now, dismissedWeeks]
+  );
   const alertLevel = useMemo(() => getAlertLevel(now), [now]);
 
-  if (dismissed || unsubmittedWeeks.length === 0) return null;
+  // Build a key from the current set of unsubmitted weeks so that
+  // dismissal sticks until the set changes (e.g. after a sync).
+  const currentKey = useMemo(
+    () => unsubmittedWeeks.map((w) => w.start).join(","),
+    [unsubmittedWeeks]
+  );
+
+  if (dismissedKey === currentKey || unsubmittedWeeks.length === 0) return null;
 
   const config = ALERT_CONFIG[alertLevel];
   const message = buildMessage(unsubmittedWeeks.length, alertLevel);
@@ -74,7 +85,10 @@ export function SubmissionAlert({ entries, onOpenFinalize }: SubmissionAlertProp
       >
         Finalize
       </button>
-      <button onClick={() => setDismissed(true)} className="hover:opacity-70 transition-opacity">
+      <button
+        onClick={() => setDismissedKey(currentKey)}
+        className="hover:opacity-70 transition-opacity"
+      >
         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path
             strokeLinecap="round"

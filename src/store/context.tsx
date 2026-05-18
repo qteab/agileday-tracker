@@ -102,6 +102,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Force a token refresh check when the window regains visibility (e.g. after
+  // sleep/wake). setInterval doesn't fire during sleep, so the background refresh
+  // loop can miss expiry windows.
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (document.visibilityState !== "visible") return;
+      const current = authStateRef.current;
+      if (!current?.refreshToken) return;
+      if (isTokenExpired(current, 60_000)) {
+        try {
+          const authConfig = buildAuthConfig(DEFAULT_CONNECTION);
+          const tokens = await refreshAccessToken(authConfig, current.refreshToken);
+          const newState = tokenResponseToAuthState(tokens);
+          setAuthState(newState);
+          await saveAuthState(newState).catch(() => {});
+        } catch {
+          // Refresh failed — let the next API call handle it
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
+
   // Restore a running timer that survived a quit/crash. Elapsed is derived
   // from startTime + now(), so time the app was closed is naturally counted.
   useEffect(() => {

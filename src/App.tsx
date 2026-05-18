@@ -40,6 +40,7 @@ function AuthenticatedApp() {
   const [activeTab, setActiveTab] = useState<"list" | "allocation">("list");
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [showFinalize, setShowFinalize] = useState(false);
+  const [dismissedWeeks, setDismissedWeeks] = useState<Set<string>>(new Set());
   const stopTimerRef = useRef<(() => void) | null>(null);
 
   // Listen for tray menu items
@@ -150,6 +151,7 @@ function AuthenticatedApp() {
       {/* Submission deadline alert */}
       <SubmissionAlert
         entries={state.entries}
+        dismissedWeeks={dismissedWeeks}
         onOpenFinalize={() => {
           setSettingsTab(null);
           setShowFinalize(true);
@@ -187,7 +189,12 @@ function AuthenticatedApp() {
       {settingsTab ? (
         <SettingsView onBack={() => setSettingsTab(null)} defaultTab={settingsTab} />
       ) : showFinalize ? (
-        <FinalizeView onBack={() => setShowFinalize(false)} />
+        <FinalizeView
+          onBack={() => setShowFinalize(false)}
+          onMarkSubmitted={(weekStart) =>
+            setDismissedWeeks((prev) => new Set([...prev, weekStart]))
+          }
+        />
       ) : (
         <>
           {/* Timer */}

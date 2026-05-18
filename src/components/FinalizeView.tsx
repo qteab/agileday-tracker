@@ -12,6 +12,7 @@ import type { TimeEntry } from "../api/types";
 
 interface FinalizeViewProps {
   onBack: () => void;
+  onMarkSubmitted: (weekStart: string) => void;
 }
 
 const WORKDAY_MINUTES = 480;
@@ -213,7 +214,7 @@ function RoundedTotalInput({
 
 // --- Main component ---
 
-export function FinalizeView({ onBack }: FinalizeViewProps) {
+export function FinalizeView({ onBack, onMarkSubmitted }: FinalizeViewProps) {
   const { state } = useApp();
   const [selectedWeek, setSelectedWeek] = useState<WeekSummary | null>(null);
   const [showInfo, setShowInfo] = useState(false);
@@ -261,7 +262,7 @@ export function FinalizeView({ onBack }: FinalizeViewProps) {
           onShowInfo={() => setShowInfo(true)}
         />
       ) : (
-        <WeekList weeks={weeks} onSelect={setSelectedWeek} />
+        <WeekList weeks={weeks} onSelect={setSelectedWeek} onMarkSubmitted={onMarkSubmitted} />
       )}
     </div>
   );
@@ -272,9 +273,11 @@ export function FinalizeView({ onBack }: FinalizeViewProps) {
 function WeekList({
   weeks,
   onSelect,
+  onMarkSubmitted,
 }: {
   weeks: WeekSummary[];
   onSelect: (w: WeekSummary) => void;
+  onMarkSubmitted: (weekStart: string) => void;
 }) {
   if (weeks.length === 0) {
     return (
@@ -287,9 +290,17 @@ function WeekList({
   return (
     <div className="px-4 py-3 space-y-2">
       {weeks.map((week) => (
-        <button
+        <div
           key={week.weekStart}
+          role="button"
+          tabIndex={0}
           onClick={() => onSelect(week)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onSelect(week);
+            }
+          }}
           className="w-full text-left bg-white rounded-lg border border-border p-3 hover:border-text-muted transition-colors cursor-pointer"
         >
           <div className="flex items-center justify-between mb-1">
@@ -309,7 +320,18 @@ function WeekList({
               </>
             )}
           </div>
-        </button>
+          {week.status === "rounded" && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onMarkSubmitted(week.weekStart);
+              }}
+              className="mt-2 w-full py-1.5 text-[10px] font-medium text-primary bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors"
+            >
+              Mark as submitted
+            </button>
+          )}
+        </div>
       ))}
     </div>
   );
