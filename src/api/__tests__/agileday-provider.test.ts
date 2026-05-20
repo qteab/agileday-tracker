@@ -459,6 +459,53 @@ describe("authentication", () => {
     expect(setAuthState).toHaveBeenCalledOnce();
   });
 
+  it("preserves the existing refresh token when the refresh response omits one", async () => {
+    // Some OAuth servers (AgileDay included, in certain shapes) don't return a
+    // new refresh_token on every refresh. Losing the existing one used to bounce
+    // the user to the login screen on the next refresh attempt.
+    authState = { ...EXPIRED_AUTH, refreshToken: "original-refresh-token" };
+
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({
+        access_token: fakeJwt({ sub: "emp-2" }),
+        // No refresh_token in the response
+        token_type: "bearer",
+        expires_in: 3600,
+      })
+    );
+    mockFetch.mockResolvedValueOnce(jsonResponse([]));
+
+    await provider.getProjects();
+
+    expect(setAuthState).toHaveBeenCalledOnce();
+    const newState = setAuthState.mock.calls[0][0] as AuthState;
+    expect(newState.refreshToken).toBe("original-refresh-token");
+  });
+
+  it("deduplicates parallel refreshes to survive refresh-token rotation", async () => {
+    authState = { ...EXPIRED_AUTH };
+
+    // Only one token response is queued — if the provider fires two refreshes
+    // in parallel, the second one will trip the rotation guard on the server
+    // and we'd see a second fetch call to the token endpoint.
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({
+        access_token: fakeJwt({ sub: "emp-2" }),
+        refresh_token: "rotated-refresh-token",
+        token_type: "bearer",
+        expires_in: 3600,
+      })
+    );
+    // Use mockImplementation so each call gets a fresh Response (bodies can
+    // only be read once).
+    mockFetch.mockImplementation(() => Promise.resolve(jsonResponse([])));
+
+    await Promise.all([provider.getProjects(), provider.getProjects()]);
+
+    const tokenCalls = mockFetch.mock.calls.filter(([url]) => String(url).endsWith("/oauth/token"));
+    expect(tokenCalls).toHaveLength(1);
+  });
+
   it("clears auth when refresh fails", async () => {
     authState = { ...EXPIRED_AUTH };
     mockFetch.mockResolvedValueOnce(errorResponse(400, "invalid_grant"));
