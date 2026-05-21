@@ -141,14 +141,51 @@ export async function refreshAccessToken(
   }
 }
 
-export function tokenResponseToAuthState(tokens: TokenResponse): AuthState {
+/**
+ * Build the next AuthState from a token response.
+ *
+ * Pass `previous` when applying the result of a refresh: many OAuth servers
+ * (AgileDay included, in some response shapes) omit `refresh_token` from
+ * refresh responses, expecting the client to keep reusing the existing one.
+ * Without this fallback the refresh token gets silently overwritten with
+ * `undefined` and the next refresh fails, logging the user out.
+ */
+export function tokenResponseToAuthState(
+  tokens: TokenResponse,
+  previous?: AuthState | null
+): AuthState {
   return {
     accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token,
+    refreshToken: tokens.refresh_token ?? previous?.refreshToken,
     expiresAt: Date.now() + tokens.expires_in * 1000,
   };
 }
 
 export function isTokenExpired(state: AuthState, bufferMs = 60_000): boolean {
   return Date.now() >= state.expiresAt - bufferMs;
+}
+
+/**
+ * Single-flight refresh: dedupe parallel refresh attempts so refresh-token
+ * rotation doesn't cause the second concurrent call to fail with
+ * `invalid_grant` and bounce the user back to the login screen.
+ */
+let inFlightRefresh: Promise<AuthState> | null = null;
+
+export async function refreshAuthState(config: AuthConfig, current: AuthState): Promise<AuthState> {
+  if (!current.refreshToken) {
+    throw new Error("No refresh token available");
+  }
+  if (inFlightRefresh) {
+    return inFlightRefresh;
+  }
+  inFlightRefresh = (async () => {
+    const tokens = await refreshAccessToken(config, current.refreshToken!);
+    return tokenResponseToAuthState(tokens, current);
+  })();
+  try {
+    return await inFlightRefresh;
+  } finally {
+    inFlightRefresh = null;
+  }
 }

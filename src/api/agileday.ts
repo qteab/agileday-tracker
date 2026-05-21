@@ -1,7 +1,7 @@
 import type { ApiProvider } from "./provider";
 import type { Allocation, Employee, Holiday, Project, ProjectType, Task, TimeEntry } from "./types";
 import type { AuthConfig, AuthState } from "./auth";
-import { isTokenExpired, refreshAccessToken, tokenResponseToAuthState } from "./auth";
+import { isTokenExpired, refreshAuthState } from "./auth";
 
 // Color palette for projects (AgileDay doesn't return colors)
 const PROJECT_COLORS = [
@@ -105,16 +105,16 @@ export function createAgileDayProvider(
         throw new Error("Session expired — please log in again");
       }
 
-      // Try refresh with one retry
+      // Try refresh with one retry. refreshAuthState dedupes parallel callers
+      // so we don't trip refresh-token rotation when the timer + visibility
+      // handler + an in-flight API call all hit expiry at the same time.
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const tokens = await refreshAccessToken(config.authConfig, auth.refreshToken);
-          const newState = tokenResponseToAuthState(tokens);
+          const newState = await refreshAuthState(config.authConfig, auth);
           setAuthState(newState);
           return newState.accessToken;
         } catch {
           if (attempt === 0) {
-            // First attempt failed — wait briefly and retry
             await new Promise((r) => setTimeout(r, 1000));
           }
         }
@@ -125,8 +125,8 @@ export function createAgileDayProvider(
 
     // Token still valid but refresh proactively if < 2 min left
     if (isTokenExpired(auth, 120_000) && auth.refreshToken) {
-      refreshAccessToken(config.authConfig, auth.refreshToken)
-        .then((tokens) => setAuthState(tokenResponseToAuthState(tokens)))
+      refreshAuthState(config.authConfig, auth)
+        .then(setAuthState)
         .catch(() => {}); // Best effort, don't block the current request
     }
 

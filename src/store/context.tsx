@@ -13,7 +13,7 @@ import { listen } from "@tauri-apps/api/event";
 import type { ApiProvider } from "../api/provider";
 import { createAgileDayProvider, type AgileDayConfig } from "../api/agileday";
 import type { AuthState } from "../api/auth";
-import { isTokenExpired, refreshAccessToken, tokenResponseToAuthState } from "../api/auth";
+import { isTokenExpired, refreshAuthState } from "../api/auth";
 import {
   loadAuthState,
   saveAuthState,
@@ -113,8 +113,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (isTokenExpired(current, 60_000)) {
         try {
           const authConfig = buildAuthConfig(DEFAULT_CONNECTION);
-          const tokens = await refreshAccessToken(authConfig, current.refreshToken);
-          const newState = tokenResponseToAuthState(tokens);
+          const newState = await refreshAuthState(authConfig, current);
           setAuthState(newState);
           await saveAuthState(newState).catch(() => {});
         } catch {
@@ -166,8 +165,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           // Access token expired but we have a refresh token — try to refresh
           try {
             const authConfig = buildAuthConfig(DEFAULT_CONNECTION);
-            const tokens = await refreshAccessToken(authConfig, saved.refreshToken);
-            const newState = tokenResponseToAuthState(tokens);
+            const newState = await refreshAuthState(authConfig, saved);
             await saveAuthState(newState).catch(() => {});
             setAuthState(newState);
             setIsConnected(true);
@@ -202,8 +200,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (isTokenExpired(current, REFRESH_BUFFER)) {
         try {
           const authConfig = buildAuthConfig(DEFAULT_CONNECTION);
-          const tokens = await refreshAccessToken(authConfig, current.refreshToken);
-          const newState = tokenResponseToAuthState(tokens);
+          const newState = await refreshAuthState(authConfig, current);
           setAuthState(newState);
           await saveAuthState(newState).catch(() => {});
         } catch {
