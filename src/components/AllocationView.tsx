@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useApp, useApi } from "../store/context";
 import type { Allocation } from "../api/types";
+import { fmtDate } from "../utils/week";
 
 type Period = "week" | "month";
 
@@ -27,8 +28,8 @@ function getWeekRange(ref: Date): { start: string; end: string; label: string } 
     : `${ordinal(sunday.getDate())} ${sunday.toLocaleDateString("en-US", { month: "short" })}`;
   const startBase = monday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   return {
-    start: monday.toISOString().split("T")[0],
-    end: sunday.toISOString().split("T")[0],
+    start: fmtDate(monday),
+    end: fmtDate(sunday),
     label: `Week of ${startBase} (${startOrd} - ${endOrd})`,
   };
 }
@@ -37,8 +38,8 @@ function getMonthRange(ref: Date): { start: string; end: string; label: string }
   const first = new Date(ref.getFullYear(), ref.getMonth(), 1);
   const last = new Date(ref.getFullYear(), ref.getMonth() + 1, 0);
   return {
-    start: first.toISOString().split("T")[0],
-    end: last.toISOString().split("T")[0],
+    start: fmtDate(first),
+    end: fmtDate(last),
     label: ref.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
   };
 }
@@ -56,7 +57,7 @@ function getWeekDays(ref: Date): string[] {
   return Array.from({ length: 5 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    return d.toISOString().split("T")[0];
+    return fmtDate(d);
   });
 }
 
@@ -250,7 +251,7 @@ export function AllocationView() {
       while (current <= last) {
         const weekDates: string[] = [];
         for (let i = 0; i < 7 && current <= last; i++) {
-          weekDates.push(current.toISOString().split("T")[0]);
+          weekDates.push(fmtDate(current));
           current.setDate(current.getDate() + 1);
         }
         weeks.push({ label: `W${weekNum}`, dates: weekDates });
@@ -342,7 +343,7 @@ export function AllocationView() {
     const end = new Date(range.end + "T12:00:00");
     const cur = new Date(start);
     while (cur <= end) {
-      days.push(cur.toISOString().split("T")[0]);
+      days.push(fmtDate(cur));
       cur.setDate(cur.getDate() + 1);
     }
 
