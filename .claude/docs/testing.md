@@ -23,7 +23,7 @@ src/api/__tests__/
   entry-sync.test.ts          — Entry consolidation
 ```
 
-Total: 57 tests.
+Total: 207 tests.
 
 ## Test Patterns
 
