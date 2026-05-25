@@ -10,6 +10,7 @@ import {
 } from "react";
 import { appReducer, initialState, type AppState, type AppAction } from "./reducer";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import type { ApiProvider } from "../api/provider";
 import { createAgileDayProvider, type AgileDayConfig } from "../api/agileday";
 import type { AuthState } from "../api/auth";
@@ -24,6 +25,9 @@ import {
 } from "../api/auth-manager";
 import { loadTimerState, saveTimerState, clearTimerState } from "./timer-store";
 import { loadFlexConfig } from "./flex-store";
+import { loadDisplayPrefs } from "./display-store";
+import { loadWindowLayout, saveWindowLayout, type WindowLayout } from "./window-store";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 interface AppContextValue {
   state: AppState;
@@ -125,6 +129,65 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
+  useEffect(() => {
+    loadDisplayPrefs()
+      .then((prefs) => dispatch({ type: "SET_DISPLAY_PREFS", payload: prefs }))
+      .catch(() => {});
+  }, []);
+
+  // Persist where the user drags the window. Dropping it near the top edge
+  // counts as docking; on the next open Rust positions the window centered
+  // under the tray icon. Anywhere else stores the absolute position so the
+  // window comes back to where the user left it.
+  useEffect(() => {
+    let cancelled = false;
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    let unlisten: (() => void) | null = null;
+    const SNAP_THRESHOLD_LOGICAL_PIXELS = 40;
+    const MOVE_DEBOUNCE_MS = 250;
+
+    async function pushLayoutToRust(layout: WindowLayout) {
+      await invoke("set_window_layout", {
+        docked: layout.docked,
+        freeX: layout.freeX ?? null,
+        freeY: layout.freeY ?? null,
+      }).catch(() => {});
+    }
+
+    async function init() {
+      const layout = await loadWindowLayout().catch(() => null);
+      if (cancelled || !layout) return;
+      await pushLayoutToRust(layout);
+
+      const window = getCurrentWindow();
+      unlisten = await window.onMoved(() => {
+        if (debounce) clearTimeout(debounce);
+        debounce = setTimeout(async () => {
+          const position = await window.outerPosition().catch(() => null);
+          if (!position) return;
+          const scaleFactor = await window.scaleFactor().catch(() => 1);
+          const topInLogicalPixels = position.y / scaleFactor;
+          const docked = topInLogicalPixels < SNAP_THRESHOLD_LOGICAL_PIXELS;
+          const next: WindowLayout = docked
+            ? { docked: true }
+            : { docked: false, freeX: position.x, freeY: position.y };
+          await saveWindowLayout(next).catch(() => {});
+          await pushLayoutToRust(next);
+          if (docked) {
+            await invoke("snap_window_to_tray").catch(() => {});
+          }
+        }, MOVE_DEBOUNCE_MS);
+      });
+    }
+
+    init();
+    return () => {
+      cancelled = true;
+      if (debounce) clearTimeout(debounce);
+      unlisten?.();
+    };
+  }, []);
+
   // Restore a running timer that survived a quit/crash. Elapsed is derived
   // from startTime + now(), so time the app was closed is naturally counted.
   useEffect(() => {
@@ -150,6 +213,86 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clearTimerState().catch(() => {});
     }
   }, [timerLoaded, state.timer]);
+
+  // Tray contents have to keep updating while the Timer view is unmounted
+  // (Settings panel open, etc.), so the push lives in the always-mounted
+  // provider rather than the useTimer hook.
+  const todayDate = (() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  })();
+
+  // When paused, fall back to the most recent entry from today so the menu
+  // bar keeps showing the last task and ▶ has a sensible target to resume.
+  const lastEntryToday = !state.timer.isRunning
+    ? state.entries.reduce<(typeof state.entries)[number] | null>(
+        (best, entry) =>
+          entry.date === todayDate && (best === null || entry.startTime > best.startTime)
+            ? entry
+            : best,
+        null
+      )
+    : null;
+
+  const displayProjectId = state.timer.isRunning
+    ? state.timer.projectId
+    : (lastEntryToday?.projectId ?? null);
+  const displayTaskId = state.timer.isRunning
+    ? state.timer.taskId
+    : (lastEntryToday?.taskId ?? null);
+  const displayDescription = state.timer.isRunning
+    ? state.timer.description
+    : (lastEntryToday?.description ?? null);
+
+  const displayProjectName =
+    (displayProjectId && state.projects.find((p) => p.id === displayProjectId)?.name) || null;
+  // The cache survives project switches; the currently-picked project's list
+  // is only consulted as a fallback while the cache is still warming up.
+  const displayTaskName = displayTaskId
+    ? (state.taskNamesById[displayTaskId] ??
+      state.tasks.find((task) => task.id === displayTaskId)?.name ??
+      null)
+    : null;
+
+  // While running we exclude the current session — Rust adds the elapsed
+  // seconds on each tick. While paused the just-stopped session is already
+  // in entries, so the plain sum gives the correct day total.
+  const todayBaseMinutes =
+    displayProjectId && displayTaskId
+      ? state.entries
+          .filter(
+            (e) =>
+              e.projectId === displayProjectId &&
+              e.taskId === displayTaskId &&
+              e.date === todayDate &&
+              e.startTime !== state.timer.startTime
+          )
+          .reduce((sum, e) => sum + (e.minutes || 0), 0)
+      : 0;
+
+  useEffect(() => {
+    const startMs =
+      state.timer.isRunning && state.timer.startTime
+        ? new Date(state.timer.startTime).getTime()
+        : null;
+    invoke("set_timer_status", {
+      running: state.timer.isRunning,
+      startTimeMs: startMs,
+      projectName: displayProjectName,
+      taskName: displayTaskName,
+      description: displayDescription,
+      dayBaseSeconds: todayBaseMinutes * 60,
+      showInMenuBar: state.displayPrefs.showTimerInMenuBar,
+    }).catch(() => {});
+  }, [
+    state.timer.isRunning,
+    state.timer.startTime,
+    displayProjectName,
+    displayTaskName,
+    displayDescription,
+    todayBaseMinutes,
+    state.displayPrefs.showTimerInMenuBar,
+  ]);
 
   // On mount: check for saved auth state, refresh if expired
   useEffect(() => {
@@ -314,11 +457,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         Promise.all(projectIdsWithEntries.map((id) => api!.getTasks(id).catch(() => []))).then(
           (taskLists) => {
             if (cancelled) return;
-            const map: Record<string, boolean> = {};
+            const billable: Record<string, boolean> = {};
+            const names: Record<string, string> = {};
             for (const tasks of taskLists) {
-              for (const t of tasks) map[t.id] = t.billable;
+              for (const t of tasks) {
+                billable[t.id] = t.billable;
+                names[t.id] = t.name;
+              }
             }
-            dispatch({ type: "MERGE_TASK_BILLABLE", payload: map });
+            dispatch({ type: "MERGE_TASK_BILLABLE", payload: billable });
+            dispatch({ type: "MERGE_TASK_NAMES", payload: names });
           }
         );
       } catch (err) {

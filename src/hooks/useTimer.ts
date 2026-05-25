@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useApp, useApi } from "../store/context";
 
@@ -10,27 +9,21 @@ export function useTimer() {
   const [elapsed, setElapsed] = useState(0); // seconds
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Update elapsed time every second based on timestamp (no drift)
+  // Local counter for the in-app timer view. The tray clock is driven by Rust
+  // because WebKit throttles setInterval when the window is hidden.
   useEffect(() => {
     if (timer.isRunning && timer.startTime) {
       const updateElapsed = () => {
         const start = new Date(timer.startTime!).getTime();
-        const seconds = Math.floor((Date.now() - start) / 1000);
-        setElapsed(seconds);
-        invoke("set_timer_status", {
-          running: true,
-          elapsedText: formatTime(seconds),
-        }).catch(() => {});
+        setElapsed(Math.floor((Date.now() - start) / 1000));
       };
       updateElapsed();
       intervalRef.current = setInterval(updateElapsed, 1000);
       return () => {
         if (intervalRef.current) clearInterval(intervalRef.current);
       };
-    } else {
-      setElapsed(0);
-      invoke("set_timer_status", { running: false, elapsedText: null }).catch(() => {});
     }
+    setElapsed(0);
   }, [timer.isRunning, timer.startTime]);
 
   const start = useCallback(() => {

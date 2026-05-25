@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react";
 import { useApp } from "../store/context";
 import { saveFlexConfig, type FlexConfig } from "../store/flex-store";
+import { saveDisplayPrefs } from "../store/display-store";
 import { calculateFlex, formatFlexMinutes } from "../utils/flex";
 import { fmtDate } from "../utils/week";
 
-export type SettingsTab = "flex" | "account";
+export type SettingsTab = "flex" | "display" | "account";
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -48,6 +49,16 @@ export function SettingsView({ onBack, defaultTab = "flex" }: SettingsViewProps)
           Flex
         </button>
         <button
+          onClick={() => setActiveTab("display")}
+          className={`flex-1 py-1.5 text-xs font-medium transition-all ${
+            activeTab === "display"
+              ? "bg-bg-card text-text"
+              : "bg-transparent text-text-muted hover:text-text"
+          }`}
+        >
+          Display
+        </button>
+        <button
           onClick={() => setActiveTab("account")}
           className={`flex-1 py-1.5 text-xs font-medium transition-all ${
             activeTab === "account"
@@ -59,7 +70,57 @@ export function SettingsView({ onBack, defaultTab = "flex" }: SettingsViewProps)
         </button>
       </div>
 
-      {activeTab === "flex" ? <FlexSettings /> : <AccountSettings onBack={onBack} />}
+      {activeTab === "flex" && <FlexSettings />}
+      {activeTab === "display" && <DisplaySettings />}
+      {activeTab === "account" && <AccountSettings onBack={onBack} />}
+    </div>
+  );
+}
+
+function DisplaySettings() {
+  const { state, dispatch } = useApp();
+  const { displayPrefs } = state;
+
+  async function toggleShowInMenuBar() {
+    const next = { ...displayPrefs, showTimerInMenuBar: !displayPrefs.showTimerInMenuBar };
+    dispatch({ type: "SET_DISPLAY_PREFS", payload: next });
+    await saveDisplayPrefs(next).catch(() => {});
+  }
+
+  const enabled = displayPrefs.showTimerInMenuBar;
+
+  return (
+    <div className="px-4 py-4 space-y-4">
+      <div className="bg-bg-card rounded-xl p-4 border border-border">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1">
+            <div className="text-sm font-medium text-text">Show running timer in menu bar</div>
+            <p className="text-xs text-text-muted mt-1">
+              Show today&apos;s total and the task name next to the menu bar icon while a timer is
+              running. Off by default to keep the menu bar tidy.
+            </p>
+          </div>
+          <button
+            onClick={toggleShowInMenuBar}
+            role="switch"
+            aria-checked={enabled}
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+              enabled ? "bg-primary" : "bg-border"
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                enabled ? "translate-x-5" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+
+      <p className="text-[11px] text-text-muted px-1">
+        The tray dropdown always shows the project, task, and description while a timer is running —
+        regardless of this setting.
+      </p>
     </div>
   );
 }
