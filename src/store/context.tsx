@@ -353,7 +353,7 @@ function useTrayDisplayPush(state: AppState) {
       taskName: displayTaskName,
       description: displayDescription,
       dayBaseSeconds: todayBaseMinutes * 60,
-      showInMenuBar: state.displayPrefs.showTimerInMenuBar,
+      menuBarMode: state.displayPrefs.menuBarMode,
     }).catch(() => {});
   }, [
     state.timer.isRunning,
@@ -362,7 +362,7 @@ function useTrayDisplayPush(state: AppState) {
     displayTaskName,
     displayDescription,
     todayBaseMinutes,
-    state.displayPrefs.showTimerInMenuBar,
+    state.displayPrefs.menuBarMode,
   ]);
 }
 

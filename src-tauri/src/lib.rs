@@ -9,6 +9,23 @@ use tauri::{
     Emitter, Manager, Wry,
 };
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MenuBarMode {
+    Off,
+    Compact,
+    Full,
+}
+
+impl MenuBarMode {
+    fn parse(s: &str) -> Self {
+        match s {
+            "compact" => MenuBarMode::Compact,
+            "full" => MenuBarMode::Full,
+            _ => MenuBarMode::Off,
+        }
+    }
+}
+
 #[derive(Clone)]
 struct DisplaySnapshot {
     running: bool,
@@ -35,7 +52,7 @@ struct TrayState {
     snapshot: Mutex<Option<DisplaySnapshot>>,
     last_title: Mutex<Option<String>>,
     last_headline: Mutex<String>,
-    show_in_menu_bar: Mutex<bool>,
+    menu_bar_mode: Mutex<MenuBarMode>,
     window_layout: Mutex<WindowLayout>,
 }
 
@@ -117,11 +134,12 @@ fn apply_tray_state(state: &TrayState, snapshot: Option<&DisplaySnapshot>) -> Re
 
     // Minutes only so the title width changes once per minute rather than once
     // per second; the dropdown headline above carries the live H:MM:SS view.
-    let show_in_menu_bar = *state.show_in_menu_bar.lock().unwrap();
-    let title: Option<String> = if !show_in_menu_bar {
-        None
-    } else {
-        match snapshot {
+    // macOS NSStatusItem doesn't reliably clear when given nil, so the Off
+    // case uses an empty string instead.
+    let mode = *state.menu_bar_mode.lock().unwrap();
+    let title: Option<String> = match mode {
+        MenuBarMode::Off => Some(String::new()),
+        _ => match snapshot {
             Some(s) => {
                 let extra = if s.running {
                     s.start_time_ms.map(elapsed_seconds_now).unwrap_or(0)
@@ -130,22 +148,22 @@ fn apply_tray_state(state: &TrayState, snapshot: Option<&DisplaySnapshot>) -> Re
                 };
                 let total = s.day_base_seconds.saturating_add(extra);
                 let time = format_hours_minutes(total);
+                let padding = "\u{2002}";
+                let glyph = if s.running { "⏸" } else { "▶" };
                 let task = s
                     .task_name
                     .as_deref()
                     .map(str::trim)
                     .filter(|p| !p.is_empty());
-                let padding = "\u{2002}";
-                let glyph = if s.running { "⏸" } else { "▶" };
-                Some(match task {
-                    Some(name) => {
+                Some(match (mode, task) {
+                    (MenuBarMode::Full, Some(name)) => {
                         format!("{padding}{glyph}  {time}  {}", truncate(name, 25))
                     }
-                    None => format!("{padding}{glyph}  {time}"),
+                    _ => format!("{padding}{glyph}  {time}"),
                 })
             }
             None => Some("\u{2002}▶\u{2002}".to_string()),
-        }
+        },
     };
     {
         let mut last = state.last_title.lock().unwrap();
@@ -244,7 +262,7 @@ fn set_timer_status(
     task_name: Option<String>,
     description: Option<String>,
     day_base_seconds: Option<u64>,
-    show_in_menu_bar: bool,
+    menu_bar_mode: String,
 ) -> Result<(), String> {
     let state = app.state::<TrayState>();
     let new_snapshot = if running {
@@ -271,7 +289,7 @@ fn set_timer_status(
     {
         let mut snap = state.snapshot.lock().unwrap();
         *snap = new_snapshot;
-        *state.show_in_menu_bar.lock().unwrap() = show_in_menu_bar;
+        *state.menu_bar_mode.lock().unwrap() = MenuBarMode::parse(&menu_bar_mode);
     }
     let snap = state.snapshot.lock().unwrap();
     apply_tray_state(&state, snap.as_ref())
@@ -601,11 +619,18 @@ pub fn run() {
                         } else if let Some(window) = app.get_webview_window("main") {
                             // Leaving the dock activation policy alone — toggling
                             // it on every hide caused the Dock icon to blink.
+                            // Three states: hidden → show; visible-but-behind →
+                            // raise + focus (don't hide); visible + focused → hide.
                             let visible = window.is_visible().unwrap_or(false);
-                            if visible {
-                                let _ = window.hide();
-                            } else {
+                            let focused = window.is_focused().unwrap_or(false);
+                            if !visible {
                                 show_main_window(app);
+                            } else if !focused {
+                                let _ = window.set_focus();
+                                #[cfg(target_os = "macos")]
+                                set_dock_visible(app, true);
+                            } else {
+                                let _ = window.hide();
                             }
                         }
                     }
@@ -669,7 +694,7 @@ pub fn run() {
                 snapshot: Mutex::new(None),
                 last_title: Mutex::new(None),
                 last_headline: Mutex::new("Timer is not running".to_string()),
-                show_in_menu_bar: Mutex::new(false),
+                menu_bar_mode: Mutex::new(MenuBarMode::Off),
                 window_layout: Mutex::new(WindowLayout::default()),
             });
 

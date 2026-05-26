@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useApp } from "../store/context";
 import { saveFlexConfig, type FlexConfig } from "../store/flex-store";
-import { saveDisplayPrefs } from "../store/display-store";
+import { saveDisplayPrefs, type MenuBarMode } from "../store/display-store";
 import { calculateFlex, formatFlexMinutes } from "../utils/flex";
 import { fmtDate } from "../utils/week";
 
@@ -81,39 +81,55 @@ function DisplaySettings() {
   const { state, dispatch } = useApp();
   const { displayPrefs } = state;
 
-  async function toggleShowInMenuBar() {
-    const next = { ...displayPrefs, showTimerInMenuBar: !displayPrefs.showTimerInMenuBar };
+  async function setMode(mode: MenuBarMode) {
+    if (mode === displayPrefs.menuBarMode) return;
+    const next = { ...displayPrefs, menuBarMode: mode };
     dispatch({ type: "SET_DISPLAY_PREFS", payload: next });
     await saveDisplayPrefs(next).catch(() => {});
   }
 
-  const enabled = displayPrefs.showTimerInMenuBar;
+  const options: { value: MenuBarMode; label: string; hint: string }[] = [
+    { value: "off", label: "Off", hint: "Icon only" },
+    { value: "compact", label: "Compact", hint: "Icon + time" },
+    { value: "full", label: "Full", hint: "Icon + time + task" },
+  ];
 
   return (
     <div className="px-4 py-4 space-y-4">
       <div className="bg-bg-card rounded-xl p-4 border border-border">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1">
-            <div className="text-sm font-medium text-text">Show running timer in menu bar</div>
-            <p className="text-xs text-text-muted mt-1">
-              Show today&apos;s total and the task name next to the menu bar icon while a timer is
-              running. Off by default to keep the menu bar tidy.
-            </p>
-          </div>
-          <button
-            onClick={toggleShowInMenuBar}
-            role="switch"
-            aria-checked={enabled}
-            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-              enabled ? "bg-primary" : "bg-border"
-            }`}
-          >
-            <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-                enabled ? "translate-x-5" : "translate-x-0.5"
+        <div className="text-sm font-medium text-text">Menu bar display</div>
+        <p className="text-xs text-text-muted mt-1 mb-3">
+          How much detail to show next to the menu bar icon while a timer is running.
+        </p>
+        <div className="flex rounded-full border border-border overflow-hidden">
+          {options.map((opt) => {
+            const active = displayPrefs.menuBarMode === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setMode(opt.value)}
+                className={`flex-1 py-1.5 text-xs font-medium transition-all ${
+                  active
+                    ? "bg-primary text-white"
+                    : "bg-transparent text-text-muted hover:text-text"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex mt-1.5">
+          {options.map((opt) => (
+            <div
+              key={opt.value}
+              className={`flex-1 text-center text-[10px] ${
+                displayPrefs.menuBarMode === opt.value ? "text-text" : "text-text-muted"
               }`}
-            />
-          </button>
+            >
+              {opt.hint}
+            </div>
+          ))}
         </div>
       </div>
 
