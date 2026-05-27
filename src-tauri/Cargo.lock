@@ -3000,6 +3000,7 @@ name = "qte-time-tracker"
 version = "0.2.22"
 dependencies = [
  "log",
+ "objc2",
  "serde",
  "serde_json",
  "tauri",

@@ -9,6 +9,21 @@ use tauri::{
     Emitter, Manager, Wry,
 };
 
+// On macOS, Control+click is the system convention for "secondary click" but
+// NSStatusItem only reports it as a plain left-click — we have to query
+// NSEvent ourselves to recover the modifier state.
+#[cfg(target_os = "macos")]
+fn control_key_held() -> bool {
+    use objc2::msg_send;
+    use objc2::runtime::AnyClass;
+    const NS_EVENT_MODIFIER_FLAG_CONTROL: usize = 1 << 18;
+    let Some(class) = AnyClass::get(c"NSEvent") else {
+        return false;
+    };
+    let flags: usize = unsafe { msg_send![class, modifierFlags] };
+    flags & NS_EVENT_MODIFIER_FLAG_CONTROL != 0
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum MenuBarMode {
     Off,
@@ -589,6 +604,17 @@ pub fn run() {
                         rect,
                         ..
                     } => {
+                        // Treat Control+click as a right-click so trackpad
+                        // users get the context menu without two fingers.
+                        #[cfg(target_os = "macos")]
+                        if control_key_held() {
+                            let app = tray.app_handle();
+                            let state = app.state::<TrayState>();
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = state.menu.popup(window.as_ref().window().clone());
+                            }
+                            return;
+                        }
                         let rect_x = match rect.position {
                             tauri::Position::Physical(p) => p.x as f64,
                             tauri::Position::Logical(p) => p.x,
