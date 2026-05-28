@@ -21,8 +21,8 @@
     /* bg-dark inverts in dark mode so tooltips (dark-bg/light-text on light
        mode) flip to light-bg/dark-text and stay readable. */
     --color-bg-dark: #f0edeb;
-    --color-text: #e8e8ea;
-    --color-text-muted: #98989e;
+    --color-text: #f4f4f6;
+    --color-text-muted: #b8b8be;
     --color-border: #36363a;
     --color-divider: #2a2a2e;
   }
