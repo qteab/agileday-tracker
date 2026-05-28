@@ -158,7 +158,7 @@ export function Timer({ onStopRef }: TimerProps) {
           {showSuggestions && !isRunning && filtered.length > 0 && (
             <div
               ref={suggestionsRef}
-              className="absolute left-0 right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-border z-50 overflow-hidden"
+              className="absolute left-0 right-0 top-full mt-2 bg-bg-card rounded-lg shadow-lg border border-border z-50 overflow-hidden"
             >
               <div className="px-3 py-1.5 text-[10px] font-semibold text-text-muted uppercase tracking-wide">
                 Previously tracked
