@@ -16,15 +16,15 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #1a1024;
-    --color-bg-card: #251a32;
+    --color-bg: #1c1c1f;
+    --color-bg-card: #26262a;
     /* bg-dark inverts in dark mode so tooltips (dark-bg/light-text on light
        mode) flip to light-bg/dark-text and stay readable. */
     --color-bg-dark: #f0edeb;
-    --color-text: #ece6f0;
-    --color-text-muted: #a99fc0;
-    --color-border: #3a2d4a;
-    --color-divider: #2e2240;
+    --color-text: #e8e8ea;
+    --color-text-muted: #98989e;
+    --color-border: #36363a;
+    --color-divider: #2a2a2e;
   }
 }
 
