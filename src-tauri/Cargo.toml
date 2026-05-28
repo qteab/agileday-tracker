@@ -1,6 +1,6 @@
 [package]
 name = "qte-time-tracker"
-version = "0.2.22"
+version = "0.3.0"
 description = "QTE Time Tracker — AgileDay menu bar app"
 authors = ["QTE"]
 license = ""
