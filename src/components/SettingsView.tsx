@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react";
 import { useApp } from "../store/context";
 import { saveFlexConfig, type FlexConfig } from "../store/flex-store";
+import { saveDisplayPrefs, type MenuBarMode } from "../store/display-store";
 import { calculateFlex, formatFlexMinutes } from "../utils/flex";
 import { fmtDate } from "../utils/week";
 
-export type SettingsTab = "flex" | "account";
+export type SettingsTab = "flex" | "display" | "account";
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -48,6 +49,16 @@ export function SettingsView({ onBack, defaultTab = "flex" }: SettingsViewProps)
           Flex
         </button>
         <button
+          onClick={() => setActiveTab("display")}
+          className={`flex-1 py-1.5 text-xs font-medium transition-all ${
+            activeTab === "display"
+              ? "bg-bg-card text-text"
+              : "bg-transparent text-text-muted hover:text-text"
+          }`}
+        >
+          Display
+        </button>
+        <button
           onClick={() => setActiveTab("account")}
           className={`flex-1 py-1.5 text-xs font-medium transition-all ${
             activeTab === "account"
@@ -59,7 +70,73 @@ export function SettingsView({ onBack, defaultTab = "flex" }: SettingsViewProps)
         </button>
       </div>
 
-      {activeTab === "flex" ? <FlexSettings /> : <AccountSettings onBack={onBack} />}
+      {activeTab === "flex" && <FlexSettings />}
+      {activeTab === "display" && <DisplaySettings />}
+      {activeTab === "account" && <AccountSettings onBack={onBack} />}
+    </div>
+  );
+}
+
+function DisplaySettings() {
+  const { state, dispatch } = useApp();
+  const { displayPrefs } = state;
+
+  async function setMode(mode: MenuBarMode) {
+    if (mode === displayPrefs.menuBarMode) return;
+    const next = { ...displayPrefs, menuBarMode: mode };
+    dispatch({ type: "SET_DISPLAY_PREFS", payload: next });
+    await saveDisplayPrefs(next).catch(() => {});
+  }
+
+  const options: { value: MenuBarMode; label: string; hint: string }[] = [
+    { value: "off", label: "Off", hint: "Icon only" },
+    { value: "compact", label: "Compact", hint: "Icon + time" },
+    { value: "full", label: "Full", hint: "Icon + time + task" },
+  ];
+
+  return (
+    <div className="px-4 py-4 space-y-4">
+      <div className="bg-bg-card rounded-xl p-4 border border-border">
+        <div className="text-sm font-medium text-text">Menu bar display</div>
+        <p className="text-xs text-text-muted mt-1 mb-3">
+          How much detail to show next to the menu bar icon while a timer is running.
+        </p>
+        <div className="flex rounded-full border border-border overflow-hidden">
+          {options.map((opt) => {
+            const active = displayPrefs.menuBarMode === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setMode(opt.value)}
+                className={`flex-1 py-1.5 text-xs font-medium transition-all ${
+                  active
+                    ? "bg-primary text-white"
+                    : "bg-transparent text-text-muted hover:text-text"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex mt-1.5">
+          {options.map((opt) => (
+            <div
+              key={opt.value}
+              className={`flex-1 text-center text-[10px] ${
+                displayPrefs.menuBarMode === opt.value ? "text-text" : "text-text-muted"
+              }`}
+            >
+              {opt.hint}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <p className="text-[11px] text-text-muted px-1">
+        The tray dropdown always shows the project, task, and description while a timer is running —
+        regardless of this setting.
+      </p>
     </div>
   );
 }

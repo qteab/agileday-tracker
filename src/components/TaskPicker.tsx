@@ -23,9 +23,14 @@ export function TaskPicker({ projectId, selectedId, onSelect }: TaskPickerProps)
     }
     api.getTasks(projectId).then((tasks) => {
       dispatch({ type: "SET_TASKS", payload: tasks });
-      const map: Record<string, boolean> = {};
-      for (const t of tasks) map[t.id] = t.billable;
-      dispatch({ type: "MERGE_TASK_BILLABLE", payload: map });
+      const billable: Record<string, boolean> = {};
+      const names: Record<string, string> = {};
+      for (const t of tasks) {
+        billable[t.id] = t.billable;
+        names[t.id] = t.name;
+      }
+      dispatch({ type: "MERGE_TASK_BILLABLE", payload: billable });
+      dispatch({ type: "MERGE_TASK_NAMES", payload: names });
     });
   }, [projectId, api, dispatch]);
 
