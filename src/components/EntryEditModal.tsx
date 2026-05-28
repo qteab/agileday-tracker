@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useApp, useApi } from "../store/context";
 import { ProjectPicker } from "./ProjectPicker";
-import { mergeDescriptions, removeDescription } from "../api/agileday";
 import type { TimeEntry } from "../api/types";
 
 interface EntryEditModalProps {
@@ -45,36 +44,12 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
     const mins = parseInt(parts[0] || "0") * 60 + parseInt(parts[1] || "0");
 
     try {
-      // Calculate group total: other sessions sharing the same AgileDay entry + this session's new value
-      const otherSessions = state.entries.filter((e) => {
-        if (e.id === entry.id || e.projectId !== entry.projectId || e.date !== entry.date)
-          return false;
-        return (e.taskId ?? "") === (entry.taskId ?? "");
-      });
-      const groupTotal = otherSessions.reduce((s, e) => s + e.minutes, 0) + mins;
-
-      // Find the real AgileDay entry to update
-      const allRecent = await api.getTimeEntries(state.employee.id, entry.date, entry.date);
-      const agileMatch = allRecent.find((e) => {
-        if (e.projectId !== entry.projectId || e.id.startsWith("summary-")) return false;
-        return (e.taskId ?? "") === (entry.taskId ?? "");
+      await api.updateTimeEntry(state.employee.id, entry.id, {
+        description,
+        projectId,
+        minutes: mins,
       });
 
-      if (agileMatch) {
-        // Swap old description for new in the grouped string
-        const afterRemove = removeDescription(agileMatch.description, entry.description);
-        const updatedDescription = description
-          ? mergeDescriptions(afterRemove, description)
-          : afterRemove;
-
-        await api.updateTimeEntry(state.employee.id, agileMatch.id, {
-          description: updatedDescription,
-          projectId,
-          minutes: groupTotal,
-        });
-      }
-
-      // Update local state
       dispatch({
         type: "UPDATE_ENTRY",
         payload: {
@@ -103,39 +78,8 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
     setDeleting(true);
     setDeleteError("");
 
-    // Calculate remaining total BEFORE removing from local state.
-    // All sessions for the same project+task+date share one AgileDay entry.
-    const remaining = state.entries.filter((e) => {
-      if (e.id === entry.id || e.projectId !== entry.projectId || e.date !== entry.date)
-        return false;
-      return (e.taskId ?? "") === (entry.taskId ?? "");
-    });
-    const remainingMinutes = remaining.reduce((s, e) => s + e.minutes, 0);
-
     try {
-      // Sync to AgileDay first — if this fails, local state stays intact
-      const allRecent = await api.getTimeEntries(state.employee.id, entry.date, entry.date);
-      const agileMatch = allRecent.find((e) => {
-        if (e.projectId !== entry.projectId || e.id.startsWith("summary-")) return false;
-        return (e.taskId ?? "") === (entry.taskId ?? "");
-      });
-
-      if (agileMatch) {
-        if (remainingMinutes > 0) {
-          const updates: Partial<TimeEntry> = { minutes: remainingMinutes };
-
-          // Remove this session's description from the grouped description
-          if (entry.description) {
-            updates.description = removeDescription(agileMatch.description, entry.description);
-          }
-
-          await api.updateTimeEntry(state.employee.id, agileMatch.id, updates);
-        } else {
-          await api.deleteTimeEntry([agileMatch.id]);
-        }
-      }
-
-      // API succeeded — now remove from local state
+      await api.deleteTimeEntry([entry.id]);
       dispatch({ type: "DELETE_ENTRY", payload: entry.id });
       onClose();
     } catch (err) {
