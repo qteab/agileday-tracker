@@ -61,6 +61,11 @@ function AuthenticatedApp() {
 
   const handleContinue = useCallback(
     (entry: TimeEntry) => {
+      // Save the currently running timer (if any) before starting the new one,
+      // otherwise the in-progress minutes are silently discarded.
+      if (state.timer.isRunning) {
+        stopTimerRef.current?.();
+      }
       dispatch({
         type: "SET_TIMER",
         payload: {
@@ -72,7 +77,7 @@ function AuthenticatedApp() {
         },
       });
     },
-    [dispatch]
+    [dispatch, state.timer.isRunning]
   );
 
   const handleStop = useCallback(() => {
