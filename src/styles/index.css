@@ -14,6 +14,20 @@
   --color-danger: #e5484d;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #1c1c1f;
+    --color-bg-card: #26262a;
+    /* bg-dark inverts in dark mode so tooltips (dark-bg/light-text on light
+       mode) flip to light-bg/dark-text and stay readable. */
+    --color-bg-dark: #f0edeb;
+    --color-text: #f4f4f6;
+    --color-text-muted: #b8b8be;
+    --color-border: #36363a;
+    --color-divider: #2a2a2e;
+  }
+}
+
 body {
   margin: 0;
   padding: 0;

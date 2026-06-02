@@ -149,7 +149,7 @@ function RoundingInfoPanel({ onClose }: { onClose: () => void }) {
           <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">
             Example
           </h4>
-          <div className="bg-white rounded-lg border border-border p-3 text-sm space-y-2">
+          <div className="bg-bg-card rounded-lg border border-border p-3 text-sm space-y-2">
             <p className="text-text-muted">
               Project A on Monday: 2:30 + 1:17 = <strong>3:47</strong>
             </p>
@@ -301,7 +301,7 @@ function WeekList({
               onSelect(week);
             }
           }}
-          className="w-full text-left bg-white rounded-lg border border-border p-3 hover:border-text-muted transition-colors cursor-pointer"
+          className="w-full text-left bg-bg-card rounded-lg border border-border p-3 hover:border-text-muted transition-colors cursor-pointer"
         >
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm font-medium text-text">{week.label}</span>
@@ -462,7 +462,7 @@ function WeekDetail({
           const adjustedOff = dayAdjusted !== WORKDAY_MINUTES;
 
           return (
-            <div key={date} className="bg-white rounded-lg border border-border overflow-hidden">
+            <div key={date} className="bg-bg-card rounded-lg border border-border overflow-hidden">
               <div className="flex items-center justify-between px-3 py-2 bg-bg/50 border-b border-border">
                 <span className="text-xs font-medium text-text">{formatDayLabel(date)}</span>
                 <span

@@ -401,16 +401,20 @@ export function createAgileDayProvider(
 
       const desc = entry.description ?? "";
 
-      // 1. Query for existing SAVED entries with same project+task+date
+      // 1. Query for existing editable entries with same project+task+date.
+      //    Entries created via AgileDay's web UI start out in NEW status; if we
+      //    filter to SAVED only, the merge misses them and we POST a duplicate
+      //    instead of patching the existing entry. CHANGE_REQUESTED is also
+      //    editable (manager has asked for revisions but hasn't locked it).
+      const EDITABLE_STATUSES = new Set(["NEW", "SAVED", "CHANGE_REQUESTED"]);
       const updatedAfter = new Date(entry.date + "T00:00:00Z").toISOString();
       const allRecent = await apiFetch<RawEntry[]>(
         `/v1/time_entry/employee/id/${employeeId}/updated?updatedAfter=${updatedAfter}`
       ).catch(() => [] as RawEntry[]);
 
       const matches = allRecent.filter((e) => {
-        if (e.projectId !== entry.projectId || e.date !== entry.date || e.status !== "SAVED") {
-          return false;
-        }
+        if (e.projectId !== entry.projectId || e.date !== entry.date) return false;
+        if (!EDITABLE_STATUSES.has(e.status)) return false;
         // Match by project+task+date only (ignore description)
         const eTask = e.taskId ?? "";
         const entryTask = entry.taskId ?? "";

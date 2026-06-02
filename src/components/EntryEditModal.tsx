@@ -92,7 +92,7 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4">
       <div className="fixed inset-0 bg-black/20" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm p-5 space-y-4">
+      <div className="relative bg-bg-card rounded-xl shadow-xl w-full max-w-sm p-5 space-y-4">
         {/* Close button */}
         <button
           onClick={onClose}
