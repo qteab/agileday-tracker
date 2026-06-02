@@ -63,7 +63,7 @@ export function ProjectPicker({ selectedId, onSelect }: ProjectPickerProps) {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg hover:bg-bg transition-colors"
+        className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg hover:bg-bg-card/60 transition-colors"
       >
         {selected ? (
           <>

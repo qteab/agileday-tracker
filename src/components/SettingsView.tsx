@@ -16,9 +16,9 @@ export function SettingsView({ onBack, defaultTab = "flex" }: SettingsViewProps)
   const [activeTab, setActiveTab] = useState<SettingsTab>(defaultTab);
 
   return (
-    <div className="flex flex-col flex-1 overflow-y-auto">
+    <div className="flex flex-col flex-1 min-h-0">
       {/* Header with back button */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+      <div className="flex shrink-0 items-center gap-2 px-4 py-3 border-b border-border">
         <button
           onClick={onBack}
           className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text transition-colors rounded-lg hover:bg-bg"
@@ -37,7 +37,7 @@ export function SettingsView({ onBack, defaultTab = "flex" }: SettingsViewProps)
       </div>
 
       {/* Tab switcher */}
-      <div className="flex mx-4 mt-3 rounded-full border border-border overflow-hidden">
+      <div className="flex shrink-0 mx-4 mt-3 rounded-full border border-border overflow-hidden">
         <button
           onClick={() => setActiveTab("flex")}
           className={`flex-1 py-1.5 text-xs font-medium transition-all ${
@@ -70,9 +70,11 @@ export function SettingsView({ onBack, defaultTab = "flex" }: SettingsViewProps)
         </button>
       </div>
 
-      {activeTab === "flex" && <FlexSettings />}
-      {activeTab === "display" && <DisplaySettings />}
-      {activeTab === "account" && <AccountSettings onBack={onBack} />}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        {activeTab === "flex" && <FlexSettings />}
+        {activeTab === "display" && <DisplaySettings />}
+        {activeTab === "account" && <AccountSettings onBack={onBack} />}
+      </div>
     </div>
   );
 }
