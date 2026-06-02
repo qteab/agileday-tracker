@@ -16,6 +16,8 @@ export function TimeEntry({ entry, onContinue, onStop }: TimeEntryProps) {
   const [editing, setEditing] = useState(false);
   const project = state.projects.find((p) => p.id === entry.projectId);
   const isSubmitted = entry.status === "SUBMITTED" || entry.status === "APPROVED";
+  const isPending = entry.syncStatus === "pending";
+  const isLocked = isSubmitted || isPending;
   const { timer } = state;
   const isThisRunning =
     timer.isRunning &&
@@ -27,16 +29,19 @@ export function TimeEntry({ entry, onContinue, onStop }: TimeEntryProps) {
     <>
       <div
         onClick={() => {
-          if (isSubmitted) {
-            // Brief visual feedback that it's locked
-          } else {
-            setEditing(true);
-          }
+          if (isLocked) return;
+          setEditing(true);
         }}
         className={`group flex items-center gap-3 px-3 py-3 transition-colors ${
-          isSubmitted ? "opacity-75 cursor-default" : "hover:bg-bg/40 cursor-pointer"
+          isLocked ? "opacity-75 cursor-default" : "hover:bg-bg/40 cursor-pointer"
         }`}
-        title={isSubmitted ? "Submitted entries can only be edited in AgileDay" : undefined}
+        title={
+          isSubmitted
+            ? "Submitted entries can only be edited in AgileDay"
+            : isPending
+              ? "Saving — please wait"
+              : undefined
+        }
       >
         <div className="flex-1 min-w-0">
           <p className="text-sm text-text truncate" title={entry.description || undefined}>
@@ -114,9 +119,7 @@ export function TimeEntry({ entry, onContinue, onStop }: TimeEntryProps) {
         </div>
       </div>
 
-      {editing && !isSubmitted && (
-        <EntryEditModal entry={entry} onClose={() => setEditing(false)} />
-      )}
+      {editing && !isLocked && <EntryEditModal entry={entry} onClose={() => setEditing(false)} />}
     </>
   );
 }

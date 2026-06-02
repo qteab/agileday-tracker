@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useApp, useApi } from "../store/context";
+import { mergeDescriptions } from "../api/agileday";
 
 export function useTimer() {
   const { state, dispatch } = useApp();
@@ -55,27 +56,53 @@ export function useTimer() {
     // Reset timer immediately so user can start a new one
     dispatch({ type: "RESET_TIMER" });
 
-    // 1. Always add individual session to local state (for the UI)
-    const localEntry = {
-      id: crypto.randomUUID(),
-      description,
-      projectId: projectId!,
-      projectName: project?.name,
-      openingId,
-      taskId: taskId ?? undefined,
-      date,
-      startTime,
-      endTime,
-      minutes,
-      status: "SAVED" as const,
-      syncStatus: "pending" as const,
-    };
-    dispatch({ type: "ADD_ENTRY", payload: localEntry });
+    // Merge-or-add: one local row per (projectId, taskId, date), mirroring AgileDay.
+    const existing = state.entries.find(
+      (e) => e.projectId === projectId && (e.taskId ?? null) === (taskId ?? null) && e.date === date
+    );
+
+    let workingId: string;
+    if (existing) {
+      workingId = existing.id;
+      dispatch({
+        type: "UPDATE_ENTRY",
+        payload: {
+          id: existing.id,
+          updates: {
+            description: description
+              ? mergeDescriptions(existing.description, description)
+              : existing.description,
+            minutes: existing.minutes + minutes,
+            endTime,
+            syncStatus: "pending",
+          },
+        },
+      });
+    } else {
+      workingId = crypto.randomUUID();
+      dispatch({
+        type: "ADD_ENTRY",
+        payload: {
+          id: workingId,
+          description,
+          projectId: projectId!,
+          projectName: project?.name,
+          openingId,
+          taskId: taskId ?? undefined,
+          date,
+          startTime,
+          endTime,
+          minutes,
+          status: "SAVED",
+          syncStatus: "pending",
+        },
+      });
+    }
 
     try {
       // Send only THIS session's minutes — the provider handles
-      // finding existing entries and adding to their total
-      await api.createTimeEntry(employee.id, {
+      // finding existing AgileDay entries and adding to their total
+      const created = await api.createTimeEntry(employee.id, {
         description,
         projectId: projectId!,
         projectName: project?.name,
@@ -87,14 +114,25 @@ export function useTimer() {
         minutes,
         status: "SAVED",
       });
+      // Adopt the real AgileDay id and authoritative description/minutes so the
+      // local row stays 1:1 with the server.
       dispatch({
         type: "UPDATE_ENTRY",
-        payload: { id: localEntry.id, updates: { syncStatus: "synced" } },
+        payload: {
+          id: workingId,
+          updates: {
+            id: created.id,
+            description: created.description,
+            minutes: created.minutes,
+            status: created.status,
+            syncStatus: "synced",
+          },
+        },
       });
     } catch (err) {
       dispatch({
         type: "UPDATE_ENTRY",
-        payload: { id: localEntry.id, updates: { syncStatus: "unsaved" } },
+        payload: { id: workingId, updates: { syncStatus: "unsaved" } },
       });
       const reason = err instanceof Error ? err.message : "Unknown error";
       dispatch({
