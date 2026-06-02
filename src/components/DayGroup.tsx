@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { TimeEntry } from "./TimeEntry";
 import { formatMinutes } from "../hooks/useTimer";
+import { useApp } from "../store/context";
 import type { TimeEntry as TimeEntryType } from "../api/types";
 
 interface DayGroupProps {
@@ -25,8 +27,30 @@ function formatDate(dateStr: string): string {
   });
 }
 
+function localDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export function DayGroup({ date, entries, onContinue, onStop }: DayGroupProps) {
-  const totalMinutes = entries.reduce((sum, e) => sum + e.minutes, 0);
+  const { state } = useApp();
+  const { timer } = state;
+  const timerOnThisDay =
+    timer.isRunning && timer.startTime !== null && localDate(timer.startTime) === date;
+
+  // Re-render every second while a timer is ticking for this day so the
+  // header total stays current.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!timerOnThisDay) return;
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [timerOnThisDay]);
+
+  const runningMinutes = timerOnThisDay
+    ? Math.max(1, Math.round((Date.now() - new Date(timer.startTime!).getTime()) / 60000))
+    : 0;
+  const totalMinutes = entries.reduce((sum, e) => sum + e.minutes, 0) + runningMinutes;
   const sorted = [...entries].sort((a, b) => b.startTime.localeCompare(a.startTime));
 
   return (
