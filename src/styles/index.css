@@ -14,6 +14,30 @@
   --color-danger: #e5484d;
 }
 
+/*
+ * Dark theme: the `dark` class on <html> is toggled by utils/theme.ts. Because
+ * components reference these as CSS variables (bg-bg, text-text, …), overriding
+ * the values here is enough to flip the whole UI.
+ *
+ * Note: --color-primary-dark/-light name *shades* of primary used for hover and
+ * the scrollbar — in dark mode the "dark" shade is lighter so hover still reads.
+ * --color-bg-dark is the tooltip surface (paired with text-bg-card), so it is
+ * inverted to a light value to keep tooltips legible.
+ */
+:root.dark {
+  --color-primary: #7a59fc;
+  --color-primary-dark: #9078ff;
+  --color-primary-light: #3a3a42;
+  --color-bg: #121214;
+  --color-bg-card: #1e1e22;
+  --color-bg-dark: #ededf0;
+  --color-text: #ededf0;
+  --color-text-muted: #9a9aa2;
+  --color-border: #2c2c32;
+  --color-divider: #26262b;
+  --color-danger: #ff6b6f;
+}
+
 body {
   margin: 0;
   padding: 0;

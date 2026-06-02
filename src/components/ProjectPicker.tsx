@@ -63,7 +63,7 @@ export function ProjectPicker({ selectedId, onSelect }: ProjectPickerProps) {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg hover:bg-white/60 transition-colors"
+        className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg hover:bg-bg transition-colors"
       >
         {selected ? (
           <>
@@ -88,7 +88,7 @@ export function ProjectPicker({ selectedId, onSelect }: ProjectPickerProps) {
 
       {open && (
         <div
-          className="fixed left-3 right-3 mt-1 bg-white rounded-xl shadow-lg border border-border z-50 overflow-hidden"
+          className="fixed left-3 right-3 mt-1 bg-bg-card rounded-xl shadow-lg border border-border z-50 overflow-hidden"
           style={{
             top: ref.current ? ref.current.getBoundingClientRect().bottom + "px" : undefined,
           }}

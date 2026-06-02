@@ -32,7 +32,7 @@ Settings and Finalize are triggered by tray menu events or header buttons.
 | **AllocationView** | `AllocationView.tsx` | Week/month allocation vs actual hours comparison. Shows per-project breakdowns. |
 | **FinalizeView** | `FinalizeView.tsx` | Timesheet submission UI: week summaries, per-day detail, rounding confirmation (15-min increments). |
 | **FlexView** | `FlexView.tsx` | Flex time balance display: hourly delta per week from configured start date. |
-| **SettingsView** | `SettingsView.tsx` | Tabbed settings: Account (name, email, logout), Flex (start date, initial hours), Holidays, About (version). |
+| **SettingsView** | `SettingsView.tsx` | Tabbed settings: Flex (start date, initial hours), Display (menu-bar mode), Account (appearance/theme, name, email, logout). |
 | **LoginScreen** | `LoginScreen.tsx` | OAuth "Sign in with AgileDay" button. Shown when not authenticated. |
 
 ### Alerts & Indicators
@@ -67,7 +67,7 @@ Key behaviors:
 ## Styling
 
 - **Tailwind CSS 4** via `@tailwindcss/vite` plugin
-- Custom theme in `src/styles/index.css` using `@theme` directive:
+- Custom theme in `src/styles/index.css` using `@theme` directive (light values on `:root`):
   - `--color-primary: #7a59fc` (purple)
   - `--color-bg: #f0edeb` (warm gray)
   - `--color-bg-card: #ffffff`
@@ -77,7 +77,20 @@ Key behaviors:
 - System font stack: `-apple-system, BlinkMacSystemFont, ...`
 - Custom scrollbar styling (thin, primary-light color)
 - `user-select: none` on body (text selection only in inputs)
-- No dark mode currently
+
+### Dark mode
+
+Theme is a user preference (`DisplayPrefs.theme`: `"system" | "light" | "dark"`, default `"system"`), persisted in `display.json` alongside the menu-bar mode. The control lives in **Settings → Account → Appearance**.
+
+How it works:
+- `src/utils/theme.ts` resolves the preference (`"system"` → `prefers-color-scheme`) and toggles a `dark` class on `<html>` plus `style.colorScheme`.
+- `index.css` defines `:root.dark { … }` overriding the same `@theme` variable *values*. Because components reference semantic vars (`bg-bg`, `text-text`, `bg-bg-card`, `border-border`, …), the whole UI flips with no `dark:` utilities.
+- `useThemeSync` (in `context.tsx`) applies the theme on pref change and, while `"system"`, listens for live OS appearance changes. `main.tsx` calls `applyTheme("system")` before first paint to avoid a flash.
+
+Caveats baked into the dark palette:
+- `--color-primary-dark` is the *hover* shade for primary buttons — in dark mode it's set *lighter* than primary so hover still reads.
+- `--color-bg-dark` is the tooltip surface (used with `text-bg-card` in `AllocationView`), so dark mode inverts it to a light value to keep tooltips legible.
+- Hardcoded exceptions: the `EntryEditModal` backdrop stays `bg-black/20` (works in both themes); `SubmissionAlert` banner tints (amber/red) are intentionally theme-independent callouts.
 
 ## Patterns
 

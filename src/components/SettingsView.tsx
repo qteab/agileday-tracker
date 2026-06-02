@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useApp } from "../store/context";
 import { saveFlexConfig, type FlexConfig } from "../store/flex-store";
-import { saveDisplayPrefs, type MenuBarMode } from "../store/display-store";
+import { saveDisplayPrefs, type MenuBarMode, type ThemeMode } from "../store/display-store";
 import { calculateFlex, formatFlexMinutes } from "../utils/flex";
 import { fmtDate } from "../utils/week";
 
@@ -307,51 +307,94 @@ function FlexSettings() {
 }
 
 function AccountSettings({ onBack }: { onBack: () => void }) {
-  const { state, logout } = useApp();
+  const { state, dispatch, logout } = useApp();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const { displayPrefs } = state;
+
+  async function setTheme(theme: ThemeMode) {
+    if (theme === displayPrefs.theme) return;
+    const next = { ...displayPrefs, theme };
+    dispatch({ type: "SET_DISPLAY_PREFS", payload: next });
+    await saveDisplayPrefs(next).catch(() => {});
+  }
+
+  const themeOptions: { value: ThemeMode; label: string }[] = [
+    { value: "system", label: "System" },
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+  ];
 
   return (
-    <div className="px-4 py-4">
-      {state.employee && (
-        <p className="text-xs text-text-muted mb-3">
-          Signed in as {state.employee.name} ({state.employee.email})
+    <div className="px-4 py-4 space-y-4">
+      {/* Appearance */}
+      <div className="bg-bg-card rounded-xl p-4 border border-border">
+        <div className="text-sm font-medium text-text">Appearance</div>
+        <p className="text-xs text-text-muted mt-1 mb-3">
+          Pick a theme, or follow your macOS system setting.
         </p>
-      )}
-      {showLogoutConfirm ? (
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-text-muted">Are you sure?</span>
+        <div className="flex rounded-full border border-border overflow-hidden">
+          {themeOptions.map((opt) => {
+            const active = displayPrefs.theme === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setTheme(opt.value)}
+                className={`flex-1 py-1.5 text-xs font-medium transition-all ${
+                  active
+                    ? "bg-primary text-white"
+                    : "bg-transparent text-text-muted hover:text-text"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Account */}
+      <div className="bg-bg-card rounded-xl p-4 border border-border">
+        {state.employee && (
+          <p className="text-xs text-text-muted mb-3">
+            Signed in as {state.employee.name} ({state.employee.email})
+          </p>
+        )}
+        {showLogoutConfirm ? (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-text-muted">Are you sure?</span>
+            <button
+              onClick={() => {
+                logout();
+                onBack();
+              }}
+              className="px-3 py-1.5 text-xs font-medium text-white bg-danger rounded-lg hover:bg-danger/90 transition-colors"
+            >
+              Sign out
+            </button>
+            <button
+              onClick={() => setShowLogoutConfirm(false)}
+              className="px-3 py-1.5 text-xs font-medium text-text-muted bg-bg rounded-lg hover:bg-border transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
           <button
-            onClick={() => {
-              logout();
-              onBack();
-            }}
-            className="px-3 py-1.5 text-xs font-medium text-white bg-danger rounded-lg hover:bg-danger/90 transition-colors"
+            onClick={() => setShowLogoutConfirm(true)}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-danger bg-danger/10 rounded-lg hover:bg-danger/20 transition-colors"
           >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              />
+            </svg>
             Sign out
           </button>
-          <button
-            onClick={() => setShowLogoutConfirm(false)}
-            className="px-3 py-1.5 text-xs font-medium text-text-muted bg-bg rounded-lg hover:bg-border transition-colors"
-          >
-            Cancel
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={() => setShowLogoutConfirm(true)}
-          className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-danger bg-danger/10 rounded-lg hover:bg-danger/20 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-            />
-          </svg>
-          Sign out
-        </button>
-      )}
+        )}
+      </div>
     </div>
   );
 }

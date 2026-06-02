@@ -29,6 +29,8 @@ import { loadTimerState, saveTimerState, clearTimerState } from "./timer-store";
 import { loadFlexConfig } from "./flex-store";
 import { loadDisplayPrefs } from "./display-store";
 import { loadWindowLayout, saveWindowLayout, type WindowLayout } from "./window-store";
+import { applyTheme, watchSystemTheme } from "../utils/theme";
+import type { ThemeMode } from "./display-store";
 
 interface AppContextValue {
   state: AppState;
@@ -94,6 +96,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useTrayMenuSyncTrigger(setSyncCounter);
   useVisibilityTokenRefresh(authStateRef, setAuthState);
   useDisplayPrefsBootstrap(dispatch);
+  useThemeSync(state.displayPrefs.theme);
   useWindowDockSnap();
   useTimerRestore(dispatch, setTimerLoaded);
   useTimerPersistence(state.timer, timerLoaded);
@@ -210,6 +213,16 @@ function useDisplayPrefsBootstrap(dispatch: React.Dispatch<AppAction>) {
       .then((prefs) => dispatch({ type: "SET_DISPLAY_PREFS", payload: prefs }))
       .catch(() => {});
   }, [dispatch]);
+}
+
+// Apply the chosen theme to the document, and while "system" is selected keep
+// it in sync with live macOS appearance changes.
+function useThemeSync(mode: ThemeMode) {
+  useEffect(() => {
+    applyTheme(mode);
+    if (mode !== "system") return;
+    return watchSystemTheme(() => applyTheme("system"));
+  }, [mode]);
 }
 
 // Persist where the user drags the window. Dropping it near the top edge
