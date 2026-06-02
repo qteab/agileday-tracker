@@ -81,7 +81,7 @@ export function SubmissionAlert({ entries, onOpenFinalize, dismissedWeeks }: Sub
       <span className="flex-1">{message}</span>
       <button
         onClick={onOpenFinalize}
-        className="px-3 py-1 text-[10px] font-semibold rounded-lg bg-white text-text shadow-sm hover:bg-bg transition-colors"
+        className="px-3 py-1 text-[10px] font-semibold rounded-lg bg-bg-card text-text shadow-sm hover:bg-bg transition-colors"
       >
         Finalize
       </button>

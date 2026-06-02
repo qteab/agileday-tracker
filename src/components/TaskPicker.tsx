@@ -50,7 +50,7 @@ export function TaskPicker({ projectId, selectedId, onSelect }: TaskPickerProps)
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg hover:bg-white/60 transition-colors"
+        className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg hover:bg-bg-card/60 transition-colors"
       >
         <svg
           className="w-3.5 h-3.5 text-text-muted"
@@ -72,7 +72,7 @@ export function TaskPicker({ projectId, selectedId, onSelect }: TaskPickerProps)
 
       {open && (
         <div
-          className="fixed left-3 right-3 mt-1 bg-white rounded-xl shadow-lg border border-border z-50 py-1 max-h-56 overflow-y-auto"
+          className="fixed left-3 right-3 mt-1 bg-bg-card rounded-xl shadow-lg border border-border z-50 py-1 max-h-56 overflow-y-auto"
           style={{
             top: ref.current ? ref.current.getBoundingClientRect().bottom + "px" : undefined,
           }}
