@@ -14,18 +14,28 @@
   --color-danger: #e5484d;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg: #1c1c1f;
-    --color-bg-card: #26262a;
-    /* bg-dark inverts in dark mode so tooltips (dark-bg/light-text on light
-       mode) flip to light-bg/dark-text and stay readable. */
-    --color-bg-dark: #f0edeb;
-    --color-text: #f4f4f6;
-    --color-text-muted: #b8b8be;
-    --color-border: #36363a;
-    --color-divider: #2a2a2e;
-  }
+/*
+ * Dark theme: the `dark` class on <html> is toggled by utils/theme.ts. Because
+ * components reference these as CSS variables (bg-bg, text-text, …), overriding
+ * the values here is enough to flip the whole UI.
+ *
+ * Note: --color-primary-dark/-light name *shades* of primary used for hover and
+ * the scrollbar — in dark mode the "dark" shade is lighter so hover still reads.
+ * --color-bg-dark is the tooltip surface (paired with text-bg-card), so it is
+ * inverted to a light value to keep tooltips legible.
+ */
+:root.dark {
+  --color-primary: #7a59fc;
+  --color-primary-dark: #9078ff;
+  --color-primary-light: #3a3a42;
+  --color-bg: #1c1c1f;
+  --color-bg-card: #26262a;
+  --color-bg-dark: #f0edeb;
+  --color-text: #f4f4f6;
+  --color-text-muted: #b8b8be;
+  --color-border: #36363a;
+  --color-divider: #2a2a2e;
+  --color-danger: #ff6b6f;
 }
 
 body {
