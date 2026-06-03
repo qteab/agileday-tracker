@@ -90,15 +90,27 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
       });
 
       try {
-        const updated = await api.updateTimeEntry(state.employee!.id, entry.id, {
+        // Use createTimeEntry (POST-or-PATCH) so it works whether
+        // the entry exists on AgileDay yet or not.
+        const saved = await api.createTimeEntry(state.employee!.id, {
           description: newDesc,
+          projectId: entry.projectId,
+          projectName: entry.projectName,
+          openingId: entry.openingId,
+          taskId: entry.taskId,
+          date: entry.date,
+          startTime: entry.startTime,
+          minutes: entry.minutes,
+          status: entry.status,
         });
         dispatch({
           type: "UPDATE_ENTRY",
           payload: {
             id: entry.id,
             updates: {
-              description: updated.description,
+              id: saved.id,
+              description: saved.description,
+              minutes: saved.minutes,
               syncStatus: "synced",
             },
           },
@@ -110,7 +122,7 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
         });
       }
     },
-    [api, dispatch, entry.id, entry.description, state.employee]
+    [api, dispatch, entry, state.employee]
   );
 
   const handleBlur = useCallback(
