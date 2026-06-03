@@ -292,9 +292,9 @@ export function Timer({ onStopRef }: TimerProps) {
       )}
 
       {/* Project & task row */}
-      <div className="flex items-center gap-1 px-3 pb-3">
-        <ProjectPicker selectedId={projectId} onSelect={setProject} />
-        <TaskPicker projectId={projectId} selectedId={taskId} onSelect={setTask} />
+      <div className="flex items-center gap-1.5 px-4 pb-3">
+        <ProjectPicker selectedId={projectId} onSelect={setProject} variant="chip" />
+        <TaskPicker projectId={projectId} selectedId={taskId} onSelect={setTask} variant="chip" />
       </div>
 
       <InactivityBanner />

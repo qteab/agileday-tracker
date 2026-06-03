@@ -5,3 +5,6 @@ target
 *.log
 .env
 .env.*
+
+# codegraph
+.codegraph/
