@@ -78,3 +78,8 @@ textarea {
   background: var(--color-primary-light);
   border-radius: 3px;
 }
+
+.desc-editable:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-subtle);
+}

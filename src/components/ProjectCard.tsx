@@ -270,7 +270,8 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
                   ref={editingIndex === i ? editRef : undefined}
                   contentEditable
                   suppressContentEditableWarning
-                  className="flex-1 outline-none rounded-[4px] focus:bg-[#faf6ff] focus:ring-2 focus:ring-primary/25"
+                  className="desc-editable flex-1 outline-none rounded-[4px] focus:bg-[#faf6ff] focus:ring-2 focus:ring-primary/25"
+                  data-placeholder="Describe what you worked on…"
                   onFocus={() => setEditingIndex(i)}
                   onBlur={(e) => handleBlur(i, e.currentTarget.textContent ?? "")}
                   onKeyDown={(e) => {
