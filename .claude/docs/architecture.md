@@ -25,7 +25,7 @@ src/
   App.tsx              — Root: auth gate → LoginScreen or AuthenticatedApp
   main.tsx             — React root + AppProvider
   api/                 — API abstraction (provider pattern, auth, types)
-  components/          — 18 UI components (all .tsx)
+  components/          — UI components (all .tsx)
   hooks/               — useTimer custom hook
   store/               — Context + useReducer state management
   utils/               — flex calc, week helpers, holiday set
@@ -62,7 +62,7 @@ interface AppState {
   entries: TimeEntry[];             // last 30 days + 30 days ahead
   allocations: Allocation[];
   allocationsFetchedAt: number | null;
-  timer: TimerState;                // isRunning, description, projectId, taskId, startTime
+  timer: TimerState;                // isRunning, projectId, taskId, startTime
   flexConfig: FlexConfig | null;
   flexEntries: TimeEntry[] | null;  // entries before the 30-day window (for flex calc)
   holidays: Holiday[];
@@ -90,23 +90,36 @@ Sync can be re-triggered via tray menu (Cmd+R) or the `sync-data` event, which i
 
 ## Timer Flow
 
-1. User selects project + task (both required), optionally enters description
-2. Start → `dispatch SET_TIMER { isRunning: true, startTime: now() }`
-3. `useTimer` hook calculates elapsed from `now() - startTime` every second (no drift)
-4. Tray menu shows elapsed time via `set_timer_status` Tauri command
-5. Stop → capture timer state, `dispatch RESET_TIMER`, add local entry with `pending` sync status
-6. `api.createTimeEntry()` — provider handles consolidation (see Entry Consolidation below)
-7. On success: mark `synced`. On failure: mark `unsaved`, show error banner.
+Timer is card-level — each project card (1:1 with an AgileDay entry) has its own play/stop button. Only Today's cards show timer controls.
+
+1. User clicks play on a project card → `startForCard(projectId, taskId)`
+2. Any running timer is stopped first (single-timer invariant)
+3. `dispatch SET_TIMER { projectId, taskId, isRunning: true, startTime: now() }`
+4. `useTimer` hook calculates elapsed from `now() - startTime` every second (no drift)
+5. Tray menu shows elapsed time via `set_timer_status` Tauri command
+6. Stop → capture timer state, `dispatch RESET_TIMER`, add minutes to matching entry
+7. `api.createTimeEntry()` — provider handles server-side merge
+8. On success: mark `synced`. On failure: mark `unsaved`, show error banner.
+
+Timer state no longer includes `description` — descriptions live on entries and are edited inline on cards.
+
+## Entry Layout
+
+The UI uses a **card-per-project-per-day** layout that maps 1:1 to AgileDay's data model. Each card represents one AgileDay entry with:
+- Project name + task tag in header
+- Billable indicator (display-only)
+- Elapsed time + play/stop (Today's cards only)
+- Stacked description lines with connector rail (inline-editable)
+
+New cards are created via the floating + button (FAB), which opens a project/task picker dialog.
 
 ## Entry Consolidation
 
-AgileDay stores one entry per project+task+date+description combination. The app shows individual sessions in the UI but consolidates on save:
+AgileDay stores one entry per project+task+date combination with bullet-point descriptions. The app's card layout matches this 1:1, so no client-side consolidation is needed. The `agileday.ts` provider still handles server-side merge for edge cases:
 
 - **0 existing matches**: create new entry
 - **1 match**: PATCH — merge description, add minutes to existing total
 - **Multiple matches**: create new entry with combined total, delete old duplicates
-
-This logic lives in `agileday.ts` (`createTimeEntry` method).
 
 ## Window Behavior
 

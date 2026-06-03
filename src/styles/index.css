@@ -1,41 +1,45 @@
+@import url("https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap");
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #7a59fc;
-  --color-primary-dark: #5519d5;
-  --color-primary-light: #aea7ff;
+  --color-primary: #5519d5;
+  --color-primary-dark: #4512b0;
+  --color-primary-light: #896cfc;
   --color-bg: #f0edeb;
   --color-bg-card: #ffffff;
-  --color-bg-dark: #170e23;
-  --color-text: #241143;
-  --color-text-muted: #5f5273;
-  --color-border: #e5e0de;
-  --color-divider: #eeebe9;
-  --color-danger: #e5484d;
+  --color-bg-dark: #0b0415;
+  --color-text: #0b0415;
+  --color-text-muted: #4a4353;
+  --color-text-subtle: #7c7585;
+  --color-border: #e5dcdc;
+  --color-divider: #e5dcdc;
+  --color-danger: #f0454b;
+  --color-accent-green: #1f8a5b;
+  --color-billable-off: #c9bfbf;
+  --color-tab-track: #e5e0de;
 }
 
 /*
  * Dark theme: the `dark` class on <html> is toggled by utils/theme.ts. Because
  * components reference these as CSS variables (bg-bg, text-text, …), overriding
  * the values here is enough to flip the whole UI.
- *
- * Note: --color-primary-dark/-light name *shades* of primary used for hover and
- * the scrollbar — in dark mode the "dark" shade is lighter so hover still reads.
- * --color-bg-dark is the tooltip surface (paired with text-bg-card), so it is
- * inverted to a light value to keep tooltips legible.
  */
 :root.dark {
-  --color-primary: #7a59fc;
-  --color-primary-dark: #9078ff;
+  --color-primary: #896cfc;
+  --color-primary-dark: #a08aff;
   --color-primary-light: #3a3a42;
   --color-bg: #1c1c1f;
   --color-bg-card: #26262a;
-  --color-bg-dark: #f0edeb;
+  --color-bg-dark: #f3e8e8;
   --color-text: #f4f4f6;
   --color-text-muted: #b8b8be;
+  --color-text-subtle: #8a8a92;
   --color-border: #36363a;
   --color-divider: #2a2a2e;
   --color-danger: #ff6b6f;
+  --color-accent-green: #2aad72;
+  --color-billable-off: #555;
+  --color-tab-track: #36363a;
 }
 
 body {
@@ -43,7 +47,16 @@ body {
   padding: 0;
   background-color: var(--color-bg);
   color: var(--color-text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family:
+    "Source Sans 3",
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;

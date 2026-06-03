@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
-import { Timer } from "./components/Timer";
 import { TabSwitcher } from "./components/TabSwitcher";
-import { TimeEntryList } from "./components/TimeEntryList";
+import { ProjectCardList } from "./components/ProjectCardList";
 import { AllocationView } from "./components/AllocationView";
 import { LoginScreen } from "./components/LoginScreen";
 import { UpdateChecker } from "./components/UpdateChecker";
@@ -12,13 +11,13 @@ import { FinalizeView } from "./components/FinalizeView";
 import { SubmissionAlert } from "./components/SubmissionAlert";
 import { FlexBadge } from "./components/FlexBadge";
 import { FlexSetupAlert } from "./components/FlexSetupAlert";
+import { Fab } from "./components/Fab";
 import { useApp } from "./store/context";
-import type { TimeEntry } from "./api/types";
+import { formatMinutes } from "./hooks/useTimer";
 
 export function App() {
   const { isConnected, isAuthLoading, onLogin } = useApp();
 
-  // Show nothing while checking saved auth
   if (isAuthLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-bg">
@@ -27,7 +26,6 @@ export function App() {
     );
   }
 
-  // Not authenticated → login screen
   if (!isConnected) {
     return <LoginScreen onLoginSuccess={onLogin} />;
   }
@@ -41,7 +39,6 @@ function AuthenticatedApp() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [showFinalize, setShowFinalize] = useState(false);
   const [dismissedWeeks, setDismissedWeeks] = useState<Set<string>>(new Set());
-  const stopTimerRef = useRef<(() => void) | null>(null);
 
   // Listen for tray menu items
   useEffect(() => {
@@ -59,33 +56,35 @@ function AuthenticatedApp() {
     };
   }, []);
 
-  const handleContinue = useCallback(
-    (entry: TimeEntry) => {
-      // Save the currently running timer (if any) before starting the new one,
-      // otherwise the in-progress minutes are silently discarded.
-      if (state.timer.isRunning) {
-        stopTimerRef.current?.();
-      }
-      dispatch({
-        type: "SET_TIMER",
-        payload: {
-          description: entry.description,
-          projectId: entry.projectId,
-          taskId: entry.taskId ?? null,
-          isRunning: true,
-          startTime: new Date().toISOString(),
-        },
-      });
-    },
-    [dispatch, state.timer.isRunning]
-  );
-
-  const handleStop = useCallback(() => {
-    stopTimerRef.current?.();
+  // Today's running total for the title bar
+  const todayDate = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   }, []);
 
+  const [, setTick] = useState(0);
+  const timerRunning = state.timer.isRunning;
+  useEffect(() => {
+    if (!timerRunning) return;
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [timerRunning]);
+
+  const todayTotalMinutes = useMemo(() => {
+    const entryMinutes = state.entries
+      .filter((e) => e.date === todayDate)
+      .reduce((sum, e) => sum + e.minutes, 0);
+    const runningMinutes =
+      state.timer.isRunning && state.timer.startTime
+        ? Math.max(0, Math.round((Date.now() - new Date(state.timer.startTime).getTime()) / 60000))
+        : 0;
+    return entryMinutes + runningMinutes;
+  }, [state.entries, todayDate, state.timer.isRunning, state.timer.startTime]);
+
+  const showMainContent = !settingsTab && !showFinalize;
+
   return (
-    <div className="flex flex-col h-screen bg-bg">
+    <div className="flex flex-col h-screen bg-bg relative">
       {/* Draggable title bar */}
       <div
         onMouseDown={(e) => {
@@ -94,13 +93,23 @@ function AuthenticatedApp() {
             getCurrentWindow().startDragging();
           }
         }}
-        className="flex items-center justify-between px-4 pt-5 pb-2 bg-bg-card border-b border-border cursor-default"
+        className="grid grid-cols-[1fr_auto_1fr] items-center px-4 pt-[13px] pb-3 bg-bg-card border-b border-border cursor-default"
       >
+        {/* Left: traffic lights space */}
         <div className="w-16" />
-        <span className="text-xs font-semibold tracking-wide text-primary uppercase pointer-events-none">
+
+        {/* Center: wordmark */}
+        <span className="font-bold text-sm tracking-[0.12em] text-primary uppercase pointer-events-none whitespace-nowrap">
           QTE Time Tracker
         </span>
-        <div className="flex items-center gap-1">
+
+        {/* Right: running total + icons */}
+        <div className="flex items-center justify-end gap-3">
+          {todayTotalMinutes > 0 && (
+            <span className="font-bold text-sm text-accent-green tabular-nums">
+              +{formatMinutes(todayTotalMinutes)}
+            </span>
+          )}
           <FlexBadge
             onClick={() => {
               setShowFinalize(false);
@@ -112,16 +121,22 @@ function AuthenticatedApp() {
               setSettingsTab(null);
               setShowFinalize(true);
             }}
-            className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text transition-colors rounded-lg hover:bg-bg"
+            className="inline-flex text-text-muted hover:opacity-60 transition-opacity"
             title="Finalize Timesheet"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-              />
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="8" y="2" width="8" height="4" rx="1" />
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+              <path d="m9 14 2 2 4-4" />
             </svg>
           </button>
           <button
@@ -129,22 +144,21 @@ function AuthenticatedApp() {
               setShowFinalize(false);
               setSettingsTab("account");
             }}
-            className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text transition-colors rounded-lg hover:bg-bg"
+            className="inline-flex text-text-muted hover:opacity-60 transition-opacity"
             title="Settings"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
           </button>
         </div>
@@ -202,22 +216,16 @@ function AuthenticatedApp() {
         />
       ) : (
         <>
-          {/* Timer */}
-          <div className="bg-bg-card border-b border-border">
-            <Timer onStopRef={stopTimerRef} />
-          </div>
-
           {/* Tab switcher */}
           <TabSwitcher active={activeTab} onChange={setActiveTab} />
 
           {/* Tab content */}
-          {activeTab === "list" ? (
-            <TimeEntryList onContinue={handleContinue} onStop={handleStop} />
-          ) : (
-            <AllocationView />
-          )}
+          {activeTab === "list" ? <ProjectCardList /> : <AllocationView />}
         </>
       )}
+
+      {/* FAB — only visible on the list tab */}
+      {showMainContent && activeTab === "list" && <Fab />}
     </div>
   );
 }

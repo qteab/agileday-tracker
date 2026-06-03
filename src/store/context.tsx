@@ -331,8 +331,17 @@ function useTrayDisplayPush(state: AppState) {
   const displayTaskId = state.timer.isRunning
     ? state.timer.taskId
     : (lastEntryToday?.taskId ?? null);
+  // Description lives on the entry, not the timer. Find the matching entry.
+  const runningEntry = state.timer.isRunning
+    ? state.entries.find(
+        (e) =>
+          e.projectId === state.timer.projectId &&
+          (e.taskId ?? null) === (state.timer.taskId ?? null) &&
+          e.date === todayDate
+      )
+    : null;
   const displayDescription = state.timer.isRunning
-    ? state.timer.description
+    ? (runningEntry?.description ?? null)
     : (lastEntryToday?.description ?? null);
 
   const displayProjectName =
