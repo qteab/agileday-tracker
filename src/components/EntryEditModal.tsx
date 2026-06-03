@@ -23,7 +23,6 @@ function formatDuration(minutes: number): string {
 export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
   const { state, dispatch } = useApp();
   const api = useApi();
-  const [description, setDescription] = useState(entry.description);
   const [projectId, setProjectId] = useState(entry.projectId);
   const date = entry.date;
   const [startTimeStr, setStartTimeStr] = useState(
@@ -45,7 +44,6 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
 
     try {
       await api.updateTimeEntry(state.employee.id, entry.id, {
-        description,
         projectId,
         minutes: mins,
       });
@@ -55,7 +53,6 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
         payload: {
           id: entry.id,
           updates: {
-            description,
             projectId,
             projectName: state.projects.find((p) => p.id === projectId)?.name,
             minutes: mins,
@@ -109,15 +106,6 @@ export function EntryEditModal({ entry, onClose }: EntryEditModalProps) {
         </button>
 
         <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide">Details</h3>
-
-        {/* Description */}
-        <input
-          type="text"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Add description"
-          className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-bg focus:outline-none focus:border-primary"
-        />
 
         {/* Project */}
         <ProjectPicker selectedId={projectId} onSelect={setProjectId} />

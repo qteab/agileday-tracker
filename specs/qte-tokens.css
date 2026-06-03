@@ -1,0 +1,313 @@
+/* =========================================================================
+   Qte Design System — Colors & Typography
+   Source: Figma "Brand for Claude Design.fig" — /Design-system
+   ========================================================================= */
+
+/* ---- Google Font import (Source Sans 3) ------------------------------- */
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600;1,700&display=swap');
+
+:root {
+  /* ======================================================================
+     COLOR TOKENS
+     ====================================================================== */
+
+  /* Base neutrals */
+  --qte-white:          #FFFFFF;     /* Font color on dark, pure white */
+  --qte-sand:           #FAF5F5;     /* Primary light background */
+  --qte-sandbox:        #F3E8E8;     /* Boxes on sand background */
+  --qte-black:          #000000;     /* Text color */
+  --qte-black-orchid:   #0B0415;     /* Primary dark background */
+  --qte-plum:           #251D31;     /* Boxes on black-orchid background */
+
+  /* Accents */
+  --qte-interdim-blue:  #5519D5;     /* Primary accent (on light) */
+  --qte-intense:        #896CFC;     /* Accent on dark backgrounds */
+
+  /* Gradients */
+  --qte-gradient-purple: linear-gradient(192deg, #896CFC 8.07%, #5519D5 98.98%);
+  --qte-gradient-beige:  linear-gradient(201deg, #F3E8E8 4.73%, #FAF5F5 26.97%, #FFFFFF 48.52%, #F3E8E8 98.34%);
+
+  /* ======================================================================
+     SEMANTIC COLOR TOKENS (light surface by default)
+     ====================================================================== */
+  --bg:                 var(--qte-sand);
+  --bg-surface:         var(--qte-sandbox);
+  --bg-surface-alt:     var(--qte-white);
+  --fg:                 var(--qte-black);
+  --fg-muted:           #4A4353;          /* plum @ reduced — for secondary copy */
+  --fg-subtle:          #7C7585;
+  --accent:             var(--qte-interdim-blue);
+  --accent-on-dark:     var(--qte-intense);
+  --border:             #E5DCDC;          /* light, desaturated sand */
+  --bullet:             var(--qte-interdim-blue);
+
+  /* Inverted surface tokens (for dark "black orchid" sections) */
+  --bg-inv:             var(--qte-black-orchid);
+  --bg-inv-surface:     var(--qte-plum);
+  --fg-inv:             var(--qte-white);
+  --fg-inv-muted:       #BDB3C9;
+  --bullet-inv:         var(--qte-intense);
+
+  /* ======================================================================
+     TYPOGRAPHY
+     ====================================================================== */
+  --font-sans: "Source Sans 3", ui-sans-serif, system-ui, -apple-system,
+               "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-sans);    /* Qte uses one family, different weights */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Type scale (px values mirror Figma sizes, rounded) */
+  --fs-display:  62px;   /* 61.8px in Figma — big section titles "01. References" */
+  --fs-h1:       45px;   /* 44.65px — page H1 */
+  --fs-h2:       38px;   /* 38px — bullet list items, secondary headline */
+  --fs-h3:       28px;
+  --fs-h4:       22px;
+  --fs-body-lg:  21px;   /* 21.2px — lead paragraph */
+  --fs-body:     16px;
+  --fs-small:    14px;
+  --fs-overline: 13px;
+  --fs-tiny:     11px;
+
+  /* Line heights */
+  --lh-tight:   1.2;    /* Titles & display */
+  --lh-snug:    1.35;
+  --lh-normal:  1.5;    /* Body, bullet items, most UI */
+  --lh-loose:   1.7;
+
+  /* Weights */
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semi:     600;
+  --fw-bold:     700;
+
+  /* Tracking */
+  --tracking-tight:  -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide:   0.02em;
+  --tracking-caps:   0.08em;      /* for uppercase details labels */
+
+  /* ======================================================================
+     SPACING — 4px base grid
+     ====================================================================== */
+  --space-0:  0px;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  24px;
+  --space-6:  32px;
+  --space-7:  48px;
+  --space-8:  64px;
+  --space-9:  96px;
+  --space-10: 128px;
+
+  /* ======================================================================
+     RADII — Qte uses "slightly rounded"
+     ====================================================================== */
+  --radius-xs:  4px;
+  --radius-sm:  6px;    /* Images */
+  --radius-md:  8px;    /* Color swatches, standard boxes */
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+  --radius-pill: 999px;
+
+  /* ======================================================================
+     BORDERS & SHADOWS
+     ====================================================================== */
+  --border-thin:   1px solid var(--border);
+  --border-hair:   1px solid rgba(0,0,0,0.08);
+
+  /* Qte is a flat system — shadows are used sparingly, for lift on sand */
+  --shadow-xs: 0 1px 2px rgba(11, 4, 21, 0.04);
+  --shadow-sm: 0 2px 6px rgba(11, 4, 21, 0.06);
+  --shadow-md: 0 6px 16px rgba(11, 4, 21, 0.08);
+  --shadow-lg: 0 18px 40px rgba(11, 4, 21, 0.12);
+
+  /* ======================================================================
+     MOTION
+     ====================================================================== */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+}
+
+/* =========================================================================
+   SEMANTIC ELEMENT STYLES
+   Use by adding .qte-doc to a container, or copy the rules onto your elements.
+   ========================================================================= */
+
+.qte-doc {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-normal);
+  color: var(--fg);
+  background-color: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.qte-doc.qte-dark {
+  color: var(--fg-inv);
+  background-color: var(--bg-inv);
+  --fg: var(--fg-inv);
+  --fg-muted: var(--fg-inv-muted);
+  --bg: var(--bg-inv);
+  --bg-surface: var(--bg-inv-surface);
+  --border: rgba(255,255,255,0.12);
+  --bullet: var(--bullet-inv);
+}
+
+/* ---- Headings ---- */
+.qte-display, .qte-doc .display {
+  font-family: var(--font-display);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-display);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-tight);
+  margin: 0 0 var(--space-5);
+}
+
+.qte-doc h1, .qte-h1 {
+  font-family: var(--font-display);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-h1);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-tight);
+  margin: 0 0 var(--space-5);
+}
+
+.qte-doc h2, .qte-h2 {
+  font-family: var(--font-display);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-h2);
+  line-height: var(--lh-tight);
+  margin: 0 0 var(--space-4);
+}
+
+.qte-doc h3, .qte-h3 {
+  font-family: var(--font-display);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-h3);
+  line-height: var(--lh-snug);
+  margin: 0 0 var(--space-3);
+}
+
+.qte-doc h4, .qte-h4 {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-h4);
+  line-height: var(--lh-snug);
+  margin: 0 0 var(--space-3);
+}
+
+/* ---- Body ---- */
+.qte-doc p, .qte-body {
+  font-size: var(--fs-body);
+  line-height: var(--lh-normal);
+  margin: 0 0 var(--space-4);
+}
+
+.qte-lead {
+  font-size: var(--fs-body-lg);
+  line-height: var(--lh-normal);
+  margin: 0 0 var(--space-5);
+}
+
+.qte-small, .qte-doc small {
+  font-size: var(--fs-small);
+  line-height: var(--lh-normal);
+}
+
+/* ---- Details / overline (uppercase, tracked, bold) ---- */
+.qte-details, .qte-overline {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-overline);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--accent);
+}
+.qte-dark .qte-details, .qte-dark .qte-overline { color: var(--accent-on-dark); }
+
+/* ---- Links ---- */
+.qte-doc a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.qte-doc a:hover { opacity: 0.75; }
+
+/* ---- Custom bullet list (Qte uses the ▸ shape from the logo glyph) ---- */
+.qte-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.qte-list li {
+  position: relative;
+  padding-left: 34px;
+  font-size: var(--fs-h2);
+  line-height: var(--lh-normal);
+}
+.qte-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 18px;
+  height: 27px;
+  background-color: var(--bullet);
+  /* The Qte chevron — same geometry as the "Q" tail glyph */
+  clip-path: polygon(0 31%, 52% 50%, 0 68%, 0 100%, 100% 63%, 100% 37%, 0 0);
+}
+
+/* ---- Vertical side-line (used on presentations / pdfs) ---- */
+.qte-sideline {
+  position: relative;
+  padding-left: var(--space-6);
+}
+.qte-sideline::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--qte-gradient-purple);
+}
+
+/* ---- Boxes ---- */
+.qte-box {
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  padding: var(--space-6);
+}
+.qte-box.qte-box-white { background: var(--qte-white); }
+
+/* ---- Images ---- */
+.qte-img {
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: block;
+}
+.qte-img-portrait {
+  border-radius: var(--radius-sm);
+  background: var(--qte-gradient-beige);
+  padding: var(--space-5);
+}
+
+/* ---- Utility ---- */
+.qte-stack-1 > * + * { margin-top: var(--space-1); }
+.qte-stack-2 > * + * { margin-top: var(--space-2); }
+.qte-stack-3 > * + * { margin-top: var(--space-3); }
+.qte-stack-4 > * + * { margin-top: var(--space-4); }
+.qte-stack-5 > * + * { margin-top: var(--space-5); }
+.qte-stack-6 > * + * { margin-top: var(--space-6); }
