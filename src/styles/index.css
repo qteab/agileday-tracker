@@ -17,6 +17,7 @@
   --color-accent-green: #1f8a5b;
   --color-billable-off: #c9bfbf;
   --color-tab-track: #e5e0de;
+  --color-bg-edit: #faf6ff;
 }
 
 /*
@@ -40,6 +41,7 @@
   --color-accent-green: #2aad72;
   --color-billable-off: #555;
   --color-tab-track: #36363a;
+  --color-bg-edit: #322a44;
 }
 
 body {

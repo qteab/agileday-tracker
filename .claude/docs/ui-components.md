@@ -91,6 +91,7 @@ Key behaviors:
   - `--color-accent-green: #1f8a5b` (running total)
   - `--color-billable-off: #c9bfbf`
   - `--color-tab-track: #e6dada`
+  - `--color-bg-edit: #faf6ff` (inline description editor focus background; dark: `#322a44`)
 - **Font**: Source Sans 3 (Google Fonts), weights 400/600/700
 - Custom scrollbar styling (thin, primary-light color)
 - `user-select: none` on body (text selection only in inputs)
