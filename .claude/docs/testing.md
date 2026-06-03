@@ -12,18 +12,18 @@ Tests live in `__tests__/` directories adjacent to source:
 
 ```
 src/api/__tests__/
-  mock-provider.test.ts       — 32 tests (ApiProvider contract via mock)
-  agileday-provider.test.ts   — 25 tests (AgileDay client with mocked fetch)
+  mock-provider.test.ts           — ApiProvider contract via mock
+  agileday-provider.test.ts       — AgileDay client with mocked fetch
+  entry-sync.test.ts              — Entry sync behavior (create, update, delete, read)
+  description-helpers.test.ts     — splitDescriptions/joinDescriptions helpers
 src/utils/__tests__/
-  flex.test.ts                — Flex calculation
-  rounding.test.ts            — 15-minute rounding
-  holidays.test.ts            — Holiday set lookup
-  week.test.ts                — Week utilities
-src/api/__tests__/
-  entry-sync.test.ts          — Entry consolidation
+  flex.test.ts                    — Flex calculation
+  rounding.test.ts                — 15-minute rounding
+  holidays.test.ts                — Holiday set lookup
+  week.test.ts                    — Week utilities
 ```
 
-Total: 207 tests.
+Total: 189 tests.
 
 ## Test Patterns
 

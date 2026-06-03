@@ -97,8 +97,8 @@ Timer is card-level — each project card (1:1 with an AgileDay entry) has its o
 3. `dispatch SET_TIMER { projectId, taskId, isRunning: true, startTime: now() }`
 4. `useTimer` hook calculates elapsed from `now() - startTime` every second (no drift)
 5. Tray menu shows elapsed time via `set_timer_status` Tauri command
-6. Stop → capture timer state, `dispatch RESET_TIMER`, add minutes to matching entry
-7. `api.createTimeEntry()` — provider handles server-side merge
+6. Stop → capture timer state, `dispatch RESET_TIMER`, compute total minutes (entry + session)
+7. `api.createTimeEntry()` — sends full state (total minutes + description) to AgileDay
 8. On success: mark `synced`. On failure: mark `unsaved`, show error banner.
 
 Timer state no longer includes `description` — descriptions live on entries and are edited inline on cards.
@@ -113,13 +113,13 @@ The UI uses a **card-per-project-per-day** layout that maps 1:1 to AgileDay's da
 
 New cards are created via the floating + button (FAB), which opens a project/task picker dialog.
 
-## Entry Consolidation
+## Sync Model
 
-AgileDay stores one entry per project+task+date combination with bullet-point descriptions. The app's card layout matches this 1:1, so no client-side consolidation is needed. The `agileday.ts` provider still handles server-side merge for edge cases:
+**App is source of truth when saving.** The app always sends the full entry state to AgileDay — total minutes and complete description string. No merging, no diffing, no consolidation. `createTimeEntry` checks if an entry already exists for the same (project, task, date); if so, it PATCHes with the app's state; otherwise, it POSTs a new one.
 
-- **0 existing matches**: create new entry
-- **1 match**: PATCH — merge description, add minutes to existing total
-- **Multiple matches**: create new entry with combined total, delete old duplicates
+**AgileDay is source of truth when loading.** On startup/sync, entries are fetched and rendered as-is. The card layout maps 1:1 to AgileDay entries.
+
+**One entry per (project, task, date).** Enforced by the FAB (checks before creating) and the provider (PATCHes existing instead of creating duplicates).
 
 ## Window Behavior
 

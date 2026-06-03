@@ -51,6 +51,8 @@ export function useTimer() {
 
     let workingId: string;
     const description = existing?.description ?? "";
+    // Total minutes = existing entry + this session (app is source of truth)
+    const totalMinutes = (existing?.minutes ?? 0) + minutes;
 
     if (existing) {
       workingId = existing.id;
@@ -59,7 +61,7 @@ export function useTimer() {
         payload: {
           id: existing.id,
           updates: {
-            minutes: existing.minutes + minutes,
+            minutes: totalMinutes,
             endTime,
             syncStatus: "pending",
           },
@@ -80,7 +82,7 @@ export function useTimer() {
           date,
           startTime,
           endTime,
-          minutes,
+          minutes: totalMinutes,
           status: "SAVED",
           syncStatus: "pending",
         },
@@ -88,6 +90,7 @@ export function useTimer() {
     }
 
     try {
+      // Send full state to API: total minutes + current description
       const created = await api.createTimeEntry(employee.id, {
         description,
         projectId: projectId!,
@@ -97,7 +100,7 @@ export function useTimer() {
         date,
         startTime,
         endTime,
-        minutes,
+        minutes: totalMinutes,
         status: "SAVED",
       });
       dispatch({

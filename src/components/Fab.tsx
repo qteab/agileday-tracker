@@ -25,10 +25,13 @@ export function Fab() {
     if (!existing) {
       const project = state.projects.find((p) => p.id === projectId);
       const openingId = state.projectOpeningMap[projectId];
+      const localId = crypto.randomUUID();
+
+      // Add locally — will be synced to AgileDay on first description save or timer stop
       dispatch({
         type: "ADD_ENTRY",
         payload: {
-          id: crypto.randomUUID(),
+          id: localId,
           description: "",
           projectId,
           projectName: project?.name,

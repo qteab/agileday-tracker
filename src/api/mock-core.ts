@@ -1,6 +1,5 @@
 import type { ApiProvider } from "./provider";
 import type { Allocation, Employee, Project, Task, TimeEntry } from "./types";
-import { mergeDescriptions } from "./agileday";
 
 export const MOCK_PROJECTS: Project[] = [
   { id: "p1", name: "Fokus", customerName: "QTE", color: "#E5B80B", projectType: "INTERNAL" },
@@ -95,21 +94,18 @@ export function createMockProvider(
 
     async createTimeEntry(_employeeId: string, entry) {
       const entries = await store.getEntries();
-      const desc = entry.description ?? "";
 
-      // Match by project+task+date (grouped mode — always active)
+      // App is source of truth: if entry exists for this (project, task, date),
+      // overwrite with app's full state. Otherwise create new.
       const match = entries.find(
         (e) =>
           e.projectId === entry.projectId &&
           e.date === entry.date &&
-          (e.taskId ?? "") === (entry.taskId ?? "") &&
-          e.status === "SAVED"
+          (e.taskId ?? "") === (entry.taskId ?? "")
       );
       if (match) {
-        match.minutes += entry.minutes;
-        if (desc) {
-          match.description = mergeDescriptions(match.description, desc);
-        }
+        match.minutes = entry.minutes;
+        match.description = entry.description ?? "";
         await store.setEntries(entries);
         return { ...match };
       }
