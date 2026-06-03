@@ -1,7 +1,15 @@
 import { useState, useMemo } from "react";
 import { useApp } from "../store/context";
 import { saveFlexConfig, type FlexConfig } from "../store/flex-store";
-import { saveDisplayPrefs, type MenuBarMode, type ThemeMode } from "../store/display-store";
+import {
+  saveDisplayPrefs,
+  clampInactivityMinutes,
+  INACTIVITY_MIN_MINUTES,
+  INACTIVITY_MAX_MINUTES,
+  type MenuBarMode,
+  type ThemeMode,
+  type DisplayPrefs,
+} from "../store/display-store";
 import { calculateFlex, formatFlexMinutes } from "../utils/flex";
 import { fmtDate } from "../utils/week";
 
@@ -326,6 +334,23 @@ function AccountSettings({ onBack }: { onBack: () => void }) {
     { value: "dark", label: "Dark" },
   ];
 
+  const [minutesInput, setMinutesInput] = useState(String(displayPrefs.inactivityMinutes));
+
+  async function persistDisplay(next: DisplayPrefs) {
+    dispatch({ type: "SET_DISPLAY_PREFS", payload: next });
+    await saveDisplayPrefs(next).catch(() => {});
+  }
+
+  async function toggleInactivity() {
+    await persistDisplay({ ...displayPrefs, inactivityEnabled: !displayPrefs.inactivityEnabled });
+  }
+
+  async function commitMinutes() {
+    const clamped = clampInactivityMinutes(parseInt(minutesInput, 10));
+    setMinutesInput(String(clamped));
+    await persistDisplay({ ...displayPrefs, inactivityMinutes: clamped });
+  }
+
   return (
     <div className="px-4 py-4 space-y-4">
       {/* Appearance */}
@@ -352,6 +377,48 @@ function AccountSettings({ onBack }: { onBack: () => void }) {
             );
           })}
         </div>
+      </div>
+
+      {/* Inactivity */}
+      <div className="bg-bg-card rounded-xl p-4 border border-border">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium text-text">Inactivity</div>
+          <button
+            role="switch"
+            aria-checked={displayPrefs.inactivityEnabled}
+            onClick={toggleInactivity}
+            className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${
+              displayPrefs.inactivityEnabled ? "bg-primary" : "bg-border"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                displayPrefs.inactivityEnabled ? "translate-x-4" : ""
+              }`}
+            />
+          </button>
+        </div>
+        <p className="text-xs text-text-muted mt-1">
+          Warn me when a timer keeps running while I'm away from the computer.
+        </p>
+        {displayPrefs.inactivityEnabled && (
+          <div className="flex items-center gap-2 mt-3">
+            <span className="text-xs text-text-muted">Warn after</span>
+            <input
+              type="number"
+              min={INACTIVITY_MIN_MINUTES}
+              max={INACTIVITY_MAX_MINUTES}
+              value={minutesInput}
+              onChange={(e) => setMinutesInput(e.target.value)}
+              onBlur={commitMinutes}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              }}
+              className="w-16 px-2 py-1 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <span className="text-xs text-text-muted">minutes of inactivity</span>
+          </div>
+        )}
       </div>
 
       {/* Account */}

@@ -32,7 +32,7 @@ Settings and Finalize are triggered by tray menu events or header buttons.
 | **AllocationView** | `AllocationView.tsx` | Week/month allocation vs actual hours comparison. Shows per-project breakdowns. |
 | **FinalizeView** | `FinalizeView.tsx` | Timesheet submission UI: week summaries, per-day detail, rounding confirmation (15-min increments). |
 | **FlexView** | `FlexView.tsx` | Flex time balance display: hourly delta per week from configured start date. |
-| **SettingsView** | `SettingsView.tsx` | Tabbed settings: Flex (start date, initial hours), Display (menu-bar mode), Account (appearance/theme, name, email, logout). |
+| **SettingsView** | `SettingsView.tsx` | Tabbed settings: Flex (start date, initial hours), Display (menu-bar mode), Account (appearance/theme, inactivity toggle + minutes, name, email, logout). |
 | **LoginScreen** | `LoginScreen.tsx` | OAuth "Sign in with AgileDay" button. Shown when not authenticated. |
 
 ### Alerts & Indicators
@@ -44,6 +44,7 @@ Settings and Finalize are triggered by tray menu events or header buttons.
 | **FlexBadge** | `FlexBadge.tsx` | Small badge in header showing current flex balance. Clickable → opens flex settings. |
 | **UpdateChecker** | `UpdateChecker.tsx` | App update notification banner (Tauri updater plugin). |
 | **TabSwitcher** | `TabSwitcher.tsx` | List/Allocation tab toggle buttons. |
+| **InactivityBanner** | `InactivityBanner.tsx` | Below the Timer dropdowns. Amber "Inactive for Hh Mm" while away; on return a persistent "You were away … — Discard/Keep" prompt. Discard rewinds the timer's `startTime`; Keep dismisses. Reads the `inactivity` reducer slice; light-amber (matches the empty-description warning, stays light in dark mode). |
 
 ## Hooks
 

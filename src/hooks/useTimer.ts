@@ -40,6 +40,9 @@ export function useTimer() {
 
   const stop = useCallback(async () => {
     if (!timer.isRunning || !timer.startTime || !employee) return;
+    // An unresolved "you were away" prompt must be answered (Discard/Keep)
+    // before the timer can be stopped.
+    if (state.inactivity.pendingReturn) return;
 
     // Capture timer state before resetting
     const { description, projectId, taskId, startTime } = timer;
@@ -140,7 +143,15 @@ export function useTimer() {
         payload: `Failed to save time entry: ${reason}. Entry saved locally — use retry to sync.`,
       });
     }
-  }, [timer, employee, state.projects, state.projectOpeningMap, dispatch, api]);
+  }, [
+    timer,
+    employee,
+    state.projects,
+    state.projectOpeningMap,
+    state.inactivity.pendingReturn,
+    dispatch,
+    api,
+  ]);
 
   const setDescription = useCallback(
     (description: string) => {

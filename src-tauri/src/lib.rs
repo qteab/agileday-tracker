@@ -56,6 +56,7 @@ struct TrayState {
     menu: Menu<Wry>,
     icon_idle: Image<'static>,
     icon_active: Image<'static>,
+    icon_inactive: Image<'static>,
     timer_status: MenuItem<Wry>,
     project_item: MenuItem<Wry>,
     task_item: MenuItem<Wry>,
@@ -69,6 +70,10 @@ struct TrayState {
     last_headline: Mutex<String>,
     menu_bar_mode: Mutex<MenuBarMode>,
     window_layout: Mutex<WindowLayout>,
+    inactivity_enabled: Mutex<bool>,
+    inactivity_minutes: Mutex<u32>,
+    // Last (is_away, idle_minute) pushed to the frontend, so we emit only on change.
+    last_inactivity: Mutex<Option<(bool, u64)>>,
 }
 
 #[derive(Default, Clone)]
@@ -101,12 +106,65 @@ fn format_hours_minutes(total_seconds: u64) -> String {
     format!("{}:{:02}", hours, minutes)
 }
 
+// "Hh Mm" idle/away phrasing for the tray title and banner (e.g. "0h 20m").
+fn format_away(total_seconds: u64) -> String {
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    format!("{}h {}m", hours, minutes)
+}
+
+// Seconds since the last system-wide HID input (mouse/keyboard anywhere on the
+// machine). Read-only; needs no accessibility permission.
+#[cfg(target_os = "macos")]
+fn system_idle_seconds() -> u64 {
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGEventSourceSecondsSinceLastEventType(state_id: i32, event_type: u32) -> f64;
+    }
+    const HID_STATE: i32 = 1; // kCGEventSourceStateHIDSystemState
+    const ANY_EVENT: u32 = 0xFFFF_FFFF; // kCGAnyInputEventType
+    let secs = unsafe { CGEventSourceSecondsSinceLastEventType(HID_STATE, ANY_EVENT) };
+    if secs.is_finite() && secs > 0.0 {
+        secs as u64
+    } else {
+        0
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn system_idle_seconds() -> u64 {
+    0
+}
+
+#[derive(Clone, serde::Serialize)]
+struct InactivityPayload {
+    idle_seconds: u64,
+    is_away: bool,
+}
+
+// Whether the user is "away" (idle past the configured threshold) plus the raw
+// idle seconds — gated on a running timer and the feature being enabled.
+fn current_inactivity(state: &TrayState, snapshot: Option<&DisplaySnapshot>) -> (bool, u64) {
+    let running = snapshot.is_some_and(|s| s.running);
+    if !running || !*state.inactivity_enabled.lock().unwrap() {
+        return (false, 0);
+    }
+    let minutes = *state.inactivity_minutes.lock().unwrap() as u64;
+    let idle = system_idle_seconds();
+    (idle >= minutes.saturating_mul(60), idle)
+}
+
 // Drives every visible part of the tray (icon, title next to the icon, the
 // disabled headline row, the project/task/description detail rows). Called on
 // every state change pushed by the React side and once per second by the
 // background tick task so the menu bar keeps advancing even when the WebView
 // is hidden and JavaScript timers get throttled.
-fn apply_tray_state(state: &TrayState, snapshot: Option<&DisplaySnapshot>) -> Result<(), String> {
+fn apply_tray_state(
+    state: &TrayState,
+    snapshot: Option<&DisplaySnapshot>,
+    inactive: bool,
+    idle_seconds: u64,
+) -> Result<(), String> {
     let running = snapshot.is_some_and(|s| s.running);
 
     let headline = match snapshot {
@@ -137,7 +195,9 @@ fn apply_tray_state(state: &TrayState, snapshot: Option<&DisplaySnapshot>) -> Re
         .set_enabled(running)
         .map_err(|e| e.to_string())?;
 
-    let icon = if running {
+    let icon = if inactive {
+        &state.icon_inactive
+    } else if running {
         &state.icon_active
     } else {
         &state.icon_idle
@@ -154,6 +214,12 @@ fn apply_tray_state(state: &TrayState, snapshot: Option<&DisplaySnapshot>) -> Re
     let mode = *state.menu_bar_mode.lock().unwrap();
     let title: Option<String> = match mode {
         MenuBarMode::Off => Some(String::new()),
+        // While away, the always-visible title carries the inactive sentence
+        // (the red icon still signals even in Off mode).
+        _ if inactive => Some(format!(
+            "\u{2002}You've been inactive for {}",
+            format_away(idle_seconds)
+        )),
         _ => match snapshot {
             Some(s) => {
                 let extra = if s.running {
@@ -278,6 +344,8 @@ fn set_timer_status(
     description: Option<String>,
     day_base_seconds: Option<u64>,
     menu_bar_mode: String,
+    inactivity_enabled: bool,
+    inactivity_minutes: u32,
 ) -> Result<(), String> {
     let state = app.state::<TrayState>();
     let new_snapshot = if running {
@@ -305,9 +373,12 @@ fn set_timer_status(
         let mut snap = state.snapshot.lock().unwrap();
         *snap = new_snapshot;
         *state.menu_bar_mode.lock().unwrap() = MenuBarMode::parse(&menu_bar_mode);
+        *state.inactivity_enabled.lock().unwrap() = inactivity_enabled;
+        *state.inactivity_minutes.lock().unwrap() = inactivity_minutes;
     }
     let snap = state.snapshot.lock().unwrap();
-    apply_tray_state(&state, snap.as_ref())
+    let (inactive, idle) = current_inactivity(&state, snap.as_ref());
+    apply_tray_state(&state, snap.as_ref(), inactive, idle)
 }
 
 #[tauri::command]
@@ -583,6 +654,7 @@ pub fn run() {
             // Load QTE branded tray icons (embedded at compile time).
             let icon_idle = tauri::include_image!("icons/tray-idle.png");
             let icon_active = tauri::include_image!("icons/tray-active.png");
+            let icon_inactive = tauri::include_image!("icons/tray-inactive.png");
 
             let tray = TrayIconBuilder::new()
                 .tooltip("QTE Time Tracker")
@@ -709,6 +781,7 @@ pub fn run() {
                 menu,
                 icon_idle,
                 icon_active,
+                icon_inactive,
                 timer_status,
                 project_item,
                 task_item,
@@ -722,6 +795,9 @@ pub fn run() {
                 last_headline: Mutex::new("Timer is not running".to_string()),
                 menu_bar_mode: Mutex::new(MenuBarMode::Off),
                 window_layout: Mutex::new(WindowLayout::default()),
+                inactivity_enabled: Mutex::new(false),
+                inactivity_minutes: Mutex::new(10),
+                last_inactivity: Mutex::new(None),
             });
 
             // WebKit throttles JavaScript timers heavily while the window is
@@ -735,7 +811,21 @@ pub fn run() {
                     interval.tick().await;
                     let state = tick_handle.state::<TrayState>();
                     let snapshot = state.snapshot.lock().unwrap().clone();
-                    if let Err(err) = apply_tray_state(&state, snapshot.as_ref()) {
+                    let (inactive, idle) = current_inactivity(&state, snapshot.as_ref());
+                    // Push to the frontend banner only when the away state or the
+                    // displayed idle minute changes — not every second.
+                    {
+                        let key = (inactive, idle / 60);
+                        let mut last = state.last_inactivity.lock().unwrap();
+                        if *last != Some(key) {
+                            *last = Some(key);
+                            let _ = tick_handle.emit(
+                                "inactivity",
+                                InactivityPayload { idle_seconds: idle, is_away: inactive },
+                            );
+                        }
+                    }
+                    if let Err(err) = apply_tray_state(&state, snapshot.as_ref(), inactive, idle) {
                         eprintln!("tray tick error: {}", err);
                     }
                 }

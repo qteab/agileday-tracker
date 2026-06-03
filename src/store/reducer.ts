@@ -10,6 +10,16 @@ export interface TimerState {
   startTime: string | null; // ISO timestamp
 }
 
+export interface InactivityState {
+  /** System idle seconds reported by Rust; 0 while the user is active. */
+  idleSeconds: number;
+  /** True while idle has crossed the configured threshold. */
+  isAway: boolean;
+  /** Set when the user returns from an away period; holds the frozen away
+   * duration awaiting a Discard/Keep decision. Null when nothing is pending. */
+  pendingReturn: { awaySeconds: number } | null;
+}
+
 export interface AppState {
   employee: Employee | null;
   projects: Project[];
@@ -28,6 +38,7 @@ export interface AppState {
   flexEntries: TimeEntry[] | null;
   holidays: Holiday[];
   displayPrefs: DisplayPrefs;
+  inactivity: InactivityState;
   loading: boolean;
   error: string | null;
 }
@@ -54,6 +65,7 @@ export const initialState: AppState = {
   flexEntries: null,
   holidays: [],
   displayPrefs: DEFAULT_DISPLAY_PREFS,
+  inactivity: { idleSeconds: 0, isAway: false, pendingReturn: null },
   loading: false,
   error: null,
 };
@@ -78,6 +90,8 @@ export type AppAction =
   | { type: "SET_FLEX_ENTRIES"; payload: TimeEntry[] | null }
   | { type: "SET_HOLIDAYS"; payload: Holiday[] }
   | { type: "SET_DISPLAY_PREFS"; payload: DisplayPrefs }
+  | { type: "SET_INACTIVITY"; payload: { idleSeconds: number; isAway: boolean } }
+  | { type: "RESOLVE_RETURN" }
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "SET_ERROR"; payload: string | null };
 
@@ -139,6 +153,26 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, holidays: action.payload };
     case "SET_DISPLAY_PREFS":
       return { ...state, displayPrefs: action.payload };
+    case "SET_INACTIVITY": {
+      const prev = state.inactivity;
+      // Returning from an away period (away→active) freezes the away duration
+      // and raises a Discard/Keep prompt. Any input resets idle to 0 on the
+      // Rust side, so the prior idleSeconds is the value to discard.
+      const justReturned = prev.isAway && !action.payload.isAway && prev.idleSeconds > 0;
+      return {
+        ...state,
+        inactivity: {
+          idleSeconds: action.payload.idleSeconds,
+          isAway: action.payload.isAway,
+          pendingReturn: justReturned ? { awaySeconds: prev.idleSeconds } : prev.pendingReturn,
+        },
+      };
+    }
+    case "RESOLVE_RETURN":
+      return {
+        ...state,
+        inactivity: { ...state.inactivity, pendingReturn: null },
+      };
     case "SET_LOADING":
       return { ...state, loading: action.payload };
     case "SET_ERROR":

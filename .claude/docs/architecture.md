@@ -11,10 +11,11 @@ The Rust layer handles:
 - **System tray menu**: Show, Continue, Stop, Sync (Cmd+R), New, Finalize (Cmd+F), Settings (Cmd+,), Quit
 - **Window lifecycle**: show/hide toggle, Dock visibility (ActivationPolicy), window close = hide (not quit)
 - **OAuth callback server**: Localhost HTTP server on `127.0.0.1:19847` captures OAuth redirect
-- **Timer status**: `set_timer_status` Tauri command updates tray menu text and button states
+- **Timer status**: `set_timer_status` Tauri command updates tray menu text and button states (also carries the inactivity prefs)
+- **Inactivity detection**: while a timer runs and the feature is enabled, the 1-second tray tick reads system-wide idle via `CGEventSourceSecondsSinceLastEventType` (CoreGraphics FFI, no permission prompt). Past the threshold it shows a red status-dot icon (`tray-inactive.png`) + "You've been inactive for Hh Mm" title, and emits an `inactivity` event. Detection is Rust-owned because the WebView can't see input outside its own (usually hidden) window.
 - **Plugin registration**: store, shell, http (with `unsafe-headers`), deep-link, updater, process, log
 
-Communication between Rust and React uses Tauri events (`sync-data`, `tray-stop-timer`, `tray-continue-last`, `tray-open-settings`, `tray-open-finalize`) and Tauri commands (`invoke`).
+Communication between Rust and React uses Tauri events (`sync-data`, `tray-stop-timer`, `tray-continue-last`, `tray-open-settings`, `tray-open-finalize`, `inactivity`) and Tauri commands (`invoke`).
 
 ### 2. React Frontend (`src/`)
 
@@ -49,7 +50,7 @@ Uses React Context + `useReducer` (no external state library).
 
 **Context** (`src/store/context.tsx`): `AppProvider` wraps the app. Exposes `{ state, dispatch, api, isConnected, isAuthLoading, logout, onLogin }`.
 
-**Reducer** (`src/store/reducer.ts`): Pure function, 18 action types. State shape:
+**Reducer** (`src/store/reducer.ts`): Pure function, 20 action types. State shape:
 
 ```typescript
 interface AppState {
@@ -66,10 +67,14 @@ interface AppState {
   flexConfig: FlexConfig | null;
   flexEntries: TimeEntry[] | null;  // entries before the 30-day window (for flex calc)
   holidays: Holiday[];
+  displayPrefs: DisplayPrefs;       // menuBarMode, theme, inactivity settings
+  inactivity: InactivityState;      // idleSeconds, isAway, pendingReturn (Discard/Keep)
   loading: boolean;
   error: string | null;
 }
 ```
+
+**Inactivity slice**: Rust emits `inactivity` ({ idle_seconds, is_away }) on each change of away-state or idle-minute; `useInactivitySync` dispatches `SET_INACTIVITY`. The reducer raises a `pendingReturn` (frozen away duration) on the away→active transition — the `InactivityBanner` then shows a persistent Discard/Keep prompt and `useTimer.stop` is blocked until it's resolved (`RESOLVE_RETURN`). Discard shifts the timer's `startTime` forward by the away duration.
 
 **Persistence** (via Tauri store plugin):
 - `timer-store.ts` — running timer survives app quit/crash

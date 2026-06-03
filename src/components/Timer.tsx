@@ -3,6 +3,7 @@ import { useTimer, formatTime } from "../hooks/useTimer";
 import { useApp } from "../store/context";
 import { ProjectPicker } from "./ProjectPicker";
 import { TaskPicker } from "./TaskPicker";
+import { InactivityBanner } from "./InactivityBanner";
 
 interface Suggestion {
   description: string;
@@ -295,6 +296,8 @@ export function Timer({ onStopRef }: TimerProps) {
         <ProjectPicker selectedId={projectId} onSelect={setProject} />
         <TaskPicker projectId={projectId} selectedId={taskId} onSelect={setTask} />
       </div>
+
+      <InactivityBanner />
     </div>
   );
 }

@@ -97,6 +97,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useVisibilityTokenRefresh(authStateRef, setAuthState);
   useDisplayPrefsBootstrap(dispatch);
   useThemeSync(state.displayPrefs.theme);
+  useInactivitySync(dispatch);
   useWindowDockSnap();
   useTimerRestore(dispatch, setTimerLoaded);
   useTimerPersistence(state.timer, timerLoaded);
@@ -367,6 +368,8 @@ function useTrayDisplayPush(state: AppState) {
       description: displayDescription,
       dayBaseSeconds: todayBaseMinutes * 60,
       menuBarMode: state.displayPrefs.menuBarMode,
+      inactivityEnabled: state.displayPrefs.inactivityEnabled,
+      inactivityMinutes: state.displayPrefs.inactivityMinutes,
     }).catch(() => {});
   }, [
     state.timer.isRunning,
@@ -376,7 +379,25 @@ function useTrayDisplayPush(state: AppState) {
     displayDescription,
     todayBaseMinutes,
     state.displayPrefs.menuBarMode,
+    state.displayPrefs.inactivityEnabled,
+    state.displayPrefs.inactivityMinutes,
   ]);
+}
+
+// Rust owns idle detection (system-wide, survives the WebView being hidden) and
+// emits an `inactivity` event whenever the away state or idle minute changes.
+function useInactivitySync(dispatch: React.Dispatch<AppAction>) {
+  useEffect(() => {
+    const unlisten = listen<{ idle_seconds: number; is_away: boolean }>("inactivity", (event) => {
+      dispatch({
+        type: "SET_INACTIVITY",
+        payload: { idleSeconds: event.payload.idle_seconds, isAway: event.payload.is_away },
+      });
+    });
+    return () => {
+      unlisten.then((fn) => fn()).catch(() => {});
+    };
+  }, [dispatch]);
 }
 
 function useAuthBootstrap(
