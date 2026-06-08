@@ -26,60 +26,6 @@ function assignProjectColor(index: number): string {
   return PROJECT_COLORS[index % PROJECT_COLORS.length];
 }
 
-/**
- * Merge a new description line into an existing grouped description.
- * Each line is prefixed with "- ". Duplicate lines are skipped.
- * Returns the merged description string.
- */
-export function mergeDescriptions(existing: string, incoming: string): string {
-  if (!incoming) return existing;
-  if (!existing) return `- ${incoming}`;
-
-  // Parse existing lines — handle both "- foo" prefixed and plain text
-  const existingLines = existing
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  // Normalize: strip leading "- " for comparison
-  const normalize = (line: string) => (line.startsWith("- ") ? line.slice(2) : line);
-  const existingNormalized = new Set(existingLines.map(normalize));
-
-  const incomingNormalized = normalize(incoming);
-  if (existingNormalized.has(incomingNormalized)) {
-    // Duplicate — return existing unchanged
-    return existing;
-  }
-
-  // Ensure existing lines are all prefixed
-  const prefixed = existingLines.map((l) => (l.startsWith("- ") ? l : `- ${l}`));
-  prefixed.push(`- ${incomingNormalized}`);
-  return prefixed.join("\n");
-}
-
-/**
- * Remove a description line from a grouped description string.
- * Returns the updated description with the line removed.
- * If only one line remains, it stays dash-prefixed.
- * If nothing remains, returns empty string.
- */
-export function removeDescription(existing: string, toRemove: string): string {
-  if (!existing || !toRemove) return existing;
-
-  const lines = existing
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  const normalize = (line: string) => (line.startsWith("- ") ? line.slice(2) : line);
-  const target = normalize(toRemove);
-
-  const filtered = lines.filter((l) => normalize(l) !== target);
-
-  if (filtered.length === 0) return "";
-  return filtered.map((l) => (l.startsWith("- ") ? l : `- ${l}`)).join("\n");
-}
-
 export interface AgileDayConfig {
   /** e.g. "https://qvik.agileday.io/api" */
   apiBaseUrl: string;
@@ -132,9 +78,6 @@ export function createAgileDayProvider(
 
     return auth.accessToken;
   }
-
-  // Cache descriptions for entries we create — the API doesn't return them immediately
-  const descriptionCache = new Map<string, string>();
 
   let resolvedFetch: typeof globalThis.fetch | null = fetchOverride ?? null;
 
@@ -344,16 +287,7 @@ export function createAgileDayProvider(
           syncStatus: "synced" as const,
         }));
 
-      // 4. Enrich entries with cached descriptions
-      for (const e of result) {
-        if (e.description) {
-          descriptionCache.set(e.id, e.description);
-        } else if (descriptionCache.has(e.id)) {
-          e.description = descriptionCache.get(e.id)!;
-        }
-      }
-
-      // 5. Add entries from summary that aren't covered by detailed entries
+      // 4. Add entries from summary that aren't covered by detailed entries
       //    (e.g. entries in SAVED/NEW status that time_entry endpoint doesn't return)
       const detailedByProjectDate = new Map<string, number>();
       for (const e of result) {
@@ -401,21 +335,18 @@ export function createAgileDayProvider(
 
       const desc = entry.description ?? "";
 
-      // 1. Query for existing editable entries with same project+task+date.
-      //    Entries created via AgileDay's web UI start out in NEW status; if we
-      //    filter to SAVED only, the merge misses them and we POST a duplicate
-      //    instead of patching the existing entry. CHANGE_REQUESTED is also
-      //    editable (manager has asked for revisions but hasn't locked it).
+      // App is source of truth when saving. Check if an entry already exists
+      // on AgileDay for this (project, task, date) — if so, PATCH it with
+      // the app's full state. Otherwise POST a new entry.
       const EDITABLE_STATUSES = new Set(["NEW", "SAVED", "CHANGE_REQUESTED"]);
       const updatedAfter = new Date(entry.date + "T00:00:00Z").toISOString();
       const allRecent = await apiFetch<RawEntry[]>(
         `/v1/time_entry/employee/id/${employeeId}/updated?updatedAfter=${updatedAfter}`
       ).catch(() => [] as RawEntry[]);
 
-      const matches = allRecent.filter((e) => {
+      const match = allRecent.find((e) => {
         if (e.projectId !== entry.projectId || e.date !== entry.date) return false;
         if (!EDITABLE_STATUSES.has(e.status)) return false;
-        // Match by project+task+date only (ignore description)
         const eTask = e.taskId ?? "";
         const entryTask = entry.taskId ?? "";
         return eTask === entryTask;
@@ -423,93 +354,16 @@ export function createAgileDayProvider(
 
       let created: RawEntry;
 
-      if (matches.length === 1) {
-        // 2. One match — PATCH to add this session's minutes
-        const existing = matches[0];
-        const newTotal = existing.minutes + entry.minutes;
-        const patch: Record<string, unknown> = { id: existing.id, minutes: newTotal };
-
-        // Append the new description to the existing one
-        if (desc) {
-          const existingDesc = existing.description ?? descriptionCache.get(existing.id) ?? "";
-          const mergedDesc = mergeDescriptions(existingDesc, desc);
-          if (mergedDesc !== existingDesc) {
-            patch.description = mergedDesc;
-          }
-        }
-
+      if (match) {
+        // PATCH existing entry with app's full state (overwrite, not merge)
         const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
           method: "PATCH",
-          body: JSON.stringify([patch]),
+          body: JSON.stringify([{ id: match.id, minutes: entry.minutes, description: desc }]),
         });
         if (results.length === 0) throw new Error("No entry returned from API");
         created = results[0];
-      } else if (matches.length > 1) {
-        // 3. Multiple matches — consolidate: create new with total, delete old
-        const totalExisting = matches.reduce((s, e) => s + e.minutes, 0);
-        const newTotal = totalExisting + entry.minutes;
-
-        // Merge all existing descriptions with the new one
-        let merged = "";
-        for (const m of matches) {
-          const mDesc = m.description ?? descriptionCache.get(m.id) ?? "";
-          merged = mergeDescriptions(merged, mDesc);
-        }
-        const consolidatedDesc = mergeDescriptions(merged, desc);
-
-        // Create the consolidated entry first (safer — if delete fails, we have duplicates not data loss)
-        const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
-          method: "POST",
-          body: JSON.stringify([
-            {
-              date: entry.date,
-              minutes: newTotal,
-              status: "SAVED",
-              projectId: entry.projectId,
-              ...(entry.openingId ? { openingId: entry.openingId } : {}),
-              ...(entry.taskId ? { taskId: entry.taskId } : {}),
-              ...(consolidatedDesc ? { description: consolidatedDesc } : {}),
-            },
-          ]),
-        });
-        if (results.length === 0) throw new Error("No entry returned from API");
-        created = results[0];
-
-        // Delete the old duplicates one by one, track failures
-        const failedDeletes: string[] = [];
-        for (const old of matches) {
-          try {
-            await apiFetch(`/v1/time_entry?ids=${old.id}`, { method: "DELETE" });
-          } catch {
-            failedDeletes.push(old.id);
-          }
-        }
-
-        // Verify deletions actually went through
-        if (failedDeletes.length === 0) {
-          // Double-check: re-query to make sure old entries are gone
-          const verifyEntries = await apiFetch<RawEntry[]>(
-            `/v1/time_entry/employee/id/${employeeId}/updated?updatedAfter=${updatedAfter}`
-          ).catch(() => [] as RawEntry[]);
-
-          const stillExist = verifyEntries.filter(
-            (e) => matches.some((m) => m.id === e.id) && e.status !== "DELETED"
-          );
-
-          if (stillExist.length > 0) {
-            throw new Error(
-              `Consolidated entry created, but ${stillExist.length} old entries couldn't be removed from AgileDay. ` +
-                `Please clean up duplicates manually in AgileDay's Time Reporting page.`
-            );
-          }
-        } else {
-          throw new Error(
-            `Consolidated entry created, but ${failedDeletes.length} of ${matches.length} old entries couldn't be deleted. ` +
-              `Please clean up duplicates manually in AgileDay's Time Reporting page.`
-          );
-        }
       } else {
-        // 4. No matches — create new entry
+        // POST new entry
         const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
           method: "POST",
           body: JSON.stringify([
@@ -528,15 +382,9 @@ export function createAgileDayProvider(
         created = results[0];
       }
 
-      // Resolve the final description that's on the API entry
-      const finalDesc = created.description ?? descriptionCache.get(created.id) ?? desc;
-
-      // Cache for description lookups on reload
-      descriptionCache.set(created.id, finalDesc);
-
       return {
         id: created.id,
-        description: finalDesc,
+        description: created.description ?? desc,
         projectId: created.projectId,
         projectName: entry.projectName,
         taskId: created.taskId,

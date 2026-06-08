@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
-import { Timer } from "./components/Timer";
 import { TabSwitcher } from "./components/TabSwitcher";
-import { TimeEntryList } from "./components/TimeEntryList";
+import { ProjectCardList } from "./components/ProjectCardList";
 import { AllocationView } from "./components/AllocationView";
 import { LoginScreen } from "./components/LoginScreen";
 import { UpdateChecker } from "./components/UpdateChecker";
@@ -12,13 +11,13 @@ import { FinalizeView } from "./components/FinalizeView";
 import { SubmissionAlert } from "./components/SubmissionAlert";
 import { FlexBadge } from "./components/FlexBadge";
 import { FlexSetupAlert } from "./components/FlexSetupAlert";
+import { Fab } from "./components/Fab";
+import { InactivityBanner } from "./components/InactivityBanner";
 import { useApp } from "./store/context";
-import type { TimeEntry } from "./api/types";
 
 export function App() {
   const { isConnected, isAuthLoading, onLogin } = useApp();
 
-  // Show nothing while checking saved auth
   if (isAuthLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-bg">
@@ -27,7 +26,6 @@ export function App() {
     );
   }
 
-  // Not authenticated → login screen
   if (!isConnected) {
     return <LoginScreen onLoginSuccess={onLogin} />;
   }
@@ -41,7 +39,6 @@ function AuthenticatedApp() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [showFinalize, setShowFinalize] = useState(false);
   const [dismissedWeeks, setDismissedWeeks] = useState<Set<string>>(new Set());
-  const stopTimerRef = useRef<(() => void) | null>(null);
 
   // Listen for tray menu items
   useEffect(() => {
@@ -59,33 +56,10 @@ function AuthenticatedApp() {
     };
   }, []);
 
-  const handleContinue = useCallback(
-    (entry: TimeEntry) => {
-      // Save the currently running timer (if any) before starting the new one,
-      // otherwise the in-progress minutes are silently discarded.
-      if (state.timer.isRunning) {
-        stopTimerRef.current?.();
-      }
-      dispatch({
-        type: "SET_TIMER",
-        payload: {
-          description: entry.description,
-          projectId: entry.projectId,
-          taskId: entry.taskId ?? null,
-          isRunning: true,
-          startTime: new Date().toISOString(),
-        },
-      });
-    },
-    [dispatch, state.timer.isRunning]
-  );
-
-  const handleStop = useCallback(() => {
-    stopTimerRef.current?.();
-  }, []);
+  const showMainContent = !settingsTab && !showFinalize;
 
   return (
-    <div className="flex flex-col h-screen bg-bg">
+    <div className="flex flex-col h-screen bg-bg relative">
       {/* Draggable title bar */}
       <div
         onMouseDown={(e) => {
@@ -202,22 +176,23 @@ function AuthenticatedApp() {
         />
       ) : (
         <>
-          {/* Timer */}
-          <div className="bg-bg-card border-b border-border">
-            <Timer onStopRef={stopTimerRef} />
-          </div>
-
           {/* Tab switcher */}
           <TabSwitcher active={activeTab} onChange={setActiveTab} />
 
           {/* Tab content */}
           {activeTab === "list" ? (
-            <TimeEntryList onContinue={handleContinue} onStop={handleStop} />
+            <>
+              <InactivityBanner />
+              <ProjectCardList />
+            </>
           ) : (
             <AllocationView />
           )}
         </>
       )}
+
+      {/* FAB — only visible on the list tab */}
+      {showMainContent && activeTab === "list" && <Fab />}
     </div>
   );
 }

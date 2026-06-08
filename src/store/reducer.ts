@@ -4,7 +4,6 @@ import { DEFAULT_DISPLAY_PREFS, type DisplayPrefs } from "./display-store";
 
 export interface TimerState {
   isRunning: boolean;
-  description: string;
   projectId: string | null;
   taskId: string | null;
   startTime: string | null; // ISO timestamp
@@ -56,7 +55,6 @@ export const initialState: AppState = {
   allocationsFetchedAt: null,
   timer: {
     isRunning: false,
-    description: "",
     projectId: null,
     taskId: null,
     startTime: null,

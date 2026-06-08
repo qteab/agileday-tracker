@@ -5,27 +5,29 @@ interface TabSwitcherProps {
 
 export function TabSwitcher({ active, onChange }: TabSwitcherProps) {
   return (
-    <div className="flex mx-4 my-3 rounded-full border border-border overflow-hidden">
-      <button
-        onClick={() => onChange("list")}
-        className={`flex-1 py-2 text-sm font-medium transition-all ${
-          active === "list"
-            ? "bg-bg-card text-text"
-            : "bg-transparent text-text-muted hover:text-text"
-        }`}
-      >
-        List
-      </button>
-      <button
-        onClick={() => onChange("allocation")}
-        className={`flex-1 py-2 text-sm font-medium transition-all ${
-          active === "allocation"
-            ? "bg-bg-card text-text"
-            : "bg-transparent text-text-muted hover:text-text"
-        }`}
-      >
-        Allocation
-      </button>
+    <div className="px-4 pt-4 pb-[6px] bg-bg">
+      <div className="grid grid-cols-2 bg-tab-track rounded-full p-1">
+        <button
+          onClick={() => onChange("list")}
+          className={`text-center py-[9px] font-bold text-[15px] rounded-full transition-all duration-200 ${
+            active === "list"
+              ? "bg-bg-card text-text shadow-[0_2px_6px_rgba(11,4,21,0.06)]"
+              : "bg-transparent text-text-muted"
+          }`}
+        >
+          List
+        </button>
+        <button
+          onClick={() => onChange("allocation")}
+          className={`text-center py-[9px] font-bold text-[15px] rounded-full transition-all duration-200 ${
+            active === "allocation"
+              ? "bg-bg-card text-text shadow-[0_2px_6px_rgba(11,4,21,0.06)]"
+              : "bg-transparent text-text-muted"
+          }`}
+        >
+          Allocation
+        </button>
+      </div>
     </div>
   );
 }

@@ -26,11 +26,24 @@ Origin: https://qvik.agileday.io
 Content-Type: application/json
 ```
 
+### Sync Model
+
+**App is source of truth when saving.** The app always sends the full entry state (total minutes + full description string) to AgileDay. No merging, no diffing — just overwrite.
+
+**AgileDay is source of truth when loading.** On startup or sync, entries are fetched from AgileDay and rendered as-is.
+
+**One entry per (project, task, date).** The FAB enforces this locally. The provider checks for existing entries before creating — if one exists, it PATCHes instead of POSTing.
+
+`createTimeEntry` flow:
+1. Query `/updated` for existing entry matching (projectId, taskId, date, EDITABLE status)
+2. If match found → PATCH with app's full state (minutes, description)
+3. If no match → POST new entry
+
 ### Entry Status Flow
 
 `NEW` → `SAVED` → `SUBMITTED` → `APPROVED` (or `CHANGE_REQUESTED` → back to `SAVED`)
 
-Submitted/approved entries are locked — the app cannot edit them, only view. The play button on a submitted entry starts a new today entry with the same project/task/description.
+Submitted/approved entries are locked — the app cannot edit them, only view.
 
 ## Authentication (OAuth 2.1 PKCE)
 
