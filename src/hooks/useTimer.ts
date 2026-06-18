@@ -29,6 +29,9 @@ export function useTimer() {
   /** Stop the running timer and save elapsed minutes to the entry. */
   const stop = useCallback(async () => {
     if (!timer.isRunning || !timer.startTime || !employee) return;
+    // An unresolved "you were away" prompt must be answered (Discard/Keep)
+    // before the timer can be stopped.
+    if (state.inactivity.pendingReturn) return;
 
     const { projectId, taskId, startTime } = timer;
     const endTime = new Date().toISOString();
@@ -127,7 +130,16 @@ export function useTimer() {
         payload: `Failed to save time entry: ${reason}. Entry saved locally — use retry to sync.`,
       });
     }
-  }, [timer, employee, state.projects, state.projectOpeningMap, state.entries, dispatch, api]);
+  }, [
+    timer,
+    employee,
+    state.projects,
+    state.projectOpeningMap,
+    state.entries,
+    state.inactivity.pendingReturn,
+    dispatch,
+    api,
+  ]);
 
   // Use a ref so startForCard always invokes the latest stop closure
   const stopRef = useRef(stop);

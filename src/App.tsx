@@ -12,6 +12,7 @@ import { SubmissionAlert } from "./components/SubmissionAlert";
 import { FlexBadge } from "./components/FlexBadge";
 import { FlexSetupAlert } from "./components/FlexSetupAlert";
 import { Fab } from "./components/Fab";
+import { InactivityBanner } from "./components/InactivityBanner";
 import { useApp } from "./store/context";
 
 export function App() {
@@ -179,7 +180,14 @@ function AuthenticatedApp() {
           <TabSwitcher active={activeTab} onChange={setActiveTab} />
 
           {/* Tab content */}
-          {activeTab === "list" ? <ProjectCardList /> : <AllocationView />}
+          {activeTab === "list" ? (
+            <>
+              <InactivityBanner />
+              <ProjectCardList />
+            </>
+          ) : (
+            <AllocationView />
+          )}
         </>
       )}
 
