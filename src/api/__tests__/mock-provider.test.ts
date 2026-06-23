@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   createMockProvider,
   MOCK_PROJECTS,
+  MOCK_ABSENCE_PROJECTS,
   MOCK_TASKS,
   MOCK_EMPLOYEE,
   type EntryStore,
@@ -83,6 +84,33 @@ describe("getProjects", () => {
       expect(p).not.toHaveProperty("billable");
       expect(p).not.toHaveProperty("minutes");
       expect(p).not.toHaveProperty("email");
+    }
+  });
+});
+
+describe("getAbsenceProjects", () => {
+  it("returns the seeded absence projects", async () => {
+    const absences = await provider.getAbsenceProjects();
+    expect(absences).toEqual(MOCK_ABSENCE_PROJECTS);
+    expect(absences.map((p) => p.name)).toEqual(["Vacation", "Sick leave"]);
+  });
+
+  it("tags every absence project with projectType ABSENCE", async () => {
+    const absences = await provider.getAbsenceProjects();
+    expect(absences.length).toBeGreaterThan(0);
+    for (const p of absences) {
+      expect(p.projectType).toBe("ABSENCE");
+    }
+  });
+
+  it("returns projects distinct from getProjects()", async () => {
+    const [projects, absences] = await Promise.all([
+      provider.getProjects(),
+      provider.getAbsenceProjects(),
+    ]);
+    const projectIds = new Set(projects.map((p) => p.id));
+    for (const a of absences) {
+      expect(projectIds.has(a.id)).toBe(false);
     }
   });
 });

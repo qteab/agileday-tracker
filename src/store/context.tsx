@@ -12,7 +12,7 @@ import { appReducer, initialState, type AppState, type AppAction } from "./reduc
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import type { ApiProvider } from "../api/provider";
+import type { ApiProvider, MyProjectInfo } from "../api/provider";
 import { createAgileDayProvider, type AgileDayConfig } from "../api/agileday";
 import type { AuthState } from "../api/auth";
 import { isTokenExpired, refreshAuthState } from "../api/auth";
@@ -24,7 +24,7 @@ import {
   buildApiBaseUrl,
   DEFAULT_CONNECTION,
 } from "../api/auth-manager";
-import type { TimeEntry } from "../api/types";
+import type { Project, TimeEntry } from "../api/types";
 import { loadTimerState, saveTimerState, clearTimerState } from "./timer-store";
 import { loadFlexConfig } from "./flex-store";
 import { loadDisplayPrefs } from "./display-store";
@@ -128,6 +128,49 @@ export function useApi(): ApiProvider {
 }
 
 // --- helpers ------------------------------------------------------------
+
+// Color for absence projectlikes surfaced from openings (the /v2/opening
+// fallback) — these don't come with a color the way /v1/absence entries do.
+const ABSENCE_FALLBACK_COLOR = "#10B981";
+
+// Build the full project list the picker draws from, combining three sources:
+//   1. Regular projects (/v1/project), enriched with allocation projectType.
+//   2. Absence projects (/v1/absence) — a separate AgileDay entity.
+//   3. Fallback: ABSENCE-typed projectlikes we're allocated to (/v2/opening),
+//      for tenants where /v1/absence is not authorized for the user's token.
+// Deduped by id; a regular project that shares an id is never clobbered.
+function mergeProjectSources(
+  projects: Project[],
+  absenceProjects: Project[],
+  myProjects: MyProjectInfo[]
+): Project[] {
+  const typeById = new Map(myProjects.map((project) => [project.id, project.projectType]));
+  const byId = new Map<string, Project>();
+
+  for (const project of projects) {
+    byId.set(
+      project.id,
+      typeById.has(project.id) ? { ...project, projectType: typeById.get(project.id) } : project
+    );
+  }
+
+  for (const absence of absenceProjects) {
+    if (!byId.has(absence.id)) byId.set(absence.id, absence);
+  }
+
+  for (const mp of myProjects) {
+    if (mp.projectType === "ABSENCE" && !byId.has(mp.id)) {
+      byId.set(mp.id, {
+        id: mp.id,
+        name: mp.name ?? "Absence",
+        color: ABSENCE_FALLBACK_COLOR,
+        projectType: "ABSENCE",
+      });
+    }
+  }
+
+  return [...byId.values()];
+}
 
 function formatLocalDate(date: Date): string {
   const year = date.getFullYear();
@@ -492,16 +535,14 @@ function useConnectedDataLoad(
         if (cancelled) return;
         dispatch({ type: "SET_EMPLOYEE", payload: employee });
 
-        const [projects, myProjects] = await Promise.all([
+        const [projects, absenceProjects, myProjects] = await Promise.all([
           api.getProjects(),
+          api.getAbsenceProjects(),
           api.getMyProjects(employee.id),
         ]);
         if (cancelled) return;
-        const typeById = new Map(myProjects.map((project) => [project.id, project.projectType]));
-        const enrichedProjects = projects.map((project) =>
-          typeById.has(project.id) ? { ...project, projectType: typeById.get(project.id) } : project
-        );
-        dispatch({ type: "SET_PROJECTS", payload: enrichedProjects });
+        const mergedProjects = mergeProjectSources(projects, absenceProjects, myProjects);
+        dispatch({ type: "SET_PROJECTS", payload: mergedProjects });
         dispatch({ type: "SET_MY_PROJECT_IDS", payload: myProjects.map((project) => project.id) });
         const openingMap: Record<string, string> = {};
         for (const project of myProjects) {

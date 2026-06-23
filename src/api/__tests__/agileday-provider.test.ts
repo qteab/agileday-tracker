@@ -166,6 +166,42 @@ describe("getProjects", () => {
   });
 });
 
+describe("getAbsenceProjects", () => {
+  it("calls GET /v1/absence and maps fields to ABSENCE-typed projects", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse([
+        { id: "a1", name: "Vacation", customer: { name: "Internal" } },
+        { id: "a2", name: "Sick leave" },
+      ])
+    );
+
+    const absences = await provider.getAbsenceProjects();
+
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toBe(
+      "https://qvik.agileday.io/api/v1/absence?sortBy=name&sortDirection=asc&limit=1000"
+    );
+    expect(absences).toHaveLength(2);
+    expect(absences[0]).toMatchObject({
+      id: "a1",
+      name: "Vacation",
+      customerName: "Internal",
+      projectType: "ABSENCE",
+    });
+    expect(absences[0].color).toBeTruthy();
+    expect(absences[1].customerName).toBeUndefined();
+    expect(absences[1].projectType).toBe("ABSENCE");
+  });
+
+  it("returns [] when the endpoint errors (e.g. unauthorized)", async () => {
+    mockFetch.mockResolvedValueOnce(errorResponse(403, "Forbidden"));
+
+    const absences = await provider.getAbsenceProjects();
+
+    expect(absences).toEqual([]);
+  });
+});
+
 describe("getTasks", () => {
   it("calls GET /v1/project/id/{projectId}/task", async () => {
     mockFetch.mockResolvedValueOnce(
