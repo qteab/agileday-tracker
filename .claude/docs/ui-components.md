@@ -24,7 +24,7 @@ Settings and Finalize are triggered by tray menu events or header buttons.
 | **ProjectCardList** | `ProjectCardList.tsx` | Scrollable list of entries grouped by day. Each day has a header (day name + total) then a column of `ProjectCard` components. |
 | **Fab** | `Fab.tsx` | Floating + button (bottom-right). Opens a dialog with ProjectPicker + TaskPicker to create a new Today entry and auto-start the timer. |
 | **EntryEditModal** | `EntryEditModal.tsx` | Modal form for editing entry: description, project, task, date, minutes. Used for duration/date overrides. |
-| **ProjectPicker** | `ProjectPicker.tsx` | Dropdown for selecting a project. Allocated projects listed first, search bar searches all active projects. |
+| **ProjectPicker** | `ProjectPicker.tsx` | Dropdown for selecting a project. Three groups: "My projects" (allocated, non-absence), "Other projects" (shown when searching), and "Absence" (always visible, all `projectType: "ABSENCE"` projects regardless of allocation). Search bar searches all active projects; absence matches stay in the Absence group. |
 | **TaskPicker** | `TaskPicker.tsx` | Dropdown filtered by selected project. Shows billable indicator. |
 | **BillableIndicator** | `BillableIndicator.tsx` | 22px square display-only indicator showing if a task is billable (accent $ when billable, grey when not). |
 

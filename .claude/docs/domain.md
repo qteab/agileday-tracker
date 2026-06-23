@@ -48,3 +48,5 @@ NEW → SAVED → SUBMITTED → APPROVED
 | **IDLE** | Unallocated/bench time |
 
 These types come from AgileDay allocations and are used for visual grouping in the allocation view.
+
+**Absence projects are a separate entity.** They are not returned by `/v1/project` — they come from the dedicated `/v1/absence` endpoint (`getAbsenceProjects()`) and are tagged `projectType: "ABSENCE"`. In the project picker they appear in their own always-visible "Absence" group, independent of allocation (vacation/sick leave aren't allocated the way projects are). Time is logged against them the same way as a project (`projectId` + `taskId`). AgileDay's umbrella term **projectlike** (used by `/v2/opening`) covers regular projects, opportunities, and absence projects; its type enum also includes `OPPORTUNITY`, which this app does not surface.

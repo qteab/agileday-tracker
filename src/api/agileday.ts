@@ -193,6 +193,27 @@ export function createAgileDayProvider(
       }));
     },
 
+    async getAbsenceProjects(): Promise<Project[]> {
+      // Absence projects (vacation, sick leave, etc.) are a separate AgileDay
+      // entity — they are NOT returned by /v1/project, so they need their own
+      // fetch. Degrade gracefully to [] if the token can't read this endpoint.
+      const absences = await apiFetch<
+        Array<{
+          id: string;
+          name: string;
+          customer?: { name: string };
+        }>
+      >("/v1/absence?sortBy=name&sortDirection=asc&limit=1000").catch(() => []);
+
+      return absences.map((a, i) => ({
+        id: a.id,
+        name: a.name,
+        customerName: a.customer?.name,
+        color: assignProjectColor(i),
+        projectType: "ABSENCE" as const,
+      }));
+    },
+
     async getTasks(projectId: string): Promise<Task[]> {
       const tasks = await apiFetch<
         Array<{
@@ -534,16 +555,21 @@ export function createAgileDayProvider(
         openings: Array<{
           id: string;
           projectlikeId: string;
+          projectlikeName?: string;
           projectlikeType?: ProjectType | null;
           status: string;
         }>;
       }>(`/v2/opening?limit=100&filter=${encodeURIComponent(filter)}`);
 
-      const byId = new Map<string, { projectType?: ProjectType; openingId: string }>();
+      const byId = new Map<
+        string,
+        { name?: string; projectType?: ProjectType; openingId: string }
+      >();
       for (const o of data.openings) {
         const prev = byId.get(o.projectlikeId);
         if (!prev) {
           byId.set(o.projectlikeId, {
+            name: o.projectlikeName,
             projectType: o.projectlikeType ?? undefined,
             openingId: o.id,
           });
@@ -554,6 +580,7 @@ export function createAgileDayProvider(
       }
       return [...byId.entries()].map(([id, info]) => ({
         id,
+        name: info.name,
         projectType: info.projectType,
         openingId: info.openingId,
       }));

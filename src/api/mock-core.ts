@@ -15,6 +15,11 @@ export const MOCK_PROJECTS: Project[] = [
   { id: "p5", name: "QTE - möten", customerName: "QTE", color: "#7A59FC", projectType: "INTERNAL" },
 ];
 
+export const MOCK_ABSENCE_PROJECTS: Project[] = [
+  { id: "a1", name: "Vacation", color: "#10B981", projectType: "ABSENCE" },
+  { id: "a2", name: "Sick leave", color: "#EF4444", projectType: "ABSENCE" },
+];
+
 export const MOCK_TASKS: Record<string, Task[]> = {
   p1: [
     { id: "t1", projectId: "p1", name: "Development", billable: true, active: true },
@@ -31,6 +36,8 @@ export const MOCK_TASKS: Record<string, Task[]> = {
   ],
   p4: [{ id: "t8", projectId: "p4", name: "Operations", billable: true, active: true }],
   p5: [{ id: "t9", projectId: "p5", name: "Internal", billable: false, active: true }],
+  a1: [{ id: "t10", projectId: "a1", name: "Vacation", billable: false, active: true }],
+  a2: [{ id: "t11", projectId: "a2", name: "Sick leave", billable: false, active: true }],
 };
 
 export const MOCK_EMPLOYEE: Employee = {
@@ -72,7 +79,8 @@ export function createMockProvider(
   projects: Project[],
   tasks: Record<string, Task[]>,
   employee: Employee,
-  allocations: Allocation[] = MOCK_ALLOCATIONS
+  allocations: Allocation[] = MOCK_ALLOCATIONS,
+  absenceProjects: Project[] = MOCK_ABSENCE_PROJECTS
 ): ApiProvider {
   return {
     async getCurrentEmployee() {
@@ -81,6 +89,10 @@ export function createMockProvider(
 
     async getProjects() {
       return projects;
+    },
+
+    async getAbsenceProjects() {
+      return absenceProjects;
     },
 
     async getTasks(projectId: string) {
@@ -154,6 +166,7 @@ export function createMockProvider(
     async getMyProjects(_employeeId: string) {
       return projects.map((p) => ({
         id: p.id,
+        name: p.name,
         projectType: p.projectType,
         openingId: `opening-${p.id}`,
       }));

@@ -2,6 +2,9 @@ import type { Allocation, Employee, Holiday, Project, ProjectType, Task, TimeEnt
 
 export interface MyProjectInfo {
   id: string;
+  /** Name from the opening (projectlikeName). Used to surface allocated
+   *  projectlikes — e.g. absence — that /v1/project doesn't return. */
+  name?: string;
   projectType?: ProjectType;
   openingId?: string;
 }
@@ -9,6 +12,8 @@ export interface MyProjectInfo {
 export interface ApiProvider {
   getCurrentEmployee(): Promise<Employee>;
   getProjects(): Promise<Project[]>;
+  /** Absence projects (vacation, sick leave, etc.) from the dedicated /v1/absence endpoint. */
+  getAbsenceProjects(): Promise<Project[]>;
   getTasks(projectId: string): Promise<Task[]>;
   getTimeEntries(employeeId: string, startDate: string, endDate: string): Promise<TimeEntry[]>;
   createTimeEntry(
