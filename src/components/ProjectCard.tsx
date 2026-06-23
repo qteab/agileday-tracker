@@ -335,6 +335,7 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
               selectedId={entry.projectId}
               onSelect={handleProjectSelect}
               variant="chip"
+              usageDate={entry.date}
             />
           ) : (
             <button
@@ -578,7 +579,7 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
                 setActionError(null);
                 setEditMode("delete");
               }}
-              className="inline-flex items-center gap-1 text-[12px] text-text-subtle hover:text-danger transition-colors"
+              className="inline-flex items-center gap-1.5 text-[12px] leading-none text-text-subtle hover:text-danger transition-colors"
               aria-label="Delete entry"
             >
               <svg
@@ -590,13 +591,14 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
                 strokeWidth="1.75"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                className="shrink-0"
               >
                 <polyline points="3 6 5 6 21 6" />
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                 <line x1="10" y1="11" x2="10" y2="17" />
                 <line x1="14" y1="11" x2="14" y2="17" />
               </svg>
-              delete
+              <span>Delete</span>
             </button>
           </div>
         )

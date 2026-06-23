@@ -11,6 +11,9 @@ export function Fab() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
 
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
   const handleCreate = async () => {
     if (!projectId || !taskId || !state.employee) return;
 
@@ -77,6 +80,7 @@ export function Fab() {
               setTaskId(null);
             }}
             variant="field"
+            usageDate={today}
           />
           <TaskPicker
             projectId={projectId}
