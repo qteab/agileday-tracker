@@ -20,12 +20,12 @@ Settings and Finalize are triggered by tray menu events or header buttons.
 
 | Component | File | Purpose |
 |---|---|---|
-| **ProjectCard** | `ProjectCard.tsx` | Card per project-per-day: header (project name, status dot, task tag, billable $, elapsed time, play/stop) + description stack with connector rail. Inline-editable descriptions synced to API on blur. |
+| **ProjectCard** | `ProjectCard.tsx` | Card per project-per-day. Everything is edited **inline** on non-submitted cards: descriptions (contentEditable, save on blur), **time** (click the counter → `H:MM` input; works while running too), **project** + **task** (click the name/tag → inline `chip` pickers), and **delete** (trash icon → in-card Cancel/Delete confirm). No modal. |
 | **ProjectCardList** | `ProjectCardList.tsx` | Scrollable list of entries grouped by day. Each day has a header (day name + total) then a column of `ProjectCard` components. |
-| **Fab** | `Fab.tsx` | Floating + button (bottom-right). Opens a dialog with ProjectPicker + TaskPicker to create a new Today entry and auto-start the timer. |
-| **EntryEditModal** | `EntryEditModal.tsx` | Modal form for editing entry: description, project, task, date, minutes. Used for duration/date overrides. |
+| **Fab** | `Fab.tsx` | Floating + button (bottom-right). Opens a dialog with ProjectPicker + TaskPicker to create a new Today entry and auto-start the timer. Locally-created entries get a `local-` id prefix until first synced. |
+| **entry-edit** (helpers) | `entry-edit.ts` | Pure helpers for card editing: `parseDurationInput`/`formatDurationInput` (duration ⇄ minutes), `computeRunningTimeEdit` (running-time edit math), `isLocalOnlyEntry` (`local-` id prefix check), `usedTaskIds` (task ids already used for a project+date, used to filter the picker). Unit-tested in `entry-edit.test.ts`. |
 | **ProjectPicker** | `ProjectPicker.tsx` | Dropdown for selecting a project. Three groups: "My projects" (allocated, non-absence), "Other projects" (shown when searching), and "Absence" (always visible, all `projectType: "ABSENCE"` projects regardless of allocation). Search bar searches all active projects; absence matches stay in the Absence group. |
-| **TaskPicker** | `TaskPicker.tsx` | Dropdown filtered by selected project. Shows billable indicator. |
+| **TaskPicker** | `TaskPicker.tsx` | Dropdown filtered by selected project. Shows billable indicator. Optional `excludeIds` set hides tasks (used inline to hide tasks already logged for the same project+date, preventing duplicate entries). |
 | **BillableIndicator** | `BillableIndicator.tsx` | 22px square display-only indicator showing if a task is billable (accent $ when billable, grey when not). |
 
 ### Views
@@ -115,4 +115,7 @@ How it works:
 - All components are function components with hooks
 - Card layout maps 1:1 to AgileDay entries (one card per project+task+date)
 - Timer controls only appear on Today's cards; past-day cards are view/edit only
-- Descriptions are inline-editable on unsubmitted cards; submitted cards are read-only
+- All editing is inline on unsubmitted cards (description, time, project, task, delete); submitted cards are fully read-only
+- Time edits persist via `createTimeEntry` (POST-or-PATCH); project/task edits persist via `updateTimeEntry` (PATCH by id, including `openingId`). Local-only entries (`local-` id) skip the API and persist on the next save
+- Project/task pickers are disabled while that card's timer runs (timer state references the current projectId/taskId)
+- Confirmations are rendered in-DOM (inline row), never native `confirm()`/`alert()` — those freeze the Tauri WebView

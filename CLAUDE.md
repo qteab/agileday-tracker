@@ -98,7 +98,7 @@ Comprehensive specs for AI agents and contributors in `.claude/docs/`:
 
 - [Architecture](.claude/docs/architecture.md) — Three-layer design (Tauri shell, React frontend, API abstraction), state management, data flow, timer logic, entry consolidation
 - [API & Auth](.claude/docs/api-and-auth.md) — AgileDay REST endpoints, OAuth 2.1 PKCE flow, token management, ApiProvider interface
-- [UI Components](.claude/docs/ui-components.md) — All 18 components, layout structure, hooks, styling (Tailwind theme)
+- [UI Components](.claude/docs/ui-components.md) — All components, layout structure, hooks, styling (Tailwind theme)
 - [Conventions](.claude/docs/conventions.md) — TypeScript strict mode, Prettier/ESLint config, React patterns, naming, file organization
 - [Testing](.claude/docs/testing.md) — Vitest setup, 57 tests, test patterns, coverage scope
 - [Domain Glossary](.claude/docs/domain.md) — AgileDay concepts, entry status lifecycle, app-specific terms

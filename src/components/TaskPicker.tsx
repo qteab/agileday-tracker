@@ -7,6 +7,8 @@ interface TaskPickerProps {
   selectedId: string | null;
   onSelect: (taskId: string | null) => void;
   variant?: "field" | "chip";
+  /** Task ids to hide from the list (e.g. already used for this project+date). */
+  excludeIds?: Set<string>;
 }
 
 export function TaskPicker({
@@ -14,6 +16,7 @@ export function TaskPicker({
   selectedId,
   onSelect,
   variant = "field",
+  excludeIds,
 }: TaskPickerProps) {
   const { state, dispatch } = useApp();
   const api = useApi();
@@ -104,6 +107,7 @@ export function TaskPicker({
         >
           {state.tasks
             .filter((t) => t.active)
+            .filter((t) => !excludeIds?.has(t.id) || t.id === selectedId)
             .map((task) => (
               <button
                 type="button"
