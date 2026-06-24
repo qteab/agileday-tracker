@@ -72,7 +72,7 @@ export function useTimer() {
       });
     } else {
       // Edge case: entry was deleted while timer was running
-      workingId = crypto.randomUUID();
+      workingId = `local-${crypto.randomUUID()}`;
       dispatch({
         type: "ADD_ENTRY",
         payload: {

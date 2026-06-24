@@ -5,10 +5,23 @@ interface ProjectPickerProps {
   selectedId: string | null;
   onSelect: (projectId: string) => void;
   variant?: "field" | "chip";
+  /** When set, projects tracked on this day (YYYY-MM-DD) are also listed in the
+   *  default view, alongside allocated projects. */
+  usageDate?: string;
+  /** Called when the picker is dismissed by clicking outside it. */
+  onClose?: () => void;
 }
 
-export function ProjectPicker({ selectedId, onSelect, variant = "field" }: ProjectPickerProps) {
+export function ProjectPicker({
+  selectedId,
+  onSelect,
+  variant = "field",
+  usageDate,
+  onClose,
+}: ProjectPickerProps) {
   const { state } = useApp();
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const ref = useRef<HTMLDivElement>(null);
@@ -54,13 +67,38 @@ export function ProjectPicker({ selectedId, onSelect, variant = "field" }: Proje
     return absences.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 20);
   }, [search, state.projects]);
 
-  const displayProjects = search.trim() ? mySearchResults : myProjects;
+  // Projects tracked on the active day (non-absence) — surfaced in the default
+  // view so a card's own project (incl. non-allocated ones) is always pickable.
+  const dayProjects = useMemo(() => {
+    if (!usageDate) return [];
+    const ids = new Set(state.entries.filter((e) => e.date === usageDate).map((e) => e.projectId));
+    return state.projects.filter((p) => ids.has(p.id) && p.projectType !== "ABSENCE");
+  }, [usageDate, state.entries, state.projects]);
+
+  // Default (non-search) list: allocated projects ∪ the day's tracked projects,
+  // plus the currently-selected project if it's somehow neither.
+  const displayProjects = useMemo(() => {
+    if (search.trim()) return mySearchResults;
+    const merged = [...myProjects];
+    const seen = new Set(myProjects.map((p) => p.id));
+    for (const p of dayProjects) {
+      if (!seen.has(p.id)) {
+        merged.push(p);
+        seen.add(p.id);
+      }
+    }
+    if (selected && selected.projectType !== "ABSENCE" && !seen.has(selected.id)) {
+      merged.unshift(selected);
+    }
+    return merged;
+  }, [search, mySearchResults, myProjects, dayProjects, selected]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
         setSearch("");
+        onCloseRef.current?.();
       }
     }
     document.addEventListener("mousedown", handleClick);
@@ -136,7 +174,7 @@ export function ProjectPicker({ selectedId, onSelect, variant = "field" }: Proje
             <div className="px-3 py-1.5 text-[10px] font-semibold text-text-muted uppercase tracking-wide">
               {search.trim()
                 ? `My projects (${mySearchResults.length})`
-                : `My projects (${myProjects.length})`}
+                : `My projects (${displayProjects.length})`}
             </div>
             {displayProjects.length === 0 && (
               <div className="px-3 py-3 text-xs text-text-muted text-center">

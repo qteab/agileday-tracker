@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useApp } from "../store/context";
 import { ProjectPicker } from "./ProjectPicker";
 import { TaskPicker } from "./TaskPicker";
+import { usedTaskIds } from "./entry-edit";
 import { useTimer } from "../hooks/useTimer";
 
 export function Fab() {
@@ -10,6 +11,16 @@ export function Fab() {
   const [showDialog, setShowDialog] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
+
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  // Tasks already tracked today for the selected project — hidden so the FAB
+  // can't create a duplicate (project, task, date) entry.
+  const usedTasks = useMemo(
+    () => (projectId ? usedTaskIds(state.entries, "", projectId, today) : new Set<string>()),
+    [projectId, state.entries, today]
+  );
 
   const handleCreate = async () => {
     if (!projectId || !taskId || !state.employee) return;
@@ -25,7 +36,7 @@ export function Fab() {
     if (!existing) {
       const project = state.projects.find((p) => p.id === projectId);
       const openingId = state.projectOpeningMap[projectId];
-      const localId = crypto.randomUUID();
+      const localId = `local-${crypto.randomUUID()}`;
 
       // Add locally — will be synced to AgileDay on first description save or timer stop
       dispatch({
@@ -77,12 +88,14 @@ export function Fab() {
               setTaskId(null);
             }}
             variant="field"
+            usageDate={today}
           />
           <TaskPicker
             projectId={projectId}
             selectedId={taskId}
             onSelect={setTaskId}
             variant="field"
+            excludeIds={usedTasks}
           />
           <button
             onClick={() => void handleCreate()}
