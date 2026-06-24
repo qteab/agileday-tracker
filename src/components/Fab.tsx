@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useApp } from "../store/context";
 import { ProjectPicker } from "./ProjectPicker";
 import { TaskPicker } from "./TaskPicker";
+import { usedTaskIds } from "./entry-edit";
 import { useTimer } from "../hooks/useTimer";
 
 export function Fab() {
@@ -13,6 +14,13 @@ export function Fab() {
 
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  // Tasks already tracked today for the selected project — hidden so the FAB
+  // can't create a duplicate (project, task, date) entry.
+  const usedTasks = useMemo(
+    () => (projectId ? usedTaskIds(state.entries, "", projectId, today) : new Set<string>()),
+    [projectId, state.entries, today]
+  );
 
   const handleCreate = async () => {
     if (!projectId || !taskId || !state.employee) return;
@@ -87,6 +95,7 @@ export function Fab() {
             selectedId={taskId}
             onSelect={setTaskId}
             variant="field"
+            excludeIds={usedTasks}
           />
           <button
             onClick={() => void handleCreate()}
