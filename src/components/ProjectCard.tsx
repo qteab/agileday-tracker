@@ -391,6 +391,51 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
     }
   }, [api, dispatch, entry, isThisRunning]);
 
+  // Quick-open: from a past-day card, start a new entry today with the same
+  // project + task. Blocked if that project+task is already tracked today.
+  const todayStr = (() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  })();
+  const canQuickOpen = !isToday && !!entry.taskId;
+  const alreadyTrackedToday = entry.taskId
+    ? usedTaskIds(state.entries, "", entry.projectId, todayStr).has(entry.taskId)
+    : false;
+
+  const handleQuickOpen = useCallback(() => {
+    if (!entry.taskId || alreadyTrackedToday || !state.employee) return;
+    const proj = state.projects.find((p) => p.id === entry.projectId);
+    const openingId = state.projectOpeningMap[entry.projectId];
+    dispatch({
+      type: "ADD_ENTRY",
+      payload: {
+        id: `local-${crypto.randomUUID()}`,
+        description: "",
+        projectId: entry.projectId,
+        projectName: proj?.name ?? entry.projectName,
+        openingId,
+        taskId: entry.taskId,
+        date: todayStr,
+        startTime: new Date().toISOString(),
+        minutes: 0,
+        status: "SAVED",
+        syncStatus: "synced",
+      },
+    });
+    void startForCard(entry.projectId, entry.taskId);
+  }, [
+    entry.taskId,
+    entry.projectId,
+    entry.projectName,
+    alreadyTrackedToday,
+    state.employee,
+    state.projects,
+    state.projectOpeningMap,
+    todayStr,
+    dispatch,
+    startForCard,
+  ]);
+
   // Dot color: green for active/external, purple for internal, intense for absence/idle
   const dotColor = (() => {
     const pt = entry.projectType ?? project?.projectType;
@@ -528,6 +573,19 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
                   <polygon points="6 4 20 12 6 20 6 4" />
                 </svg>
               )}
+            </button>
+          )}
+          {canQuickOpen && (
+            <button
+              onClick={handleQuickOpen}
+              disabled={alreadyTrackedToday}
+              title={alreadyTrackedToday ? "Already tracked today" : "Start today"}
+              className="w-[38px] h-[38px] rounded-full flex items-center justify-center transition-all active:scale-[0.94] border-2 border-primary text-primary hover:bg-primary hover:text-white disabled:opacity-40 disabled:border-border disabled:text-text-subtle disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-text-subtle"
+              aria-label="Start today"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="6 4 20 12 6 20 6 4" />
+              </svg>
             </button>
           )}
         </div>
