@@ -62,9 +62,10 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
     (timerTaskId ?? null) === (entry.taskId ?? null) &&
     isToday;
 
-  // Project/task can only be changed while the card's timer is not running
-  // (the timer state references the current projectId/taskId).
-  const canEditMeta = isEditable && !isThisRunning;
+  // Project/task are editable on any non-submitted card. When the card's timer
+  // is running, the timer state is re-pointed to the new project/task so it
+  // keeps counting on the re-categorized entry (see handleProject/TaskSelect).
+  const canEditMeta = isEditable;
 
   // Descriptions state for inline editing
   const [descriptions, setDescriptions] = useState(() => splitDescriptions(entry.description));
@@ -236,10 +237,15 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
           },
         },
       });
+      // If this card's timer is running, re-point it to the new project so it
+      // keeps counting (task cleared until the user picks one below).
+      if (isThisRunning) {
+        dispatch({ type: "SET_TIMER", payload: { projectId: newProjectId, taskId: null } });
+      }
       // Force a task selection for the new project before persisting.
       setEditMode("task");
     },
-    [entry.id, entry.projectId, state.projects, state.projectOpeningMap, dispatch]
+    [entry.id, entry.projectId, state.projects, state.projectOpeningMap, dispatch, isThisRunning]
   );
 
   /** Change the task (and persist the project+task change). */
@@ -253,6 +259,15 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
         type: "UPDATE_ENTRY",
         payload: { id: entry.id, updates: { taskId: newTaskId, syncStatus: "pending" } },
       });
+
+      // Keep a running timer pointed at the re-categorized project+task so it
+      // keeps counting and stop() finds this entry.
+      if (isThisRunning) {
+        dispatch({
+          type: "SET_TIMER",
+          payload: { projectId: entry.projectId, taskId: newTaskId },
+        });
+      }
 
       // Local-only entries aren't on AgileDay yet — they'll be POSTed correctly
       // on the next save (timer stop / description / minutes edit).
@@ -289,7 +304,7 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
         setActionError(err instanceof Error ? err.message : "Failed to update task");
       }
     },
-    [api, dispatch, entry, state.employee]
+    [api, dispatch, entry, state.employee, isThisRunning]
   );
 
   /** Delete the entry (with the inline confirmation already shown). */
