@@ -78,6 +78,17 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
   const timeInputRef = useRef<HTMLInputElement>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Snapshot of the entry's project/task taken when a project change begins, so
+  // cancelling (clicking outside) restores it instead of leaving a half-changed
+  // entry. Cleared once a task is committed.
+  const pendingRevertRef = useRef<{
+    projectId: string;
+    projectName?: string;
+    openingId?: string;
+    taskId?: string;
+    wasRunning: boolean;
+  } | null>(null);
+
   // Sync descriptions when entry changes from server
   useEffect(() => {
     if (editingIndex === null) {
@@ -223,6 +234,17 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
         setEditMode("none");
         return;
       }
+      // Remember the pre-change state (only the first change in this session)
+      // so cancelling can restore it.
+      if (!pendingRevertRef.current) {
+        pendingRevertRef.current = {
+          projectId: entry.projectId,
+          projectName: entry.projectName,
+          openingId: entry.openingId,
+          taskId: entry.taskId,
+          wasRunning: isThisRunning,
+        };
+      }
       const newProject = state.projects.find((p) => p.id === newProjectId);
       const openingId = state.projectOpeningMap[newProjectId];
       dispatch({
@@ -245,7 +267,17 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
       // Force a task selection for the new project before persisting.
       setEditMode("task");
     },
-    [entry.id, entry.projectId, state.projects, state.projectOpeningMap, dispatch, isThisRunning]
+    [
+      entry.id,
+      entry.projectId,
+      entry.projectName,
+      entry.openingId,
+      entry.taskId,
+      state.projects,
+      state.projectOpeningMap,
+      dispatch,
+      isThisRunning,
+    ]
   );
 
   /** Change the task (and persist the project+task change). */
@@ -254,6 +286,8 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
       setEditMode("none");
       if (!newTaskId || newTaskId === entry.taskId) return;
       setActionError(null);
+      // A task was chosen — the project/task change is committed, nothing to revert.
+      pendingRevertRef.current = null;
 
       dispatch({
         type: "UPDATE_ENTRY",
@@ -307,6 +341,34 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
     [api, dispatch, entry, state.employee, isThisRunning]
   );
 
+  /** Exit project/task editing. Restores the pre-change project/task if a
+   *  project change was started but no task was committed. */
+  const handleCancelEdit = useCallback(() => {
+    const snap = pendingRevertRef.current;
+    pendingRevertRef.current = null;
+    if (snap) {
+      dispatch({
+        type: "UPDATE_ENTRY",
+        payload: {
+          id: entry.id,
+          updates: {
+            projectId: snap.projectId,
+            projectName: snap.projectName,
+            openingId: snap.openingId,
+            taskId: snap.taskId,
+          },
+        },
+      });
+      if (snap.wasRunning) {
+        dispatch({
+          type: "SET_TIMER",
+          payload: { projectId: snap.projectId, taskId: snap.taskId ?? null },
+        });
+      }
+    }
+    setEditMode("none");
+  }, [dispatch, entry.id]);
+
   /** Delete the entry (with the inline confirmation already shown). */
   const confirmDelete = useCallback(async () => {
     setEditMode("none");
@@ -351,7 +413,7 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
               onSelect={handleProjectSelect}
               variant="chip"
               usageDate={entry.date}
-              onClose={() => setEditMode("none")}
+              onClose={handleCancelEdit}
             />
           ) : (
             <button
@@ -377,7 +439,7 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
                 onSelect={handleTaskSelect}
                 excludeIds={usedTasks}
                 variant="chip"
-                onClose={() => setEditMode("none")}
+                onClose={handleCancelEdit}
               />
             ) : (
               <button

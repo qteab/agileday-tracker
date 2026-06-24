@@ -118,5 +118,5 @@ How it works:
 - All editing is inline on unsubmitted cards (description, time, project, task, delete); submitted cards are fully read-only
 - Time edits persist via `createTimeEntry` (POST-or-PATCH); project/task edits persist via `updateTimeEntry` (PATCH by id, including `openingId`). Local-only entries (`local-` id) skip the API and persist on the next save
 - Project/task can be changed even while that card's timer runs; the timer state is re-pointed to the new project/task (via `SET_TIMER`) so it keeps counting on the re-categorized entry and `stop()` still finds it
-- The inline project/task pickers take an `onClose` callback; clicking outside dismisses the dropdown and exits edit mode (reverts to the project name / task tag) without changing anything
+- The inline project/task pickers take an `onClose` callback; clicking outside dismisses the dropdown and exits edit mode. If a project change was started but no task was committed, the pre-change project/task (and the running timer's pointer) is restored — so cancelling never leaves a task-less entry
 - Confirmations are rendered in-DOM (inline row), never native `confirm()`/`alert()` — those freeze the Tauri WebView
