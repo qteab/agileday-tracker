@@ -336,6 +336,7 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
               onSelect={handleProjectSelect}
               variant="chip"
               usageDate={entry.date}
+              onClose={() => setEditMode("none")}
             />
           ) : (
             <button
@@ -361,6 +362,7 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
                 onSelect={handleTaskSelect}
                 excludeIds={usedTasks}
                 variant="chip"
+                onClose={() => setEditMode("none")}
               />
             ) : (
               <button

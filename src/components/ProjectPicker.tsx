@@ -8,6 +8,8 @@ interface ProjectPickerProps {
   /** When set, projects tracked on this day (YYYY-MM-DD) are also listed in the
    *  default view, alongside allocated projects. */
   usageDate?: string;
+  /** Called when the picker is dismissed by clicking outside it. */
+  onClose?: () => void;
 }
 
 export function ProjectPicker({
@@ -15,8 +17,11 @@ export function ProjectPicker({
   onSelect,
   variant = "field",
   usageDate,
+  onClose,
 }: ProjectPickerProps) {
   const { state } = useApp();
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const ref = useRef<HTMLDivElement>(null);
@@ -93,6 +98,7 @@ export function ProjectPicker({
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
         setSearch("");
+        onCloseRef.current?.();
       }
     }
     document.addEventListener("mousedown", handleClick);

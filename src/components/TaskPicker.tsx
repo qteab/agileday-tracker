@@ -9,6 +9,8 @@ interface TaskPickerProps {
   variant?: "field" | "chip";
   /** Task ids to hide from the list (e.g. already used for this project+date). */
   excludeIds?: Set<string>;
+  /** Called when the picker is dismissed by clicking outside it. */
+  onClose?: () => void;
 }
 
 export function TaskPicker({
@@ -17,11 +19,14 @@ export function TaskPicker({
   onSelect,
   variant = "field",
   excludeIds,
+  onClose,
 }: TaskPickerProps) {
   const { state, dispatch } = useApp();
   const api = useApi();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   const selected = state.tasks.find((t) => t.id === selectedId);
 
@@ -47,6 +52,7 @@ export function TaskPicker({
     function handleClick(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
+        onCloseRef.current?.();
       }
     }
     document.addEventListener("mousedown", handleClick);
