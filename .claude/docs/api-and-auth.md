@@ -8,8 +8,9 @@ All requests require `Origin: https://qvik.agileday.io` header (Tauri HTTP plugi
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| GET | `/v1/time_entry/employee/id/{id}/updated` | Read entries (all statuses, includes descriptions) |
-| GET | `/v1/timesheets/{id}/summary` | Fallback entry read (all statuses, no descriptions) |
+| GET | `/v1/time_entry/employee/id/{id}?startDate=&endDate=` | Primary entry read, filtered by **work date** (all statuses, includes descriptions). `endDate` is **exclusive** — callers pass `endDate + 1 day` |
+| GET | `/v1/time_entry/employee/id/{id}/updated` | Fallback entry read, used **only** if the primary read fails. Filters by last-update timestamp, *not* work date, so it uses a 400-day `updatedAfter` lookback |
+| GET | `/v1/timesheets/{id}/summary` | Per-month top-up read (all statuses, no descriptions). Fetched for **every** month the requested window touches |
 | POST | `/v1/time_entry/employee/id/{id}` | Create time entry |
 | PATCH | `/v1/time_entry/{id}` | Update time entry |
 | DELETE | `/v1/time_entry/{id}` | Delete time entry |
@@ -36,9 +37,31 @@ Content-Type: application/json
 **One entry per (project, task, date).** The FAB enforces this locally. The provider checks for existing entries before creating — if one exists, it PATCHes instead of POSTing.
 
 `createTimeEntry` flow:
-1. Query `/updated` for existing entry matching (projectId, taskId, date, EDITABLE status)
+1. Query that single day by work date (`?startDate={date}&endDate={date+1}`) for an existing entry matching (projectId, taskId, EDITABLE status)
 2. If match found → PATCH with app's full state (minutes, description)
 3. If no match → POST new entry
+
+### Reading entries: why three sources
+
+Entries are read by **work date**, never by last-update timestamp. `updatedAfter`
+on the `/updated` endpoint filters on `updatedAt`, so using it as a date-range
+filter silently hides any entry written before the window start — a week of
+vacation booked months in advance simply disappears, and because the cutoff
+rolls forward daily, entries drop out over time rather than all at once. That
+produced a phantom -40h week in the flex balance (see
+`specs/fix-flex-missing-entries/plan.md`).
+
+The read therefore layers:
+1. **Primary** — date-range GET. Correct by construction.
+2. **Fallback** — `/updated` with a 400-day lookback, only if the primary throws
+   (an *empty* primary result is legitimate and does not trigger it).
+3. **Top-up** — per-month summary for every month in the window, merged by
+   `projectId::date` and adding only the deficit. This is what guarantees no
+   minutes go missing if the primary read's status coverage is incomplete.
+
+Flex depends entirely on this: `calculateFlex` never reduces *expected* hours
+for absence, it counts logged absence entries as worked minutes. A week whose
+entries fail to load therefore reads as five no-show days.
 
 ### Entry Status Flow
 

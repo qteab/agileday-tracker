@@ -236,8 +236,8 @@ describe("getTasks", () => {
 });
 
 describe("getTimeEntries", () => {
-  it("fetches from /updated endpoint and timesheets summary", async () => {
-    // First call: /updated endpoint (detailed entries with descriptions)
+  it("fetches from the date-range endpoint and timesheets summary", async () => {
+    // First call: date-range read (detailed entries with descriptions)
     mockFetch.mockResolvedValueOnce(
       jsonResponse([
         {
@@ -257,7 +257,7 @@ describe("getTimeEntries", () => {
     const entries = await provider.getTimeEntries("emp-1", "2026-04-01", "2026-04-30");
 
     const [url] = mockFetch.mock.calls[0];
-    expect(url).toContain("/v1/time_entry/employee/id/emp-1/updated");
+    expect(url).toContain("/v1/time_entry/employee/id/emp-1?startDate=2026-04-01");
     expect(entries).toHaveLength(1);
     expect(entries[0].syncStatus).toBe("synced");
     expect(entries[0].description).toBe("work");
@@ -285,8 +285,8 @@ describe("getTimeEntries", () => {
 });
 
 describe("createTimeEntry", () => {
-  it("queries /updated first, then POSTs if no match", async () => {
-    // First call: /updated query returns no matches
+  it("queries that day's entries first, then POSTs if no match", async () => {
+    // First call: same-day lookup returns no matches
     mockFetch.mockResolvedValueOnce(jsonResponse([]));
     // Second call: POST creates entry
     mockFetch.mockResolvedValueOnce(
@@ -312,8 +312,8 @@ describe("createTimeEntry", () => {
       status: "SAVED",
     });
 
-    // First call was /updated query
-    expect(mockFetch.mock.calls[0][0]).toContain("/updated");
+    // First call was the same-day existence lookup (by work date)
+    expect(mockFetch.mock.calls[0][0]).toContain("startDate=2026-04-24&endDate=2026-04-25");
     // Second call was POST
     const [url, opts] = mockFetch.mock.calls[1];
     expect(url).toContain("/v1/time_entry/employee/id/emp-1");

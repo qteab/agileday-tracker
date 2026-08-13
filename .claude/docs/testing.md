@@ -16,14 +16,18 @@ src/api/__tests__/
   agileday-provider.test.ts       — AgileDay client with mocked fetch
   entry-sync.test.ts              — Entry sync behavior (create, update, delete, read)
   description-helpers.test.ts     — splitDescriptions/joinDescriptions helpers
-src/utils/__tests__/
   flex.test.ts                    — Flex calculation
   rounding.test.ts                — 15-minute rounding
   holidays.test.ts                — Holiday set lookup
+src/utils/__tests__/
+  date-range.test.ts              — monthsInRange/addDays API window helpers
   week.test.ts                    — Week utilities
+  inactivity.test.ts              — Idle detection
+src/store/__tests__/
+  inactivity-reducer.test.ts      — Idle state transitions
 ```
 
-Total: 189 tests.
+Total: 220 tests.
 
 ## Test Patterns
 
