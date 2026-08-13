@@ -404,6 +404,40 @@ describe("calculateFlex — multi-week integration", () => {
   });
 });
 
+describe("fully-logged vacation week (regression)", () => {
+  // Reported 2026-08-13: the balance read -34h 23m because the Aug 3-7 vacation
+  // week came back from the API with no entries, so a fully-logged week counted
+  // as five no-show days. Flex never reduces *expected* hours for absence — it
+  // relies on the absence entries themselves — so this guards the arithmetic
+  // once those entries are present.
+  const entries = [
+    entry("2026-08-03", 480, "abs-1"), // Mon-Fri vacation, 8h/day
+    entry("2026-08-04", 480, "abs-1"),
+    entry("2026-08-05", 480, "abs-1"),
+    entry("2026-08-06", 480, "abs-1"),
+    entry("2026-08-07", 480, "abs-1"),
+    entry("2026-08-10", 505), // Mon-Wed of the current, partial week: 25:18 total
+    entry("2026-08-11", 480),
+    entry("2026-08-12", 533),
+  ];
+  // startDate = last day of the July paycheck month → counting starts Aug 1
+  const result = calculateFlex(entries, "2026-07-31", 4.31, [], new Date("2026-08-13T12:00:00"));
+
+  it("counts a fully-logged vacation week as neutral, not -40h", () => {
+    const vacationWeek = result.weeks.find((w) => w.startDate === "2026-08-03");
+    expect(vacationWeek).toBeDefined();
+    expect(vacationWeek?.expectedMinutes).toBe(2400); // 5 × 8h
+    expect(vacationWeek?.workedMinutes).toBe(2400);
+    expect(vacationWeek?.deltaMinutes).toBe(0);
+  });
+
+  it("keeps the balance positive instead of showing a phantom deficit", () => {
+    // 259 (initial 4.31h) + 0 (Aug 1-2 weekend) + 0 (vacation) + 78 (25:18 vs 24:00)
+    expect(result.totalMinutes).toBe(337);
+    expect(formatFlexMinutes(result.totalMinutes)).toBe("+5h 37m");
+  });
+});
+
 describe("formatFlexMinutes", () => {
   it("formats positive flex", () => {
     expect(formatFlexMinutes(150)).toBe("+2h 30m");
