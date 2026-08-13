@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { monthsInRange, addDays } from "../../utils/date-range";
+import { monthsInRange, addDays } from "../date-range";
 
 describe("monthsInRange", () => {
   it("covers every month in a ±30-day window (the missing-August bug)", () => {

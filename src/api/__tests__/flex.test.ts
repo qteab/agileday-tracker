@@ -420,10 +420,13 @@ describe("fully-logged vacation week (regression)", () => {
     entry("2026-08-11", 480),
     entry("2026-08-12", 533),
   ];
+
   // startDate = last day of the July paycheck month → counting starts Aug 1
-  const result = calculateFlex(entries, "2026-07-31", 4.31, [], new Date("2026-08-13T12:00:00"));
+  const calculate = () =>
+    calculateFlex(entries, "2026-07-31", 4.31, [], new Date("2026-08-13T12:00:00"));
 
   it("counts a fully-logged vacation week as neutral, not -40h", () => {
+    const result = calculate();
     const vacationWeek = result.weeks.find((w) => w.startDate === "2026-08-03");
     expect(vacationWeek).toBeDefined();
     expect(vacationWeek?.expectedMinutes).toBe(2400); // 5 × 8h
@@ -432,6 +435,7 @@ describe("fully-logged vacation week (regression)", () => {
   });
 
   it("keeps the balance positive instead of showing a phantom deficit", () => {
+    const result = calculate();
     // 259 (initial 4.31h) + 0 (Aug 1-2 weekend) + 0 (vacation) + 78 (25:18 vs 24:00)
     expect(result.totalMinutes).toBe(337);
     expect(formatFlexMinutes(result.totalMinutes)).toBe("+5h 37m");

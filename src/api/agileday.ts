@@ -289,13 +289,16 @@ export function createAgileDayProvider(
       // 2. Fetch timesheets summary (has all statuses, but no descriptions) for
       //    EVERY month the window touches — a ±30-day window normally spans
       //    three, and skipping the middle one leaves that month uncovered.
-      const summaryEntries: SummaryEntry[] = [];
-      for (const month of monthsInRange(startDate, endDate)) {
-        const data = await apiFetch<{ entries: SummaryEntry[] }>(
-          `/v1/timesheets/${employeeId}/summary?date=${month}&intervalType=day&month=${month}`
-        ).catch(() => ({ entries: [] as SummaryEntry[] }));
-        summaryEntries.push(...data.entries);
-      }
+      //    In parallel: the flex backfill can span a year of months, and those
+      //    would otherwise be a year's worth of serial round-trips.
+      const summaryPages = await Promise.all(
+        monthsInRange(startDate, endDate).map((month) =>
+          apiFetch<{ entries: SummaryEntry[] }>(
+            `/v1/timesheets/${employeeId}/summary?date=${month}&intervalType=day&month=${month}`
+          ).catch(() => ({ entries: [] as SummaryEntry[] }))
+        )
+      );
+      const summaryEntries: SummaryEntry[] = summaryPages.flatMap((page) => page.entries);
 
       // Build a projectId -> projectType lookup from summary entries (the summary
       // endpoint reliably exposes projectType, the /updated endpoint does not).

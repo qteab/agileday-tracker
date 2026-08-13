@@ -19,8 +19,8 @@ src/api/__tests__/
   flex.test.ts                    — Flex calculation
   rounding.test.ts                — 15-minute rounding
   holidays.test.ts                — Holiday set lookup
-  date-range.test.ts              — monthsInRange/addDays API window helpers
 src/utils/__tests__/
+  date-range.test.ts              — monthsInRange/addDays API window helpers
   week.test.ts                    — Week utilities
   inactivity.test.ts              — Idle detection
 src/store/__tests__/
