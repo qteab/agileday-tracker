@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev              # Start Vite dev server (port 1420)
 npm run tauri dev        # Start full Tauri app in dev mode (Rust + Vite)
 npm run check            # Run all checks: typecheck → lint → format:check → test
-npm run test             # Vitest (57 tests, single run)
+npm run test             # Vitest (235 tests, single run)
 npm run test:watch       # Vitest watch mode
 npm run lint             # ESLint (src/ only)
 npm run typecheck        # tsc --noEmit
@@ -55,8 +55,9 @@ macOS menu bar time tracker that syncs to AgileDay. Tauri v2 (Rust) shell + Reac
 
 AgileDay requires `Origin: https://qvik.agileday.io` header on all requests (Tauri HTTP plugin with `unsafe-headers` feature).
 
-- Reading entries: `/v1/time_entry/employee/id/{id}/updated` (returns all statuses with descriptions)
-- Fallback: `/v1/timesheets/{id}/summary` (all statuses, no descriptions)
+- Reading entries: `/v1/time_entry/employee/id/{id}?startDate=&endDate=` — filtered by work date, all statuses, with descriptions. `endDate` is **exclusive**, so callers pass `endDate + 1 day`.
+- Fallback (only if the primary read fails): `/v1/time_entry/employee/id/{id}/updated` with a 400-day `updatedAfter` lookback. This param filters by last-update time, not work date — never use it as a date range.
+- Top-up: `/v1/timesheets/{id}/summary` (all statuses, no descriptions), fetched for **every** month the window touches.
 - Creating: `POST /v1/time_entry/employee/id/{id}` — checks for existing entry first (same project+date+description), PATCHes if found, creates if not. Multiple duplicates are consolidated (create new total, delete old).
 - Projects: `GET /v1/project?projectStage=ACTIVE`
 - Allocated projects: `GET /v2/opening` with employee filter
@@ -64,11 +65,13 @@ AgileDay requires `Origin: https://qvik.agileday.io` header on all requests (Tau
 
 ## Testing
 
-Tests live in `src/api/__tests__/`. Two test suites:
-- `mock-provider.test.ts` — 32 tests for the ApiProvider contract via mock implementation
-- `agileday-provider.test.ts` — 25 tests for the AgileDay client (mocked fetch, JWT decode, auth flow)
+Tests live mostly in `src/api/__tests__/` (plus `src/utils/__tests__/` and `src/store/__tests__/`):
+- `mock-provider.test.ts` — 42 tests for the ApiProvider contract via mock implementation
+- `agileday-provider.test.ts` — 32 tests for the AgileDay client (mocked fetch, JWT decode, auth flow)
+- `entry-sync.test.ts` — 15 tests for the create/update/delete/read sync journey
+- Plus flex, rounding, holidays, date-range, week, description and inactivity suites
 
-Total: 57 tests. Run a single file: `npx vitest run src/api/__tests__/mock-provider.test.ts`
+Total: 235 tests. Run a single file: `npx vitest run src/api/__tests__/mock-provider.test.ts`
 
 ## CI/CD
 
@@ -100,5 +103,5 @@ Comprehensive specs for AI agents and contributors in `.claude/docs/`:
 - [API & Auth](.claude/docs/api-and-auth.md) — AgileDay REST endpoints, OAuth 2.1 PKCE flow, token management, ApiProvider interface
 - [UI Components](.claude/docs/ui-components.md) — All components, layout structure, hooks, styling (Tailwind theme)
 - [Conventions](.claude/docs/conventions.md) — TypeScript strict mode, Prettier/ESLint config, React patterns, naming, file organization
-- [Testing](.claude/docs/testing.md) — Vitest setup, 57 tests, test patterns, coverage scope
+- [Testing](.claude/docs/testing.md) — Vitest setup, 235 tests, test patterns, coverage scope
 - [Domain Glossary](.claude/docs/domain.md) — AgileDay concepts, entry status lifecycle, app-specific terms

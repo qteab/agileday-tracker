@@ -32,7 +32,7 @@ NEW → SAVED → SUBMITTED → APPROVED
 |---|---|
 | **Session** | One timer start→stop cycle. Shown individually in the UI but consolidated into a single AgileDay entry per project+task+date+description. |
 | **Sync Status** | Local tracking of whether a session has been saved to AgileDay: `pending` (saving), `synced` (saved), `unsaved` (save failed). |
-| **Flex** | Overtime/undertime balance calculated from a configurable start date. Compares actual hours logged vs expected (7.5h/day, excluding holidays). |
+| **Flex** | Overtime/undertime balance calculated from a configurable start date. Compares actual hours logged vs expected (8h/day — `WORKDAY_MINUTES = 480`, excluding weekends and holidays). Absence does **not** reduce expected hours; logged absence entries count as worked minutes instead, so a week whose entries fail to load reads as a full deficit. |
 | **Rounding** | 15-minute increment rounding applied during finalization. Uses ceil for totals, with per-project-day manual overrides. |
 | **Finalize** | The process of reviewing, rounding, and submitting a week's entries. |
 | **My Projects** | Projects the user is allocated to (via openings). Shown first in project picker. |

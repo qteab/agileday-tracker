@@ -40,6 +40,66 @@ function jsonResponse(data: unknown, status = 200): Response {
   });
 }
 
+type RawEntryLike = Record<string, unknown>;
+
+interface FetchRoutes {
+  /** GET /v1/time_entry/employee/id/{id}?startDate=&endDate= — primary read */
+  dateRange?: RawEntryLike[];
+  /** HTTP status for the primary read, to exercise the fallback */
+  dateRangeStatus?: number;
+  /** GET /v1/time_entry/employee/id/{id}/updated — fallback read */
+  updated?: RawEntryLike[];
+  /** GET /v1/timesheets/{id}/summary, keyed by the `month` query param */
+  summaryByMonth?: Record<string, RawEntryLike[]>;
+  /** Response body for any non-GET call (POST/PATCH/DELETE) */
+  write?: RawEntryLike[];
+}
+
+/**
+ * Route mocked fetch by URL instead of call order, so a test can assert which
+ * endpoints were hit without depending on how many calls precede them.
+ */
+function routeFetch(routes: FetchRoutes) {
+  mockFetch.mockImplementation((rawUrl: string, init?: RequestInit) => {
+    const url = new URL(String(rawUrl));
+    const path = url.pathname;
+
+    if ((init?.method ?? "GET") !== "GET") {
+      return Promise.resolve(jsonResponse(routes.write ?? []));
+    }
+    if (path.endsWith("/updated")) {
+      return Promise.resolve(jsonResponse(routes.updated ?? []));
+    }
+    if (path.includes("/v1/timesheets/")) {
+      const month = url.searchParams.get("month") ?? "";
+      return Promise.resolve(jsonResponse({ entries: routes.summaryByMonth?.[month] ?? [] }));
+    }
+    if (path.includes("/v1/time_entry/employee/id/")) {
+      const status = routes.dateRangeStatus ?? 200;
+      if (status >= 400) {
+        return Promise.resolve(jsonResponse({ message: "boom" }, status));
+      }
+      return Promise.resolve(jsonResponse(routes.dateRange ?? []));
+    }
+    return Promise.resolve(jsonResponse([]));
+  });
+}
+
+/** Every URL the mocked fetch was called with. */
+function fetchedUrls(): string[] {
+  return mockFetch.mock.calls.map((call) => String(call[0]));
+}
+
+/** Non-GET calls the mocked fetch received, as {method, body}. */
+function writeCalls(): { method: string; body: RawEntryLike[] }[] {
+  return mockFetch.mock.calls
+    .filter((call) => (call[1]?.method ?? "GET") !== "GET")
+    .map((call) => ({
+      method: String(call[1].method),
+      body: call[1].body ? JSON.parse(String(call[1].body)) : [],
+    }));
+}
+
 const TEST_CONFIG: AgileDayConfig = {
   apiBaseUrl: "https://qvik.agileday.io/api",
   authConfig: {
@@ -76,7 +136,7 @@ beforeEach(() => {
 
 describe("Create (Timer Stop)", () => {
   it("creates a new entry when no existing match in AgileDay", async () => {
-    // /updated query returns no matches
+    // same-day lookup returns no matches
     mockFetch.mockResolvedValueOnce(jsonResponse([]));
     // POST creates entry
     mockFetch.mockResolvedValueOnce(
@@ -101,8 +161,8 @@ describe("Create (Timer Stop)", () => {
       status: "SAVED",
     });
 
-    // First call: /updated query
-    expect(mockFetch.mock.calls[0][0]).toContain("/updated");
+    // First call: existence lookup for that day (by work date, not update time)
+    expect(mockFetch.mock.calls[0][0]).toContain("startDate=2026-04-28&endDate=2026-04-29");
     // Second call: POST
     expect(mockFetch.mock.calls[1][1].method).toBe("POST");
     expect(entry.id).toBe("agile-1");
@@ -212,6 +272,45 @@ describe("Create (Timer Stop)", () => {
 
     // Should POST (no SAVED match for same project+task+date)
     expect(mockFetch.mock.calls[1][1].method).toBe("POST");
+  });
+
+  it("PATCHes an existing entry last updated before its own work date", async () => {
+    // The existence lookup used /updated?updatedAfter={entry.date}, which
+    // cannot see an entry left untouched since before that date — so the app
+    // POSTed a duplicate instead of updating it.
+    const existing = {
+      id: "stale-1",
+      date: "2026-08-05",
+      minutes: 60,
+      status: "SAVED",
+      description: "planning",
+      projectId: "p1",
+      taskId: "t1",
+    };
+    routeFetch({ dateRange: [existing], write: [{ ...existing, minutes: 90 }] });
+
+    const result = await provider.createTimeEntry("emp-1", {
+      description: "planning",
+      projectId: "p1",
+      taskId: "t1",
+      date: "2026-08-05",
+      startTime: "2026-08-05T09:00:00Z",
+      minutes: 90,
+      status: "SAVED",
+    });
+
+    const writes = writeCalls();
+    expect(writes).toHaveLength(1);
+    expect(writes[0].method).toBe("PATCH");
+    expect(writes[0].body[0].id).toBe("stale-1");
+    expect(result.minutes).toBe(90);
+
+    // Lookup is a single-day range: startDate inclusive, endDate exclusive.
+    const lookup = fetchedUrls().find((url) => url.includes("/v1/time_entry/employee/id/emp-1?"));
+    expect(lookup).toBeDefined();
+    const params = new URL(lookup as string).searchParams;
+    expect(params.get("startDate")).toBe("2026-08-05");
+    expect(params.get("endDate")).toBe("2026-08-06");
   });
 });
 
@@ -407,5 +506,95 @@ describe("Read (getTimeEntries)", () => {
     // Should have exactly 1 entry, not 2
     expect(entries).toHaveLength(1);
     expect(entries[0].minutes).toBe(60);
+  });
+
+  it("fetches a summary for every month the window touches", async () => {
+    // A ±30-day window spans three calendar months. Fetching only the first and
+    // last silently skipped the middle one — for a window centred on Aug 13
+    // that meant August itself was never requested.
+    routeFetch({});
+
+    await provider.getTimeEntries("emp-1", "2026-07-14", "2026-09-12");
+
+    const summaryMonths = fetchedUrls()
+      .filter((url) => url.includes("/v1/timesheets/emp-1/summary"))
+      .map((url) => new URL(url).searchParams.get("month"));
+
+    expect(summaryMonths).toEqual(["2026-07-01", "2026-08-01", "2026-09-01"]);
+  });
+
+  it("returns entries in the window even when they were last updated before it", async () => {
+    // Vacation for Aug 3-7 booked months in advance. /updated filters on
+    // updatedAt, so it cannot see these; the read must query by work date.
+    const vacation = ["03", "04", "05", "06", "07"].map((day, i) => ({
+      id: `vac-${i}`,
+      date: `2026-08-${day}`,
+      minutes: 480,
+      status: "APPROVED",
+      description: "",
+      projectId: "abs-1",
+      projectName: "Qte Vacation",
+    }));
+    routeFetch({ dateRange: vacation, updated: [], summaryByMonth: {} });
+
+    const entries = await provider.getTimeEntries("emp-1", "2026-07-14", "2026-09-12");
+
+    const vacationMinutes = entries
+      .filter((e) => e.date >= "2026-08-03" && e.date <= "2026-08-07")
+      .reduce((sum, e) => sum + e.minutes, 0);
+    expect(vacationMinutes).toBe(2400); // 5 × 8h
+  });
+
+  it("queries startDate inclusive and endDate exclusive, keeping the final day", async () => {
+    routeFetch({
+      dateRange: [
+        {
+          id: "e-last",
+          date: "2026-08-31",
+          minutes: 60,
+          status: "SAVED",
+          description: "last day",
+          projectId: "p1",
+          projectName: "Fokus",
+        },
+      ],
+    });
+
+    const entries = await provider.getTimeEntries("emp-1", "2026-08-01", "2026-08-31");
+
+    const primary = fetchedUrls().find((url) => url.includes("/v1/time_entry/employee/id/emp-1?"));
+    expect(primary).toBeDefined();
+    const params = new URL(primary as string).searchParams;
+    expect(params.get("startDate")).toBe("2026-08-01");
+    expect(params.get("endDate")).toBe("2026-09-01"); // exclusive per the API spec
+
+    expect(entries.find((e) => e.id === "e-last")).toBeDefined();
+  });
+
+  it("falls back to /updated when the date-range read fails", async () => {
+    routeFetch({
+      dateRangeStatus: 500,
+      updated: [
+        {
+          id: "e1",
+          date: "2026-08-05",
+          minutes: 480,
+          status: "SAVED",
+          description: "work",
+          projectId: "p1",
+          projectName: "Fokus",
+        },
+      ],
+    });
+
+    const entries = await provider.getTimeEntries("emp-1", "2026-07-14", "2026-09-12");
+    expect(entries.find((e) => e.id === "e1")?.minutes).toBe(480);
+
+    // The fallback needs a wide lookback, otherwise it reintroduces the very
+    // gap it is standing in for.
+    const updatedUrl = fetchedUrls().find((url) => url.includes("/updated"));
+    expect(updatedUrl).toBeDefined();
+    const updatedAfter = new URL(updatedUrl as string).searchParams.get("updatedAfter") as string;
+    expect(Date.parse(updatedAfter)).toBeLessThan(Date.parse("2025-07-01T00:00:00Z"));
   });
 });

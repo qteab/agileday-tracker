@@ -2,6 +2,14 @@ import type { ApiProvider } from "./provider";
 import type { Allocation, Employee, Holiday, Project, ProjectType, Task, TimeEntry } from "./types";
 import type { AuthConfig, AuthState } from "./auth";
 import { isTokenExpired, refreshAuthState } from "./auth";
+import { addDays, monthsInRange } from "../utils/date-range";
+
+/**
+ * Lookback for the /updated fallback read. That endpoint filters by last-update
+ * timestamp, not work date, so the cutoff must sit far enough back to still
+ * catch entries that were written long before the requested window.
+ */
+const FALLBACK_LOOKBACK_DAYS = 400;
 
 // Color palette for projects (AgileDay doesn't return colors)
 const PROJECT_COLORS = [
@@ -262,25 +270,35 @@ export function createAgileDayProvider(
         status: string;
       };
 
-      // 1. Fetch detailed entries using the /updated endpoint
-      //    This returns ALL entries (including SAVED/unsaved) with descriptions
-      const updatedAfter = new Date(startDate + "T00:00:00Z").toISOString();
+      // 1. Fetch detailed entries by WORK DATE (with descriptions + IDs).
+      //    endDate is exclusive on this endpoint, hence the +1 day.
       const detailedEntries = await apiFetch<RawEntry[]>(
-        `/v1/time_entry/employee/id/${employeeId}/updated?updatedAfter=${updatedAfter}`
-      ).catch(() => [] as RawEntry[]);
+        `/v1/time_entry/employee/id/${employeeId}?startDate=${startDate}&endDate=${addDays(endDate, 1)}`
+      ).catch(async () => {
+        // Fallback: /updated filters on last-update timestamp rather than work
+        // date, so it needs a wide lookback — anything narrower silently drops
+        // entries booked before the window (e.g. vacation planned months ahead).
+        const updatedAfter = new Date(
+          addDays(startDate, -FALLBACK_LOOKBACK_DAYS) + "T00:00:00Z"
+        ).toISOString();
+        return apiFetch<RawEntry[]>(
+          `/v1/time_entry/employee/id/${employeeId}/updated?updatedAfter=${updatedAfter}`
+        ).catch(() => [] as RawEntry[]);
+      });
 
-      // 2. Fetch timesheets summary (has all statuses, but no descriptions)
-      const startMonth = startDate.substring(0, 7) + "-01";
-      const endMonth = endDate.substring(0, 7) + "-01";
-      const months = new Set([startMonth, endMonth]);
-
-      const summaryEntries: SummaryEntry[] = [];
-      for (const month of months) {
-        const data = await apiFetch<{ entries: SummaryEntry[] }>(
-          `/v1/timesheets/${employeeId}/summary?date=${month}&intervalType=day&month=${month}`
-        ).catch(() => ({ entries: [] as SummaryEntry[] }));
-        summaryEntries.push(...data.entries);
-      }
+      // 2. Fetch timesheets summary (has all statuses, but no descriptions) for
+      //    EVERY month the window touches — a ±30-day window normally spans
+      //    three, and skipping the middle one leaves that month uncovered.
+      //    In parallel: the flex backfill can span a year of months, and those
+      //    would otherwise be a year's worth of serial round-trips.
+      const summaryPages = await Promise.all(
+        monthsInRange(startDate, endDate).map((month) =>
+          apiFetch<{ entries: SummaryEntry[] }>(
+            `/v1/timesheets/${employeeId}/summary?date=${month}&intervalType=day&month=${month}`
+          ).catch(() => ({ entries: [] as SummaryEntry[] }))
+        )
+      );
+      const summaryEntries: SummaryEntry[] = summaryPages.flatMap((page) => page.entries);
 
       // Build a projectId -> projectType lookup from summary entries (the summary
       // endpoint reliably exposes projectType, the /updated endpoint does not).
@@ -359,13 +377,15 @@ export function createAgileDayProvider(
       // App is source of truth when saving. Check if an entry already exists
       // on AgileDay for this (project, task, date) — if so, PATCH it with
       // the app's full state. Otherwise POST a new entry.
+      // Look the day up by work date. Filtering by last-update timestamp would
+      // miss an entry left untouched since before its own date (and would miss
+      // every future-dated entry outright), causing a duplicate POST.
       const EDITABLE_STATUSES = new Set(["NEW", "SAVED", "CHANGE_REQUESTED"]);
-      const updatedAfter = new Date(entry.date + "T00:00:00Z").toISOString();
-      const allRecent = await apiFetch<RawEntry[]>(
-        `/v1/time_entry/employee/id/${employeeId}/updated?updatedAfter=${updatedAfter}`
+      const sameDay = await apiFetch<RawEntry[]>(
+        `/v1/time_entry/employee/id/${employeeId}?startDate=${entry.date}&endDate=${addDays(entry.date, 1)}`
       ).catch(() => [] as RawEntry[]);
 
-      const match = allRecent.find((e) => {
+      const match = sameDay.find((e) => {
         if (e.projectId !== entry.projectId || e.date !== entry.date) return false;
         if (!EDITABLE_STATUSES.has(e.status)) return false;
         const eTask = e.taskId ?? "";
