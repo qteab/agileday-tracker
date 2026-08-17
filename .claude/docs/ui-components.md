@@ -12,7 +12,7 @@ Settings and Finalize are triggered by tray menu events or header buttons.
 
 ### Title bar
 
-3-column grid: left (traffic lights space), center ("QTE TIME TRACKER" wordmark), right (today's running total in green + finalize icon + settings icon + flex badge).
+3-column grid (`grid-cols-[1fr_auto_1fr]`, equal side columns so the wordmark stays centered regardless of side content): left (traffic lights space + flex badge), center ("QTE TIME TRACKER" wordmark), right (finalize icon + settings icon).
 
 ## Component Inventory
 
