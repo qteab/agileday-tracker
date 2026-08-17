@@ -4,6 +4,7 @@ import { useTimer, formatTime, formatMinutes } from "../hooks/useTimer";
 import { BillableIndicator } from "./BillableIndicator";
 import { ProjectPicker } from "./ProjectPicker";
 import { TaskPicker } from "./TaskPicker";
+import { Modal } from "./Modal";
 import {
   parseDurationInput,
   formatDurationInput,
@@ -76,6 +77,9 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
   const [editMode, setEditMode] = useState<EditMode>("none");
   const [timeInput, setTimeInput] = useState("");
   const timeInputRef = useRef<HTMLInputElement>(null);
+  // Value the time editor was seeded with — an unchanged input commits as a
+  // no-op so a running timer keeps its sub-minute seconds.
+  const timeSeedRef = useRef("");
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Snapshot of the entry's project/task taken when a project change begins, so
@@ -201,13 +205,17 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
   /** Open the inline time editor seeded with the current total. */
   const openTimeEdit = useCallback(() => {
     if (!isEditable) return;
-    setTimeInput(formatDurationInput(Math.round(totalSeconds / 60)));
+    const seed = formatDurationInput(Math.round(totalSeconds / 60));
+    timeSeedRef.current = seed;
+    setTimeInput(seed);
     setEditMode("time");
   }, [isEditable, totalSeconds]);
 
   /** Commit the inline time edit. While running, snap the clock and keep counting. */
   const commitTime = useCallback(() => {
     setEditMode("none");
+    // Untouched input → treat as cancel, so a running timer keeps its seconds.
+    if (timeInput === timeSeedRef.current) return;
     const mins = parseDurationInput(timeInput);
     if (mins === null) return;
     if (isThisRunning) {
@@ -369,7 +377,9 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
     setEditMode("none");
   }, [dispatch, entry.id]);
 
-  /** Delete the entry (with the inline confirmation already shown). */
+  const closeDeleteModal = useCallback(() => setEditMode("none"), []);
+
+  /** Delete the entry (after the confirmation modal). */
   const confirmDelete = useCallback(async () => {
     setEditMode("none");
     setActionError(null);
@@ -689,56 +699,63 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
         </div>
       </div>
 
-      {/* Delete confirmation row */}
-      {editMode === "delete" ? (
-        <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-1">
-          <span className="text-xs text-text-muted">Delete this entry?</span>
-          <div className="flex items-center gap-2">
+      {/* Delete button */}
+      {isEditable && (
+        <div className="flex justify-end px-4 pb-3 -mt-1">
+          <button
+            onClick={() => {
+              setActionError(null);
+              setEditMode("delete");
+            }}
+            className="inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-danger transition-colors cursor-pointer"
+            aria-label="Delete entry"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0"
+            >
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              <line x1="10" y1="11" x2="10" y2="17" />
+              <line x1="14" y1="11" x2="14" y2="17" />
+            </svg>
+            <span>Delete</span>
+          </button>
+        </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      {editMode === "delete" && (
+        <Modal onClose={closeDeleteModal}>
+          <h3 className="text-sm font-semibold text-text">Delete this entry?</h3>
+          <p className="text-xs text-text-muted">
+            {entry.projectName ?? "This entry"} · {displayTime}
+            {isThisRunning ? " — the running timer will be discarded." : ""} This can&apos;t be
+            undone.
+          </p>
+          <div className="flex justify-end gap-2">
             <button
-              onClick={() => setEditMode("none")}
-              className="px-3 py-1.5 text-xs font-medium text-text-muted hover:text-text rounded-md"
+              onClick={closeDeleteModal}
+              className="px-3 py-1.5 text-xs font-medium text-text-muted hover:text-text rounded-md cursor-pointer"
             >
               Cancel
             </button>
             <button
+              autoFocus
               onClick={() => void confirmDelete()}
-              className="px-3 py-1.5 text-xs font-semibold text-white bg-danger hover:bg-[#d8363c] rounded-md transition-colors"
+              className="px-3 py-1.5 text-xs font-semibold text-white bg-danger hover:bg-[#d8363c] rounded-md transition-colors cursor-pointer"
             >
               Delete
             </button>
           </div>
-        </div>
-      ) : (
-        isEditable && (
-          <div className="flex justify-end px-4 pb-3 -mt-1">
-            <button
-              onClick={() => {
-                setActionError(null);
-                setEditMode("delete");
-              }}
-              className="inline-flex items-center gap-1.5 text-[12px] leading-none text-text-subtle hover:text-danger transition-colors"
-              aria-label="Delete entry"
-            >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="shrink-0"
-              >
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                <line x1="10" y1="11" x2="10" y2="17" />
-                <line x1="14" y1="11" x2="14" y2="17" />
-              </svg>
-              <span>Delete</span>
-            </button>
-          </div>
-        )
+        </Modal>
       )}
 
       {/* Lock indicator for submitted entries */}
