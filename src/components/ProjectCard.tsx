@@ -459,143 +459,146 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
       className={`bg-bg-card border border-border rounded-xl shadow-[0_1px_2px_rgba(11,4,21,0.04)]`}
     >
       {/* Header */}
-      <div className="flex items-start gap-3 px-4 pt-4 pb-3">
-        {/* Left: project info */}
-        <div className="flex-1 min-w-0">
-          {editMode === "project" ? (
-            <ProjectPicker
-              selectedId={entry.projectId}
-              onSelect={handleProjectSelect}
-              variant="chip"
-              usageDate={entry.date}
-              onClose={handleCancelEdit}
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => canEditMeta && setEditMode("project")}
-              disabled={!canEditMeta}
-              className={`block w-full text-left font-bold text-[17px] leading-[1.25] text-text truncate ${
-                canEditMeta
-                  ? "cursor-pointer hover:text-primary transition-colors"
-                  : "cursor-default"
-              }`}
-            >
-              {project?.name ?? entry.projectName ?? "Unknown project"}
-            </button>
-          )}
-
-          <div className="flex items-center gap-2 mt-[7px] text-[13.5px] text-text-muted">
-            <span className={`w-[9px] h-[9px] rounded-full shrink-0 ${dotColor}`} />
-            {editMode === "task" ? (
-              <TaskPicker
-                projectId={entry.projectId}
-                selectedId={entry.taskId ?? null}
-                onSelect={handleTaskSelect}
-                excludeIds={usedTasks}
+      <div className="px-4 pt-[14px] pb-3">
+        {/* Row 1: project name + billable, time, play/stop */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            {editMode === "project" ? (
+              <ProjectPicker
+                selectedId={entry.projectId}
+                onSelect={handleProjectSelect}
                 variant="chip"
+                usageDate={entry.date}
                 onClose={handleCancelEdit}
               />
             ) : (
               <button
                 type="button"
-                onClick={() => canEditMeta && setEditMode("task")}
+                onClick={() => canEditMeta && setEditMode("project")}
                 disabled={!canEditMeta}
-                className={`flex items-center gap-[5px] min-w-0 ${
+                className={`block w-full text-left font-bold text-[17px] leading-[1.25] text-text truncate ${
                   canEditMeta
                     ? "cursor-pointer hover:text-primary transition-colors"
                     : "cursor-default"
                 }`}
               >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="text-text-subtle shrink-0"
-                >
-                  <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
-                  <circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none" />
+                {project?.name ?? entry.projectName ?? "Unknown project"}
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            {editMode === "time" ? (
+              <input
+                ref={timeInputRef}
+                type="text"
+                value={timeInput}
+                onChange={(e) => setTimeInput(e.target.value)}
+                onBlur={commitTime}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitTime();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    setEditMode("none");
+                  }
+                }}
+                className="w-[72px] px-2 py-0.5 text-[17px] font-semibold tabular-nums text-right border border-primary rounded-md bg-bg-edit outline-none focus:ring-2 focus:ring-primary/25"
+                aria-label="Edit time"
+              />
+            ) : (
+              <span
+                onClick={openTimeEdit}
+                className={`text-[17px] font-semibold tabular-nums ${
+                  isThisRunning ? "text-primary" : "text-text"
+                } ${isEditable ? "cursor-pointer hover:opacity-70" : ""}`}
+              >
+                {displayTime}
+              </span>
+            )}
+            {isToday && !isSubmitted && (
+              <button
+                onClick={() => {
+                  if (isThisRunning) {
+                    void stop();
+                  } else {
+                    void startForCard(entry.projectId, entry.taskId!);
+                  }
+                }}
+                disabled={!entry.taskId && !isThisRunning}
+                className={`w-[36px] h-[36px] rounded-full flex items-center justify-center text-white transition-all active:scale-[0.94] disabled:opacity-40 disabled:cursor-not-allowed ${
+                  isThisRunning
+                    ? "bg-danger hover:bg-[#d8363c]"
+                    : "bg-primary hover:bg-primary-dark"
+                }`}
+                aria-label={isThisRunning ? "Stop timer" : "Start timer"}
+              >
+                {isThisRunning ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="6" y="6" width="12" height="12" rx="2.5" />
+                  </svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="6 4 20 12 6 20 6 4" />
+                  </svg>
+                )}
+              </button>
+            )}
+            {canQuickOpen && (
+              <button
+                onClick={handleQuickOpen}
+                disabled={alreadyTrackedToday}
+                title={alreadyTrackedToday ? "Already tracked today" : "Start today"}
+                className="w-[36px] h-[36px] rounded-full flex items-center justify-center transition-all active:scale-[0.94] border-2 border-primary text-primary hover:bg-primary hover:text-white disabled:opacity-40 disabled:border-border disabled:text-text-subtle disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-text-subtle"
+                aria-label="Start today"
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="6 4 20 12 6 20 6 4" />
                 </svg>
-                <span className="truncate">{taskName ?? "Select task"}</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* Right: billable, time, play/stop */}
-        <div className="flex items-center gap-3 shrink-0">
-          <BillableIndicator billable={billable} />
-          {editMode === "time" ? (
-            <input
-              ref={timeInputRef}
-              type="text"
-              value={timeInput}
-              onChange={(e) => setTimeInput(e.target.value)}
-              onBlur={commitTime}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  commitTime();
-                } else if (e.key === "Escape") {
-                  e.preventDefault();
-                  setEditMode("none");
-                }
-              }}
-              className="w-[72px] px-2 py-0.5 text-[17px] font-semibold tabular-nums text-right border border-primary rounded-md bg-bg-edit outline-none focus:ring-2 focus:ring-primary/25"
-              aria-label="Edit time"
+        {/* Row 2: status dot + task selector (full width) */}
+        <div className="flex items-center gap-2 mt-1 text-[13.5px] text-text-muted">
+          <span className={`w-[9px] h-[9px] rounded-full shrink-0 ${dotColor}`} />
+          {editMode === "task" ? (
+            <TaskPicker
+              projectId={entry.projectId}
+              selectedId={entry.taskId ?? null}
+              onSelect={handleTaskSelect}
+              excludeIds={usedTasks}
+              variant="chip"
+              onClose={handleCancelEdit}
             />
           ) : (
-            <span
-              onClick={openTimeEdit}
-              className={`text-[17px] font-semibold tabular-nums ${
-                isThisRunning ? "text-primary" : "text-text"
-              } ${isEditable ? "cursor-pointer hover:opacity-70" : ""}`}
-            >
-              {displayTime}
-            </span>
-          )}
-          {isToday && !isSubmitted && (
             <button
-              onClick={() => {
-                if (isThisRunning) {
-                  void stop();
-                } else {
-                  void startForCard(entry.projectId, entry.taskId!);
-                }
-              }}
-              disabled={!entry.taskId && !isThisRunning}
-              className={`w-[38px] h-[38px] rounded-full flex items-center justify-center text-white transition-all active:scale-[0.94] disabled:opacity-40 disabled:cursor-not-allowed ${
-                isThisRunning ? "bg-danger hover:bg-[#d8363c]" : "bg-primary hover:bg-primary-dark"
+              type="button"
+              onClick={() => canEditMeta && setEditMode("task")}
+              disabled={!canEditMeta}
+              className={`flex items-center gap-[5px] min-w-0 ${
+                canEditMeta
+                  ? "cursor-pointer hover:text-primary transition-colors"
+                  : "cursor-default"
               }`}
-              aria-label={isThisRunning ? "Stop timer" : "Start timer"}
             >
-              {isThisRunning ? (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-                  <rect x="6" y="6" width="12" height="12" rx="2.5" />
-                </svg>
-              ) : (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-                  <polygon points="6 4 20 12 6 20 6 4" />
-                </svg>
-              )}
-            </button>
-          )}
-          {canQuickOpen && (
-            <button
-              onClick={handleQuickOpen}
-              disabled={alreadyTrackedToday}
-              title={alreadyTrackedToday ? "Already tracked today" : "Start today"}
-              className="w-[38px] h-[38px] rounded-full flex items-center justify-center transition-all active:scale-[0.94] border-2 border-primary text-primary hover:bg-primary hover:text-white disabled:opacity-40 disabled:border-border disabled:text-text-subtle disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-text-subtle"
-              aria-label="Start today"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <polygon points="6 4 20 12 6 20 6 4" />
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-text-subtle shrink-0"
+              >
+                <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
+                <circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none" />
               </svg>
+              <span className="truncate">{taskName ?? "Select task"}</span>
             </button>
           )}
         </div>
@@ -699,80 +702,74 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
         </div>
       </div>
 
-      {/* Delete button */}
-      {isEditable && (
-        <div className="flex justify-end px-4 pb-3 -mt-1">
-          <button
-            onClick={() => {
-              setActionError(null);
-              setEditMode("delete");
-            }}
-            className="inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-danger transition-colors cursor-pointer"
-            aria-label="Delete entry"
-          >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="shrink-0"
+      {/* Footer: billable indicator (left) + delete button or lock indicator (right) */}
+      {(isEditable || isSubmitted || billable !== undefined) && (
+        <div className="flex items-center px-4 pb-3 -mt-1">
+          {/* Negative margin cancels the indicator's internal centering so the $
+              glyph left-aligns with the rows above. */}
+          <BillableIndicator billable={billable} className="-ml-[7px]" />
+          {isEditable && (
+            <button
+              onClick={() => {
+                setActionError(null);
+                setEditMode("delete");
+              }}
+              className="ml-auto inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-danger transition-colors cursor-pointer"
+              aria-label="Delete entry"
             >
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              <line x1="10" y1="11" x2="10" y2="17" />
-              <line x1="14" y1="11" x2="14" y2="17" />
-            </svg>
-            <span>Delete</span>
-          </button>
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="shrink-0"
+              >
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                <line x1="10" y1="11" x2="10" y2="17" />
+                <line x1="14" y1="11" x2="14" y2="17" />
+              </svg>
+              <span>Delete</span>
+            </button>
+          )}
+          {isSubmitted && (
+            <span className="ml-auto text-[10px] text-text-muted/50 flex items-center gap-0.5">
+              <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M12 15v2m0 0v2m0-2h2m-2 0H10m-4-6V7a4 4 0 118 0v4m-8 0h12a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6a2 2 0 012-2z"
+                />
+              </svg>
+              Submitted — edit in AgileDay
+            </span>
+          )}
         </div>
       )}
 
       {/* Delete confirmation modal */}
       {editMode === "delete" && (
-        <Modal onClose={closeDeleteModal}>
-          <h3 className="text-sm font-semibold text-text">Delete this entry?</h3>
-          <p className="text-xs text-text-muted">
-            {entry.projectName ?? "This entry"} · {displayTime}
-            {isThisRunning ? " — the running timer will be discarded." : ""} This can&apos;t be
-            undone.
-          </p>
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={closeDeleteModal}
-              className="px-3 py-1.5 text-xs font-medium text-text-muted hover:text-text rounded-md cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              autoFocus
-              onClick={() => void confirmDelete()}
-              className="px-3 py-1.5 text-xs font-semibold text-white bg-danger hover:bg-[#d8363c] rounded-md transition-colors cursor-pointer"
-            >
-              Delete
-            </button>
-          </div>
-        </Modal>
-      )}
-
-      {/* Lock indicator for submitted entries */}
-      {isSubmitted && (
-        <div className="px-4 pb-3">
-          <span className="text-[10px] text-text-muted/50 flex items-center gap-0.5">
-            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M12 15v2m0 0v2m0-2h2m-2 0H10m-4-6V7a4 4 0 118 0v4m-8 0h12a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6a2 2 0 012-2z"
-              />
-            </svg>
-            Submitted — edit in AgileDay
-          </span>
-        </div>
+        <Modal
+          onClose={closeDeleteModal}
+          title="Delete this entry?"
+          subtitle={`${entry.projectName ?? "This entry"} · ${displayTime}${
+            isThisRunning ? " — the running timer will be discarded." : ""
+          } This can't be undone.`}
+          actions={[
+            { label: "Cancel", variant: "secondary", onClick: closeDeleteModal },
+            {
+              label: "Delete",
+              variant: "danger",
+              autoFocus: true,
+              onClick: () => void confirmDelete(),
+            },
+          ]}
+        />
       )}
     </div>
   );

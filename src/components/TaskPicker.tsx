@@ -106,9 +106,12 @@ export function TaskPicker({
 
       {open && (
         <div
-          className="fixed left-3 right-3 mt-1 bg-bg-card rounded-lg shadow-lg border border-divider z-50 py-1 max-h-56 overflow-y-auto"
+          className="fixed mt-1 bg-bg-card rounded-lg shadow-lg border border-divider z-50 py-1 max-h-56 overflow-y-auto"
           style={{
-            top: ref.current ? ref.current.getBoundingClientRect().bottom + "px" : undefined,
+            // Anchor below the trigger, matching its width exactly.
+            top: ref.current?.getBoundingClientRect().bottom,
+            left: ref.current?.getBoundingClientRect().left,
+            width: ref.current?.getBoundingClientRect().width,
           }}
         >
           {state.tasks

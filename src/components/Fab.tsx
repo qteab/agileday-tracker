@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useApp } from "../store/context";
 import { ProjectPicker } from "./ProjectPicker";
 import { TaskPicker } from "./TaskPicker";
+import { Modal } from "./Modal";
 import { usedTaskIds } from "./entry-edit";
 import { useTimer } from "../hooks/useTimer";
 
@@ -66,50 +67,42 @@ export function Fab() {
     setTaskId(null);
   };
 
+  const closeDialog = () => {
+    setShowDialog(false);
+    setProjectId(null);
+    setTaskId(null);
+  };
+
   if (showDialog) {
     return (
-      <>
-        {/* Backdrop */}
-        <div
-          className="absolute inset-0 bg-black/20 z-40"
-          onClick={() => {
-            setShowDialog(false);
-            setProjectId(null);
+      <Modal
+        onClose={closeDialog}
+        title="New time entry"
+        actions={[
+          {
+            label: "Start tracking",
+            onClick: () => void handleCreate(),
+            disabled: !projectId || !taskId,
+          },
+        ]}
+      >
+        <ProjectPicker
+          selectedId={projectId}
+          onSelect={(id) => {
+            setProjectId(id);
             setTaskId(null);
           }}
+          variant="field"
+          usageDate={today}
         />
-        {/* Dialog — positioned at top of window below title bar */}
-        <div className="absolute top-14 right-4 left-4 z-50 bg-bg-card rounded-xl shadow-[0_18px_40px_rgba(11,4,21,0.12)] border border-border p-4 flex flex-col gap-3">
-          <div className="font-bold text-sm text-text">New time entry</div>
-          <ProjectPicker
-            selectedId={projectId}
-            onSelect={(id) => {
-              setProjectId(id);
-              setTaskId(null);
-            }}
-            variant="field"
-            usageDate={today}
-          />
-          <TaskPicker
-            projectId={projectId}
-            selectedId={taskId}
-            onSelect={setTaskId}
-            variant="field"
-            excludeIds={usedTasks}
-          />
-          <button
-            onClick={() => void handleCreate()}
-            disabled={!projectId || !taskId}
-            className={`w-full py-2.5 rounded-lg font-semibold text-sm text-white transition-all ${
-              projectId && taskId
-                ? "bg-primary hover:bg-primary-dark active:scale-[0.98]"
-                : "bg-primary/30 cursor-not-allowed"
-            }`}
-          >
-            Start tracking
-          </button>
-        </div>
-      </>
+        <TaskPicker
+          projectId={projectId}
+          selectedId={taskId}
+          onSelect={setTaskId}
+          variant="field"
+          excludeIds={usedTasks}
+        />
+      </Modal>
     );
   }
 
