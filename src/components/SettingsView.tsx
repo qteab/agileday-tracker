@@ -11,6 +11,7 @@ import {
   type DisplayPrefs,
 } from "../store/display-store";
 import { fmtDate } from "../utils/week";
+import bearIcon from "../assets/bear.png";
 
 export type SettingsTab = "flex" | "display" | "account";
 
@@ -90,17 +91,25 @@ function DisplaySettings() {
   const { state, dispatch } = useApp();
   const { displayPrefs } = state;
 
-  async function setMode(mode: MenuBarMode) {
-    if (mode === displayPrefs.menuBarMode) return;
-    const next = { ...displayPrefs, menuBarMode: mode };
+  async function persist(next: DisplayPrefs) {
     dispatch({ type: "SET_DISPLAY_PREFS", payload: next });
     await saveDisplayPrefs(next).catch(() => {});
   }
 
+  async function setMode(mode: MenuBarMode) {
+    if (mode === displayPrefs.menuBarMode) return;
+    await persist({ ...displayPrefs, menuBarMode: mode });
+  }
+
+  async function toggleTrayIcon() {
+    await persist({ ...displayPrefs, showTrayIcon: !displayPrefs.showTrayIcon });
+  }
+
+  const withIcon = displayPrefs.showTrayIcon;
   const options: { value: MenuBarMode; label: string; hint: string }[] = [
-    { value: "off", label: "Off", hint: "Icon only" },
-    { value: "compact", label: "Compact", hint: "Icon + time" },
-    { value: "full", label: "Full", hint: "Icon + time + task" },
+    { value: "off", label: "Off", hint: withIcon ? "Icon only" : "Play/pause only" },
+    { value: "compact", label: "Compact", hint: withIcon ? "Icon + time" : "Time only" },
+    { value: "full", label: "Full", hint: withIcon ? "Icon + time + task" : "Time + task" },
   ];
 
   return (
@@ -140,6 +149,40 @@ function DisplaySettings() {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="bg-bg-card rounded-xl p-4 border border-border">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <img
+              src={bearIcon}
+              alt=""
+              className={`w-5 h-5 shrink-0 transition-opacity ${
+                displayPrefs.showTrayIcon ? "opacity-100" : "opacity-30"
+              }`}
+            />
+            <div className="text-sm font-medium text-text">Bear icon</div>
+          </div>
+          <button
+            role="switch"
+            aria-checked={displayPrefs.showTrayIcon}
+            aria-label="Show the bear icon in the menu bar"
+            onClick={toggleTrayIcon}
+            className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${
+              displayPrefs.showTrayIcon ? "bg-primary" : "bg-border"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                displayPrefs.showTrayIcon ? "translate-x-4" : ""
+              }`}
+            />
+          </button>
+        </div>
+        <p className="text-xs text-text-muted mt-1">
+          Show the bear icon in the menu bar. Turn it off for a text-only tray — the play/pause
+          control and the dropdown keep working.
+        </p>
       </div>
 
       <p className="text-[11px] text-text-muted px-1">

@@ -431,6 +431,7 @@ function useTrayDisplayPush(state: AppState) {
       description: displayDescription,
       dayBaseSeconds: todayBaseMinutes * 60,
       menuBarMode: state.displayPrefs.menuBarMode,
+      showTrayIcon: state.displayPrefs.showTrayIcon,
       inactivityEnabled: state.displayPrefs.inactivityEnabled,
       inactivityMinutes: state.displayPrefs.inactivityMinutes,
     }).catch(() => {});
@@ -442,6 +443,7 @@ function useTrayDisplayPush(state: AppState) {
     displayDescription,
     todayBaseMinutes,
     state.displayPrefs.menuBarMode,
+    state.displayPrefs.showTrayIcon,
     state.displayPrefs.inactivityEnabled,
     state.displayPrefs.inactivityMinutes,
   ]);
