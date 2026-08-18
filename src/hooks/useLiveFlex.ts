@@ -2,16 +2,20 @@ import { useMemo } from "react";
 import { useApp } from "../store/context";
 import { useNow } from "./useNow";
 import {
+  calculateLastMonthSummary,
   calculateLiveFlex,
   calculateMonthStats,
   type LiveFlexResult,
   type MonthStats,
+  type MonthSummary,
 } from "../utils/flex";
 
 export interface LiveFlex {
   /** Null until flex is configured. */
   flex: LiveFlexResult | null;
   month: MonthStats;
+  /** Null until a full month lies inside the flex period. */
+  lastMonth: MonthSummary | null;
   now: Date;
 }
 
@@ -52,5 +56,16 @@ export function useLiveFlex(): LiveFlex {
     [allEntries, holidays, now, runningMinutes]
   );
 
-  return { flex, month, now };
+  const lastMonth = useMemo(() => {
+    if (!flexConfig) return null;
+    return calculateLastMonthSummary(
+      allEntries,
+      flexConfig.startDate,
+      flexConfig.initialHours,
+      holidays,
+      now
+    );
+  }, [flexConfig, allEntries, holidays, now]);
+
+  return { flex, month, lastMonth, now };
 }

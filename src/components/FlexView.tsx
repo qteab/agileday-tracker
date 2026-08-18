@@ -1,5 +1,5 @@
 import { useApp } from "../store/context";
-import { formatFlexMinutes, type FlexWeek } from "../utils/flex";
+import { formatFlexMinutes, type FlexWeek, type MonthSummary } from "../utils/flex";
 import { useLiveFlex } from "../hooks/useLiveFlex";
 import { MonthProgressCard } from "./MonthProgressCard";
 
@@ -25,7 +25,7 @@ interface FlexViewProps {
 export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
   const { state } = useApp();
   const { flexConfig } = state;
-  const { flex, month, now } = useLiveFlex();
+  const { flex, month, lastMonth, now } = useLiveFlex();
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -117,6 +117,9 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
             {/* This month: worked vs target */}
             <MonthProgressCard month={month} now={now} />
 
+            {/* Last month: closed summary */}
+            {lastMonth && <LastMonthCard summary={lastMonth} />}
+
             {/* Weekly breakdown */}
             {flex && flex.weeks.length > 0 && (
               <div className="space-y-2">
@@ -130,6 +133,54 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
             )}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function LastMonthCard({ summary }: { summary: MonthSummary }) {
+  const monthLabel = new Date(summary.monthStart + "T12:00:00").toLocaleDateString("en-US", {
+    month: "long",
+  });
+  const deltaPositive = summary.deltaMinutes >= 0;
+
+  return (
+    <div className="bg-bg-card rounded-xl p-4 border border-border">
+      <h3 className="text-sm font-semibold text-text mb-3">Last month — {monthLabel}</h3>
+      <div className="space-y-1 text-sm">
+        <div className="flex items-center justify-between">
+          <span className="text-text-muted">Worked</span>
+          <span className="font-semibold tabular-nums text-text">
+            {formatHM(summary.workedMinutes)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-text-muted">Target</span>
+          <span className="tabular-nums text-text">
+            {formatHM(summary.expectedMinutes)}
+            <span className="text-text-muted"> · {summary.workdays} days</span>
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-text-muted">Flex in</span>
+          <span className="tabular-nums text-text">{formatFlexMinutes(summary.flexInMinutes)}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-text-muted">Flex out</span>
+          <span className="tabular-nums text-text">
+            {formatFlexMinutes(summary.flexOutMinutes)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-text-muted">Change</span>
+          <span
+            className={`font-semibold tabular-nums ${
+              deltaPositive ? "text-emerald-600" : "text-danger"
+            }`}
+          >
+            {formatFlexMinutes(summary.deltaMinutes)}
+          </span>
+        </div>
       </div>
     </div>
   );

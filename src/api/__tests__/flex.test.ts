@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   calculateFlex,
+  calculateLastMonthSummary,
   calculateLiveFlex,
   calculateMonthStats,
   formatFlexMinutes,
@@ -600,5 +601,64 @@ describe("calculateMonthStats", () => {
       45
     );
     expect(result.workedMinutes).toBe(345);
+  });
+});
+
+describe("calculateLastMonthSummary", () => {
+  const NO_HOLIDAYS: Holiday[] = [];
+
+  it("summarizes January from a February reference", () => {
+    // Counting starts Jan 1 (startDate = Dec 31), initial 5h
+    // Jan 2026 has 22 weekdays. Work 8h on each of the first 5 workdays
+    // (Thu 1, Fri 2, Mon 5, Tue 6, Wed 7), nothing after.
+    const entries = [
+      entry("2026-01-01", 480),
+      entry("2026-01-02", 480),
+      entry("2026-01-05", 480),
+      entry("2026-01-06", 480),
+      entry("2026-01-07", 480),
+    ];
+    const result = calculateLastMonthSummary(
+      entries,
+      "2025-12-31",
+      5,
+      NO_HOLIDAYS,
+      new Date("2026-02-10T12:00:00")
+    );
+    expect(result).not.toBeNull();
+    expect(result!.monthStart).toBe("2026-01-01");
+    expect(result!.workdays).toBe(22);
+    expect(result!.expectedMinutes).toBe(22 * 480);
+    expect(result!.workedMinutes).toBe(5 * 480);
+    // Flex in: balance through Dec 31 = initial only
+    expect(result!.flexInMinutes).toBe(300);
+    // Change = worked - expected = -17 workdays
+    expect(result!.deltaMinutes).toBe(-17 * 480);
+    expect(result!.flexOutMinutes).toBe(300 - 17 * 480);
+  });
+
+  it("returns null when the month isn't fully inside the flex period", () => {
+    // Counting starts Jan 15 → January is partial → no summary in February
+    const result = calculateLastMonthSummary(
+      [],
+      "2026-01-14",
+      0,
+      NO_HOLIDAYS,
+      new Date("2026-02-10T12:00:00")
+    );
+    expect(result).toBeNull();
+  });
+
+  it("accounts for holidays in the month target", () => {
+    const holidays: Holiday[] = [{ date: "2026-01-06", name: "Epiphany" }];
+    const result = calculateLastMonthSummary(
+      [],
+      "2025-12-31",
+      0,
+      holidays,
+      new Date("2026-02-10T12:00:00")
+    );
+    expect(result!.workdays).toBe(21);
+    expect(result!.expectedMinutes).toBe(21 * 480);
   });
 });

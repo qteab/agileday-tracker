@@ -245,6 +245,57 @@ export function calculateMonthStats(
   };
 }
 
+export interface MonthSummary {
+  /** First day of the summarized month (YYYY-MM-DD) */
+  monthStart: string;
+  workedMinutes: number;
+  expectedMinutes: number;
+  workdays: number;
+  /** Balance entering the month (through the last day of the month before) */
+  flexInMinutes: number;
+  /** Balance leaving the month (through the month's last day) */
+  flexOutMinutes: number;
+  /** flexOut − flexIn; equals worked − expected */
+  deltaMinutes: number;
+}
+
+/**
+ * Summary of the month before the one containing `now`: worked vs expected
+ * hours and the flex balance entering/leaving the month. Returns null unless
+ * the whole month lies inside the flex period, since a partial month would
+ * show misleading totals.
+ */
+export function calculateLastMonthSummary(
+  entries: TimeEntry[],
+  startDate: string,
+  initialHours: number,
+  holidays: Holiday[],
+  now: Date
+): MonthSummary | null {
+  const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1, 12);
+  const firstOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1, 12);
+  const lastOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 12);
+
+  const firstCountedDay = new Date(startDate + "T12:00:00");
+  firstCountedDay.setDate(firstCountedDay.getDate() + 1);
+  if (fmtDate(firstCountedDay) > fmtDate(firstOfLastMonth)) return null;
+
+  // Passing the month's last day as "now" makes the whole month count
+  const stats = calculateMonthStats(entries, holidays, lastOfLastMonth);
+  const flexIn = calculateFlex(entries, startDate, initialHours, holidays, firstOfLastMonth);
+  const flexOut = calculateFlex(entries, startDate, initialHours, holidays, firstOfThisMonth);
+
+  return {
+    monthStart: fmtDate(firstOfLastMonth),
+    workedMinutes: stats.workedMinutes,
+    expectedMinutes: stats.expectedMinutes,
+    workdays: stats.workdays,
+    flexInMinutes: flexIn.totalMinutes,
+    flexOutMinutes: flexOut.totalMinutes,
+    deltaMinutes: flexOut.totalMinutes - flexIn.totalMinutes,
+  };
+}
+
 function getSunday(monday: Date): Date {
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
