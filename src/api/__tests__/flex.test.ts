@@ -280,7 +280,8 @@ describe("calculateFlex", () => {
     expect(result.weeks[0].expectedMinutes).toBe(960); // 16h
     expect(result.weeks[0].workedMinutes).toBe(960); // 16h
     expect(result.weeks[0].deltaMinutes).toBe(0);
-    expect(result.weeks[0].isPartial).toBe(true);
+    expect(result.weeks[0].isPartial).toBe(false);
+    expect(result.weeks[0].isOngoing).toBe(true);
   });
 
   it("excludes unsaved entries from calculation", () => {
@@ -367,6 +368,7 @@ describe("calculateFlex — multi-week integration", () => {
     expect(result.weeks[0].expectedMinutes).toBe(2400);
     expect(result.weeks[0].deltaMinutes).toBe(120);
     expect(result.weeks[0].isPartial).toBe(false);
+    expect(result.weeks[0].isOngoing).toBe(false);
 
     // Week 2: 36h - 32h = +4h (240m), has holiday
     expect(result.weeks[1].workedMinutes).toBe(2160);
@@ -378,7 +380,8 @@ describe("calculateFlex — multi-week integration", () => {
     expect(result.weeks[2].workedMinutes).toBe(1200);
     expect(result.weeks[2].expectedMinutes).toBe(1440);
     expect(result.weeks[2].deltaMinutes).toBe(-240);
-    expect(result.weeks[2].isPartial).toBe(true);
+    expect(result.weeks[2].isPartial).toBe(false);
+    expect(result.weeks[2].isOngoing).toBe(true);
     expect(result.weeks[2].workdays).toBe(3); // Mon, Tue, Wed
 
     // Total: 5h initial + 2h + 4h - 4h = 7h (420m)
@@ -406,6 +409,7 @@ describe("calculateFlex — multi-week integration", () => {
     expect(result.weeks[0].workedMinutes).toBe(960);
     expect(result.weeks[0].deltaMinutes).toBe(0);
     expect(result.weeks[0].isPartial).toBe(true); // first week partial
+    expect(result.weeks[0].isOngoing).toBe(false);
   });
 });
 

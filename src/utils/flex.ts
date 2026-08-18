@@ -11,7 +11,8 @@ export interface FlexWeek {
   workedMinutes: number; // sum of all entries Mon-Sun
   deltaMinutes: number; // worked - expected
   holidays: { date: string; name: string }[];
-  isPartial: boolean; // true for current incomplete week
+  isPartial: boolean; // true when the week is truncated by the flex start date
+  isOngoing: boolean; // true for the current, not-yet-closed week
 }
 
 export interface FlexResult {
@@ -113,7 +114,8 @@ export function calculateFlex(
       workedMinutes,
       deltaMinutes,
       holidays: weekHolidays,
-      isPartial: isCurrentWeek || fmtDate(firstDay) > mondayStr, // first week may be partial too
+      isPartial: fmtDate(firstDay) > mondayStr,
+      isOngoing: isCurrentWeek,
     });
 
     current.setDate(current.getDate() + 7);

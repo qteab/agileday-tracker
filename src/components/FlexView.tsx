@@ -125,6 +125,11 @@ function WeekRow({ week }: { week: FlexWeek }) {
               partial
             </span>
           )}
+          {week.isOngoing && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+              open
+            </span>
+          )}
         </div>
         <span
           className={`text-sm font-semibold tabular-nums ${
