@@ -563,7 +563,7 @@ export function createAgileDayProvider(
         percentage: o.allocation,
         hours: o.hours,
         allocationMode: o.allocationMode,
-        periods: o.allocations.map((a) => ({
+        periods: (o.allocations ?? []).map((a) => ({
           percentage: a.allocation,
           startDate: a.startDate,
         })),

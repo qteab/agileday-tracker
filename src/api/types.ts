@@ -51,8 +51,9 @@ export interface AllocationPeriod {
 export interface Allocation {
   projectId: string;
   projectName: string;
-  startDate: string;
-  endDate: string;
+  /** Null when the opening has no allocation periods (dates are derived from them) */
+  startDate: string | null;
+  endDate: string | null;
   /** Overall allocation percentage */
   percentage: number;
   /** Total hours for this opening */

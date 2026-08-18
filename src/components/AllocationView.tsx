@@ -63,6 +63,8 @@ function getWeekDays(ref: Date): string[] {
 
 /** Get the allocation percentage for a specific date from an allocation's periods */
 function getAllocPercentageOnDate(alloc: Allocation, dateStr: string): number {
+  // Openings with no allocation periods have null start/end dates
+  if (!alloc.startDate || !alloc.endDate) return 0;
   if (dateStr < alloc.startDate || dateStr > alloc.endDate) return 0;
   if (!isWeekday(dateStr)) return 0;
 
@@ -374,7 +376,9 @@ export function AllocationView() {
         .reduce((s, e) => s + e.minutes, 0);
     }
 
-    return [...byProject.values()].filter((r) => r.allocMinutes > 0 || r.tracked > 0);
+    // Only projects actually allocated in the visible range. Tracked time on
+    // unallocated projects is already covered by the "Tracked time" section.
+    return [...byProject.values()].filter((r) => r.allocMinutes > 0);
   }, [allocations, state.entries, range.start, range.end]);
   const referenceMinutes = period === "week" ? WORKDAY_MINUTES : WEEK_CAPACITY_MINUTES;
   const referenceLabel = period === "week" ? "8h" : "40h";
@@ -541,9 +545,11 @@ export function AllocationView() {
           </span>
         </div>
         <div className="bg-bg-card rounded-xl shadow-sm overflow-hidden">
-          {allocations.length === 0 && (
+          {projectRows.length === 0 && (
             <div className="px-4 py-6 text-center text-xs text-text-muted">
-              No allocation data available
+              {allocations.length === 0
+                ? "No allocation data available"
+                : `No allocations ${period === "week" ? "this week" : "this month"}`}
             </div>
           )}
           {projectRows.map((row, i, arr) => {
