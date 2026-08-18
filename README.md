@@ -4,7 +4,7 @@ A lightweight macOS menu bar app for tracking time against AgileDay projects. Bu
 
 ## Install
 
-1. Download the latest `.dmg` file from [Releases](https://github.com/Kaijonsson/agileday-tracker/releases)
+1. Download the latest `.dmg` file from [Releases](https://github.com/qteab/agileday-tracker/releases)
 2. Open the `.dmg` and drag **QTE Time Tracker** into your **Applications** folder
 3. **Before opening for the first time**, you need to allow the app since it's not signed with an Apple certificate. Choose one:
    - **Option A (easiest):** Open **Terminal** and paste:
@@ -118,7 +118,7 @@ The app stays in your menu bar even when the window is closed. Click the teddy b
 Prerequisites: [Node.js](https://nodejs.org/) 22+, [Rust](https://rustup.rs/), Xcode CLI tools.
 
 ```bash
-git clone https://github.com/Kaijonsson/agileday-tracker.git
+git clone https://github.com/qteab/agileday-tracker.git
 cd agileday-tracker
 npm install
 npm run tauri dev    # Run the app in dev mode
