@@ -63,32 +63,59 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
           </div>
         ) : (
           <>
-            {/* Live balance */}
+            {/* Live balance: big number left, today/yesterday detail right */}
             {flex && (
-              <div className="bg-bg-card rounded-xl p-4 border border-border text-center">
-                <div className="text-xs text-text-muted mb-1">Current flex balance</div>
-                <div
-                  className={`text-2xl font-bold tabular-nums ${
-                    flex.totalMinutes >= 0 ? "text-emerald-600" : "text-danger"
-                  }`}
-                >
-                  {formatFlexMinutes(flex.totalMinutes)}
-                </div>
-                <div className="text-[10px] text-text-muted mt-1">
-                  {flex.countsToday ? (
-                    <>
-                      Live · today: {formatHM(flex.todayWorkedMinutes)} worked
-                      {flex.todayExpectedMinutes > 0 && (
-                        <> of {formatHM(flex.todayExpectedMinutes)} expected</>
-                      )}{" "}
-                      · through yesterday: {formatFlexMinutes(flex.baseMinutes)}
-                    </>
-                  ) : (
-                    <>
-                      Counting starts {flexStartLabel(flexConfig.startDate)} — hours until then are
-                      covered by your paycheck balance
-                    </>
-                  )}
+              <div className="bg-bg-card rounded-xl p-4 border border-border">
+                <div className="flex items-center gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                      Flex balance
+                      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        live
+                      </span>
+                    </div>
+                    <div
+                      className={`text-3xl font-bold tabular-nums mt-1 ${
+                        flex.totalMinutes >= 0 ? "text-emerald-600" : "text-danger"
+                      }`}
+                    >
+                      {formatFlexMinutes(flex.totalMinutes)}
+                    </div>
+                  </div>
+                  <div className="flex-1 space-y-1 text-sm border-l border-border pl-4">
+                    {flex.countsToday ? (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-text-muted">Today</span>
+                          <span className="font-semibold tabular-nums text-text">
+                            {formatHM(flex.todayWorkedMinutes)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-text-muted">Expected</span>
+                          <span className="tabular-nums text-text">
+                            {formatHM(flex.todayExpectedMinutes)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-text-muted">Before today</span>
+                          <span
+                            className={`tabular-nums ${
+                              flex.baseMinutes >= 0 ? "text-emerald-600" : "text-danger"
+                            }`}
+                          >
+                            {formatFlexMinutes(flex.baseMinutes)}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-xs text-text-muted">
+                        Counting starts {flexStartLabel(flexConfig.startDate)} — hours until then
+                        are covered by your paycheck balance.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
