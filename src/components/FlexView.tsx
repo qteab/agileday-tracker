@@ -68,13 +68,7 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
               <div className="bg-bg-card rounded-xl p-4 border border-border">
                 <div className="flex items-center gap-4">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 text-xs text-text-muted">
-                      Flex balance
-                      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        live
-                      </span>
-                    </div>
+                    <div className="text-xs text-text-muted">Flex balance</div>
                     <div
                       className={`text-3xl font-bold tabular-nums mt-1 ${
                         flex.totalMinutes >= 0 ? "text-emerald-600" : "text-danger"
