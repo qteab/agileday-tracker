@@ -11,6 +11,7 @@ import {
   type DisplayPrefs,
 } from "../store/display-store";
 import { fmtDate } from "../utils/week";
+import bearIcon from "../assets/bear.png";
 
 export type SettingsTab = "flex" | "display" | "account";
 
@@ -152,7 +153,16 @@ function DisplaySettings() {
 
       <div className="bg-bg-card rounded-xl p-4 border border-border">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-medium text-text">Bear icon</div>
+          <div className="flex items-center gap-2">
+            <img
+              src={bearIcon}
+              alt=""
+              className={`w-5 h-5 shrink-0 transition-opacity ${
+                displayPrefs.showTrayIcon ? "opacity-100" : "opacity-30"
+              }`}
+            />
+            <div className="text-sm font-medium text-text">Bear icon</div>
+          </div>
           <button
             role="switch"
             aria-checked={displayPrefs.showTrayIcon}
