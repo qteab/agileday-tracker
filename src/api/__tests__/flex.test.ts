@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { calculateFlex, formatFlexMinutes } from "../../utils/flex";
+import {
+  calculateFlex,
+  calculateLastMonthSummary,
+  calculateLiveFlex,
+  calculateMonthStats,
+  formatFlexMinutes,
+} from "../../utils/flex";
 import type { TimeEntry } from "../types";
 import type { Holiday } from "../types";
 
@@ -275,7 +281,8 @@ describe("calculateFlex", () => {
     expect(result.weeks[0].expectedMinutes).toBe(960); // 16h
     expect(result.weeks[0].workedMinutes).toBe(960); // 16h
     expect(result.weeks[0].deltaMinutes).toBe(0);
-    expect(result.weeks[0].isPartial).toBe(true);
+    expect(result.weeks[0].isPartial).toBe(false);
+    expect(result.weeks[0].isOngoing).toBe(true);
   });
 
   it("excludes unsaved entries from calculation", () => {
@@ -362,6 +369,7 @@ describe("calculateFlex — multi-week integration", () => {
     expect(result.weeks[0].expectedMinutes).toBe(2400);
     expect(result.weeks[0].deltaMinutes).toBe(120);
     expect(result.weeks[0].isPartial).toBe(false);
+    expect(result.weeks[0].isOngoing).toBe(false);
 
     // Week 2: 36h - 32h = +4h (240m), has holiday
     expect(result.weeks[1].workedMinutes).toBe(2160);
@@ -373,7 +381,8 @@ describe("calculateFlex — multi-week integration", () => {
     expect(result.weeks[2].workedMinutes).toBe(1200);
     expect(result.weeks[2].expectedMinutes).toBe(1440);
     expect(result.weeks[2].deltaMinutes).toBe(-240);
-    expect(result.weeks[2].isPartial).toBe(true);
+    expect(result.weeks[2].isPartial).toBe(false);
+    expect(result.weeks[2].isOngoing).toBe(true);
     expect(result.weeks[2].workdays).toBe(3); // Mon, Tue, Wed
 
     // Total: 5h initial + 2h + 4h - 4h = 7h (420m)
@@ -401,6 +410,7 @@ describe("calculateFlex — multi-week integration", () => {
     expect(result.weeks[0].workedMinutes).toBe(960);
     expect(result.weeks[0].deltaMinutes).toBe(0);
     expect(result.weeks[0].isPartial).toBe(true); // first week partial
+    expect(result.weeks[0].isOngoing).toBe(false);
   });
 });
 
@@ -452,5 +462,274 @@ describe("formatFlexMinutes", () => {
   it("formats negative flex", () => {
     expect(formatFlexMinutes(-150)).toBe("-2h 30m");
     expect(formatFlexMinutes(-480)).toBe("-8h");
+  });
+});
+
+describe("calculateLiveFlex", () => {
+  const NO_HOLIDAYS: Holiday[] = [];
+
+  it("adds today's worked minus expected on a workday", () => {
+    // startDate = Jan 4 (Sun) → counting starts Mon Jan 5
+    // Week Jan 5-11: 40h worked = 0 flex through yesterday
+    // Reference: Mon Jan 12, 6h worked today → 0 + 360 - 480 = -120
+    const entries = [
+      entry("2026-01-05", 480),
+      entry("2026-01-06", 480),
+      entry("2026-01-07", 480),
+      entry("2026-01-08", 480),
+      entry("2026-01-09", 480),
+      entry("2026-01-12", 360),
+    ];
+    const result = calculateLiveFlex(
+      entries,
+      "2026-01-04",
+      0,
+      NO_HOLIDAYS,
+      new Date("2026-01-12T15:00:00")
+    );
+    expect(result.baseMinutes).toBe(0);
+    expect(result.todayWorkedMinutes).toBe(360);
+    expect(result.todayExpectedMinutes).toBe(480);
+    expect(result.countsToday).toBe(true);
+    expect(result.totalMinutes).toBe(-120);
+  });
+
+  it("includes running timer minutes via extraMinutes", () => {
+    const result = calculateLiveFlex(
+      [entry("2026-01-12", 300)],
+      "2026-01-11",
+      0,
+      NO_HOLIDAYS,
+      new Date("2026-01-12T15:00:00"),
+      90
+    );
+    // today: 300 + 90 = 390 worked, 480 expected → -90
+    expect(result.todayWorkedMinutes).toBe(390);
+    expect(result.totalMinutes).toBe(-90);
+  });
+
+  it("expects 0 on weekends", () => {
+    // Reference: Sat Jan 17, 2h worked today → flex goes up by 2h
+    const result = calculateLiveFlex(
+      [entry("2026-01-17", 120)],
+      "2026-01-11",
+      0,
+      NO_HOLIDAYS,
+      new Date("2026-01-17T15:00:00")
+    );
+    expect(result.todayExpectedMinutes).toBe(0);
+    // base: Mon-Fri Jan 12-16 with no entries = -2400
+    expect(result.baseMinutes).toBe(-2400);
+    expect(result.totalMinutes).toBe(-2280);
+  });
+
+  it("expects 0 on holidays", () => {
+    const holidays: Holiday[] = [{ date: "2026-01-12", name: "Test Holiday" }];
+    const result = calculateLiveFlex(
+      [],
+      "2026-01-11",
+      0,
+      holidays,
+      new Date("2026-01-12T15:00:00")
+    );
+    expect(result.todayExpectedMinutes).toBe(0);
+    expect(result.totalMinutes).toBe(0);
+  });
+
+  it("ignores today entirely before the flex period starts", () => {
+    // startDate = Jan 12 → counting starts Jan 13; today Jan 12 doesn't count
+    const result = calculateLiveFlex(
+      [entry("2026-01-12", 480)],
+      "2026-01-12",
+      5,
+      NO_HOLIDAYS,
+      new Date("2026-01-12T15:00:00")
+    );
+    expect(result.todayWorkedMinutes).toBe(0);
+    expect(result.todayExpectedMinutes).toBe(0);
+    expect(result.countsToday).toBe(false);
+    expect(result.totalMinutes).toBe(300);
+  });
+
+  it("skips unsaved entries for today", () => {
+    const unsaved = { ...entry("2026-01-12", 240), syncStatus: "unsaved" as const };
+    const result = calculateLiveFlex(
+      [unsaved],
+      "2026-01-11",
+      0,
+      NO_HOLIDAYS,
+      new Date("2026-01-12T15:00:00")
+    );
+    expect(result.todayWorkedMinutes).toBe(0);
+    expect(result.totalMinutes).toBe(-480);
+  });
+});
+
+describe("calculateMonthStats", () => {
+  const NO_HOLIDAYS: Holiday[] = [];
+
+  it("counts workdays and worked minutes for January 2026", () => {
+    // Jan 2026: 31 days, Jan 1 is a Thursday → 22 weekdays
+    const entries = [
+      entry("2026-01-05", 480),
+      entry("2026-01-06", 510),
+      entry("2025-12-31", 480), // previous month, ignored
+      entry("2026-02-02", 480), // next month, ignored
+    ];
+    const result = calculateMonthStats(entries, NO_HOLIDAYS, new Date("2026-01-12T15:00:00"));
+    expect(result.workdays).toBe(22);
+    expect(result.expectedMinutes).toBe(22 * 480);
+    expect(result.workedMinutes).toBe(990);
+    // Workdays Jan 1-12: 1,2,5,6,7,8,9,12 = 8
+    expect(result.workdaysToDate).toBe(8);
+    expect(result.expectedToDateMinutes).toBe(8 * 480);
+  });
+
+  it("excludes holidays from workdays", () => {
+    const holidays: Holiday[] = [{ date: "2026-01-06", name: "Epiphany" }];
+    const result = calculateMonthStats([], holidays, new Date("2026-01-12T15:00:00"));
+    expect(result.workdays).toBe(21);
+    expect(result.workdaysToDate).toBe(7);
+  });
+
+  it("adds extraMinutes and skips unsaved entries", () => {
+    const unsaved = { ...entry("2026-01-12", 240), syncStatus: "unsaved" as const };
+    const result = calculateMonthStats(
+      [entry("2026-01-12", 300), unsaved],
+      NO_HOLIDAYS,
+      new Date("2026-01-12T15:00:00"),
+      45
+    );
+    expect(result.workedMinutes).toBe(345);
+  });
+});
+
+describe("calculateLastMonthSummary", () => {
+  const NO_HOLIDAYS: Holiday[] = [];
+
+  it("summarizes January from a February reference", () => {
+    // Counting starts Jan 1 (startDate = Dec 31), initial 5h
+    // Jan 2026 has 22 weekdays. Work 8h on each of the first 5 workdays
+    // (Thu 1, Fri 2, Mon 5, Tue 6, Wed 7), nothing after.
+    const entries = [
+      entry("2026-01-01", 480),
+      entry("2026-01-02", 480),
+      entry("2026-01-05", 480),
+      entry("2026-01-06", 480),
+      entry("2026-01-07", 480),
+    ];
+    const result = calculateLastMonthSummary(
+      entries,
+      "2025-12-31",
+      5,
+      NO_HOLIDAYS,
+      new Date("2026-02-10T12:00:00")
+    );
+    expect(result).not.toBeNull();
+    expect(result!.monthStart).toBe("2026-01-01");
+    expect(result!.workdays).toBe(22);
+    expect(result!.expectedMinutes).toBe(22 * 480);
+    expect(result!.workedMinutes).toBe(5 * 480);
+    // Flex in: balance through Dec 31 = initial only
+    expect(result!.flexInMinutes).toBe(300);
+    // Change = worked - expected = -17 workdays
+    expect(result!.deltaMinutes).toBe(-17 * 480);
+    expect(result!.flexOutMinutes).toBe(300 - 17 * 480);
+  });
+
+  it("returns null when the month isn't fully inside the flex period", () => {
+    // Counting starts Jan 15 → January is partial → no summary in February
+    const result = calculateLastMonthSummary(
+      [],
+      "2026-01-14",
+      0,
+      NO_HOLIDAYS,
+      new Date("2026-02-10T12:00:00")
+    );
+    expect(result).toBeNull();
+  });
+
+  it("accounts for holidays in the month target", () => {
+    const holidays: Holiday[] = [{ date: "2026-01-06", name: "Epiphany" }];
+    const result = calculateLastMonthSummary(
+      [],
+      "2025-12-31",
+      0,
+      holidays,
+      new Date("2026-02-10T12:00:00")
+    );
+    expect(result!.workdays).toBe(21);
+    expect(result!.expectedMinutes).toBe(21 * 480);
+  });
+});
+
+describe("flex resets", () => {
+  const NO_HOLIDAYS: Holiday[] = [];
+
+  // Jan 2026 fully worked (delta 0 every day), so the balance stays at the
+  // initial value through the month.
+  function fullJanuary(): TimeEntry[] {
+    const entries: TimeEntry[] = [];
+    for (let d = 1; d <= 31; d++) {
+      const date = `2026-01-${String(d).padStart(2, "0")}`;
+      const day = new Date(date + "T12:00:00").getDay();
+      if (day !== 0 && day !== 6) entries.push(entry(date, 480));
+    }
+    return entries;
+  }
+
+  it("floors the balance to 50h after a completed reset month", () => {
+    // Initial 100h, January worked exactly → 100h at month end → floored to 50h
+    const result = calculateFlex(
+      fullJanuary(),
+      "2025-12-31",
+      100,
+      NO_HOLIDAYS,
+      new Date("2026-02-02T12:00:00"),
+      ["2026-01"]
+    );
+    expect(result.totalMinutes).toBe(3000); // 50h
+    expect(result.resets).toEqual([{ month: "2026-01", beforeMinutes: 6000, afterMinutes: 3000 }]);
+  });
+
+  it("does nothing when the balance is at or below 50h", () => {
+    const result = calculateFlex(
+      fullJanuary(),
+      "2025-12-31",
+      10,
+      NO_HOLIDAYS,
+      new Date("2026-02-02T12:00:00"),
+      ["2026-01"]
+    );
+    expect(result.totalMinutes).toBe(600); // 10h untouched
+    expect(result.resets).toEqual([]);
+  });
+
+  it("does not apply a reset while the month is still running", () => {
+    const result = calculateFlex(
+      fullJanuary(),
+      "2025-12-31",
+      100,
+      NO_HOLIDAYS,
+      new Date("2026-01-15T12:00:00"),
+      ["2026-01"]
+    );
+    expect(result.totalMinutes).toBe(6000); // still 100h mid-month
+    expect(result.resets).toEqual([]);
+  });
+
+  it("reports the payout in the last-month summary", () => {
+    const summary = calculateLastMonthSummary(
+      fullJanuary(),
+      "2025-12-31",
+      100,
+      NO_HOLIDAYS,
+      new Date("2026-02-10T12:00:00"),
+      ["2026-01"]
+    );
+    expect(summary!.flexInMinutes).toBe(6000); // 100h entering January
+    expect(summary!.flexOutMinutes).toBe(3000); // floored to 50h leaving
+    expect(summary!.resetPayoutMinutes).toBe(3000); // 50h paid out
+    expect(summary!.deltaMinutes).toBe(-3000);
   });
 });

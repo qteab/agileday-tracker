@@ -11,15 +11,25 @@ export interface FlexWeek {
   workedMinutes: number; // sum of all entries Mon-Sun
   deltaMinutes: number; // worked - expected
   holidays: { date: string; name: string }[];
-  isPartial: boolean; // true for current incomplete week
+  isPartial: boolean; // true when the week is truncated by the flex start date
+  isOngoing: boolean; // true for the current, not-yet-closed week
+}
+
+export interface FlexReset {
+  month: string; // YYYY-MM
+  beforeMinutes: number; // balance at month end, before flooring
+  afterMinutes: number; // always RESET_CAP_MINUTES
 }
 
 export interface FlexResult {
-  totalMinutes: number; // initialHours*60 + sum of all weekly deltas
+  totalMinutes: number; // balance through yesterday, after any resets
   weeks: FlexWeek[];
+  /** Resets that were applied (reset month completed with balance > 50h) */
+  resets: FlexReset[];
 }
 
 const WORKDAY_MINUTES = 480; // 8 hours
+export const RESET_CAP_MINUTES = 50 * 60; // flex above this is paid out on a reset
 
 /**
  * Calculate flex balance from entries.
@@ -29,13 +39,16 @@ const WORKDAY_MINUTES = 480; // 8 hours
  * @param initialHours - Flex balance as of startDate (can be negative)
  * @param holidays - Company holidays from AgileDay
  * @param referenceDate - "Today" — flex is calculated through yesterday
+ * @param resetMonths - Months (YYYY-MM) at whose end the balance is floored
+ *   to 50h if above it, so the next month starts at exactly 50h
  */
 export function calculateFlex(
   entries: TimeEntry[],
   startDate: string,
   initialHours: number,
   holidays: Holiday[],
-  referenceDate: Date
+  referenceDate: Date,
+  resetMonths: string[] = []
 ): FlexResult {
   // The day after startDate is the first day we count
   const firstDay = new Date(startDate + "T12:00:00");
@@ -47,7 +60,7 @@ export function calculateFlex(
   yesterday.setHours(12, 0, 0, 0);
 
   if (yesterday < firstDay) {
-    return { totalMinutes: Math.round(initialHours * 60), weeks: [] };
+    return { totalMinutes: Math.round(initialHours * 60), weeks: [], resets: [] };
   }
 
   const hSet = holidaySet(holidays);
@@ -113,16 +126,227 @@ export function calculateFlex(
       workedMinutes,
       deltaMinutes,
       holidays: weekHolidays,
-      isPartial: isCurrentWeek || fmtDate(firstDay) > mondayStr, // first week may be partial too
+      isPartial: fmtDate(firstDay) > mondayStr,
+      isOngoing: isCurrentWeek,
     });
 
     current.setDate(current.getDate() + 7);
   }
 
-  const totalDelta = weeks.reduce((sum, w) => sum + w.deltaMinutes, 0);
-  const totalMinutes = Math.round(initialHours * 60) + totalDelta;
+  // Walk day by day for the total so resets apply at the right point in
+  // time. Without resets this equals initial + sum of weekly deltas.
+  const resetSet = new Set(resetMonths);
+  const resets: FlexReset[] = [];
+  let balance = Math.round(initialHours * 60);
+  const day = new Date(firstDay);
+  while (day <= yesterday) {
+    const dayStr = fmtDate(day);
+    const dayOfWeek = day.getDay();
+    const isWorkday = dayOfWeek !== 0 && dayOfWeek !== 6 && !hSet.has(dayStr);
+    balance += (minutesByDate.get(dayStr) ?? 0) - (isWorkday ? WORKDAY_MINUTES : 0);
 
-  return { totalMinutes, weeks };
+    day.setDate(day.getDate() + 1);
+    // Just crossed a month boundary: apply the completed month's reset
+    if (day.getDate() === 1) {
+      const monthKey = dayStr.slice(0, 7);
+      if (resetSet.has(monthKey) && balance > RESET_CAP_MINUTES) {
+        resets.push({ month: monthKey, beforeMinutes: balance, afterMinutes: RESET_CAP_MINUTES });
+        balance = RESET_CAP_MINUTES;
+      }
+    }
+  }
+
+  return { totalMinutes: balance, weeks, resets };
+}
+
+export interface LiveFlexResult extends FlexResult {
+  /** Balance through yesterday (what calculateFlex returns). */
+  baseMinutes: number;
+  todayWorkedMinutes: number;
+  /** 480 if today is a workday inside the flex period, otherwise 0. */
+  todayExpectedMinutes: number;
+  /** False when today is still before the flex period (nothing counted yet). */
+  countsToday: boolean;
+}
+
+/**
+ * Live flex balance: through-yesterday balance plus today counted as a full
+ * day (worked − expected). Starts the morning a workday down and climbs back
+ * as hours are logged, so the number never jumps at midnight.
+ *
+ * @param extraMinutes - Minutes worked today that aren't in entries yet
+ *   (the running timer's elapsed time)
+ */
+export function calculateLiveFlex(
+  entries: TimeEntry[],
+  startDate: string,
+  initialHours: number,
+  holidays: Holiday[],
+  now: Date,
+  extraMinutes = 0,
+  resetMonths: string[] = []
+): LiveFlexResult {
+  const base = calculateFlex(entries, startDate, initialHours, holidays, now, resetMonths);
+
+  // Today counts only if it's on/after the first counted day
+  const firstDay = new Date(startDate + "T12:00:00");
+  firstDay.setDate(firstDay.getDate() + 1);
+  const todayStr = fmtDate(now);
+  if (todayStr < fmtDate(firstDay)) {
+    return {
+      ...base,
+      baseMinutes: base.totalMinutes,
+      todayWorkedMinutes: 0,
+      todayExpectedMinutes: 0,
+      countsToday: false,
+    };
+  }
+
+  let todayWorkedMinutes = extraMinutes;
+  for (const entry of entries) {
+    if (entry.syncStatus === "unsaved") continue;
+    if (entry.date === todayStr) todayWorkedMinutes += entry.minutes;
+  }
+
+  const dayOfWeek = now.getDay();
+  const isWorkday = dayOfWeek !== 0 && dayOfWeek !== 6 && !holidaySet(holidays).has(todayStr);
+  const todayExpectedMinutes = isWorkday ? WORKDAY_MINUTES : 0;
+
+  return {
+    ...base,
+    baseMinutes: base.totalMinutes,
+    totalMinutes: base.totalMinutes + todayWorkedMinutes - todayExpectedMinutes,
+    todayWorkedMinutes,
+    todayExpectedMinutes,
+    countsToday: true,
+  };
+}
+
+export interface MonthStats {
+  /** Minutes worked this calendar month, including today (and extraMinutes). */
+  workedMinutes: number;
+  /** Full-month target: workdays in the month × 480. */
+  expectedMinutes: number;
+  /** Target through today: elapsed workdays × 480. */
+  expectedToDateMinutes: number;
+  workdays: number;
+  workdaysToDate: number;
+}
+
+/**
+ * Worked vs expected hours for the calendar month containing `now`.
+ *
+ * @param extraMinutes - Minutes worked today that aren't in entries yet
+ *   (the running timer's elapsed time)
+ */
+export function calculateMonthStats(
+  entries: TimeEntry[],
+  holidays: Holiday[],
+  now: Date,
+  extraMinutes = 0
+): MonthStats {
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}-`;
+  const todayStr = fmtDate(now);
+  const hSet = holidaySet(holidays);
+
+  let workdays = 0;
+  let workdaysToDate = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const day = new Date(year, month, d);
+    const dayStr = fmtDate(day);
+    const dayOfWeek = day.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6 || hSet.has(dayStr)) continue;
+    workdays++;
+    if (dayStr <= todayStr) workdaysToDate++;
+  }
+
+  let workedMinutes = extraMinutes;
+  for (const entry of entries) {
+    if (entry.syncStatus === "unsaved") continue;
+    if (entry.date.startsWith(monthPrefix)) workedMinutes += entry.minutes;
+  }
+
+  return {
+    workedMinutes,
+    expectedMinutes: workdays * WORKDAY_MINUTES,
+    expectedToDateMinutes: workdaysToDate * WORKDAY_MINUTES,
+    workdays,
+    workdaysToDate,
+  };
+}
+
+export interface MonthSummary {
+  /** First day of the summarized month (YYYY-MM-DD) */
+  monthStart: string;
+  workedMinutes: number;
+  expectedMinutes: number;
+  workdays: number;
+  /** Balance entering the month (through the last day of the month before) */
+  flexInMinutes: number;
+  /** Balance leaving the month (through the month's last day) */
+  flexOutMinutes: number;
+  /** flexOut − flexIn; worked − expected, minus any reset payout */
+  deltaMinutes: number;
+  /** Minutes paid out by a flex reset at this month's end (0 if none) */
+  resetPayoutMinutes: number;
+}
+
+/**
+ * Summary of the month before the one containing `now`: worked vs expected
+ * hours and the flex balance entering/leaving the month. Returns null unless
+ * the whole month lies inside the flex period, since a partial month would
+ * show misleading totals.
+ */
+export function calculateLastMonthSummary(
+  entries: TimeEntry[],
+  startDate: string,
+  initialHours: number,
+  holidays: Holiday[],
+  now: Date,
+  resetMonths: string[] = []
+): MonthSummary | null {
+  const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1, 12);
+  const firstOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1, 12);
+  const lastOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 12);
+
+  const firstCountedDay = new Date(startDate + "T12:00:00");
+  firstCountedDay.setDate(firstCountedDay.getDate() + 1);
+  if (fmtDate(firstCountedDay) > fmtDate(firstOfLastMonth)) return null;
+
+  // Passing the month's last day as "now" makes the whole month count
+  const stats = calculateMonthStats(entries, holidays, lastOfLastMonth);
+  const flexIn = calculateFlex(
+    entries,
+    startDate,
+    initialHours,
+    holidays,
+    firstOfLastMonth,
+    resetMonths
+  );
+  const flexOut = calculateFlex(
+    entries,
+    startDate,
+    initialHours,
+    holidays,
+    firstOfThisMonth,
+    resetMonths
+  );
+  const monthKey = fmtDate(firstOfLastMonth).slice(0, 7);
+  const reset = flexOut.resets.find((r) => r.month === monthKey);
+
+  return {
+    monthStart: fmtDate(firstOfLastMonth),
+    workedMinutes: stats.workedMinutes,
+    expectedMinutes: stats.expectedMinutes,
+    workdays: stats.workdays,
+    flexInMinutes: flexIn.totalMinutes,
+    flexOutMinutes: flexOut.totalMinutes,
+    deltaMinutes: flexOut.totalMinutes - flexIn.totalMinutes,
+    resetPayoutMinutes: reset ? reset.beforeMinutes - reset.afterMinutes : 0,
+  };
 }
 
 function getSunday(monday: Date): Date {

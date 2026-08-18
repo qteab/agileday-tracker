@@ -3,6 +3,9 @@ import { load } from "@tauri-apps/plugin-store";
 export interface FlexConfig {
   startDate: string; // YYYY-MM-DD — flex counting starts the day AFTER this
   initialHours: number; // flex balance as of startDate (can be negative)
+  /** Months (YYYY-MM) whose end-of-month balance above 50h is paid out and
+   * floored to 50h ("flex reset", usually quarterly). */
+  resetMonths?: string[];
 }
 
 const FLEX_STORE_FILE = "flex.json";

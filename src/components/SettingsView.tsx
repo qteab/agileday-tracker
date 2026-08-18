@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useApp } from "../store/context";
 import { saveFlexConfig, type FlexConfig } from "../store/flex-store";
 import {
@@ -10,7 +10,6 @@ import {
   type ThemeMode,
   type DisplayPrefs,
 } from "../store/display-store";
-import { calculateFlex, formatFlexMinutes } from "../utils/flex";
 import { fmtDate } from "../utils/week";
 
 export type SettingsTab = "flex" | "display" | "account";
@@ -152,8 +151,8 @@ function DisplaySettings() {
 }
 
 function FlexSettings() {
-  const { state, dispatch } = useApp();
-  const { flexConfig, entries, flexEntries, holidays } = state;
+  const { state, dispatch, resync } = useApp();
+  const { flexConfig } = state;
 
   // Derive month from stored start date (which is last day of month)
   function dateToMonth(dateStr: string): string {
@@ -176,20 +175,31 @@ function FlexSettings() {
     flexConfig?.startDate ? dateToMonth(flexConfig.startDate) : getDefaultMonth()
   );
   const [initialHours, setInitialHours] = useState(flexConfig?.initialHours?.toString() ?? "0");
+  const [resetMonths, setResetMonths] = useState<string[]>(flexConfig?.resetMonths ?? []);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const flex = useMemo(() => {
-    if (!flexConfig) return null;
-    const allEntries = flexEntries ? [...entries, ...flexEntries] : entries;
-    return calculateFlex(
-      allEntries,
-      flexConfig.startDate,
-      flexConfig.initialHours,
-      holidays,
-      new Date()
-    );
-  }, [flexConfig, entries, flexEntries, holidays]);
+  // Selectable reset months: first counted month (after the paycheck month)
+  // through the current month
+  function resetMonthOptions(): string[] {
+    if (!paycheckMonth) return [];
+    const [y, m] = paycheckMonth.split("-").map(Number);
+    const cursor = new Date(y, m, 1); // month after paycheck month
+    const current = new Date();
+    const currentKey = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}`;
+    const options: string[] = [];
+    for (let i = 0; i < 48; i++) {
+      const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
+      if (key > currentKey) break;
+      options.push(key);
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    return options;
+  }
+
+  function toggleResetMonth(key: string) {
+    setResetMonths((prev) => (prev.includes(key) ? prev.filter((m) => m !== key) : [...prev, key]));
+  }
 
   async function handleSave() {
     const hours = parseFloat(initialHours);
@@ -197,10 +207,17 @@ function FlexSettings() {
 
     setSaving(true);
     const startDate = monthToLastDay(paycheckMonth);
-    const config: FlexConfig = { startDate, initialHours: hours };
+    const config: FlexConfig = {
+      startDate,
+      initialHours: hours,
+      resetMonths: [...resetMonths].sort(),
+    };
     try {
       await saveFlexConfig(config);
       dispatch({ type: "SET_FLEX_CONFIG", payload: config });
+      // The pre-window entries (flexEntries) were fetched for the old start
+      // date — reload so an earlier start date gets its entries
+      resync();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch {
@@ -212,23 +229,9 @@ function FlexSettings() {
 
   return (
     <div className="px-4 py-4 space-y-4">
-      {/* Current balance */}
-      {flex && (
-        <div className="bg-bg-card rounded-xl p-4 border border-border text-center">
-          <div className="text-xs text-text-muted mb-1">Current flex balance</div>
-          <div
-            className={`text-2xl font-bold tabular-nums ${
-              flex.totalMinutes >= 0 ? "text-emerald-600" : "text-danger"
-            }`}
-          >
-            {formatFlexMinutes(flex.totalMinutes)}
-          </div>
-          <div className="text-[10px] text-text-muted mt-1">Through yesterday</div>
-        </div>
-      )}
-
-      {/* Config form */}
+      {/* Balance config */}
       <div className="bg-bg-card rounded-xl p-4 border border-border space-y-3">
+        <h3 className="text-sm font-semibold text-text">Flex balance</h3>
         <div>
           <label className="block text-xs text-text-muted mb-1">Latest paycheck month</label>
           <input
@@ -251,67 +254,48 @@ function FlexSettings() {
             className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving || !paycheckMonth}
-          className="w-full py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
-        >
-          {saved ? "Saved!" : saving ? "Saving..." : "Save"}
-        </button>
       </div>
 
-      {/* Weekly breakdown */}
-      {flex && flex.weeks.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide">
-            Weekly breakdown
-          </h3>
-          {[...flex.weeks].reverse().map((week) => (
-            <div key={week.startDate} className="bg-bg-card rounded-xl p-3 border border-border">
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-text">{week.weekLabel}</span>
-                  {week.isPartial && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                      partial
-                    </span>
-                  )}
-                </div>
-                <span
-                  className={`text-sm font-semibold tabular-nums ${
-                    week.deltaMinutes >= 0 ? "text-emerald-600" : "text-danger"
+      {/* Reset config */}
+      <div className="bg-bg-card rounded-xl p-4 border border-border space-y-3">
+        <h3 className="text-sm font-semibold text-text">Flex resets</h3>
+        <div>
+          <p className="text-[10px] text-text-muted mb-1.5">
+            At the end of a reset month, flex above 50h is paid out and the balance is floored to
+            50h. Usually quarterly (Mar, Jun, Sep, Dec).
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {resetMonthOptions().map((key) => {
+              const active = resetMonths.includes(key);
+              const label = new Date(key + "-15T12:00:00").toLocaleDateString("en-US", {
+                month: "short",
+                year: "2-digit",
+              });
+              return (
+                <button
+                  key={key}
+                  onClick={() => toggleResetMonth(key)}
+                  className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                    active
+                      ? "bg-primary text-white border-primary"
+                      : "bg-transparent text-text-muted border-border hover:text-text"
                   }`}
                 >
-                  {formatFlexMinutes(week.deltaMinutes)}
-                </span>
-              </div>
-              <div className="flex items-center gap-3 text-xs text-text-muted">
-                <span>
-                  Expected: {Math.floor(week.expectedMinutes / 60)}:
-                  {String(week.expectedMinutes % 60).padStart(2, "0")}
-                </span>
-                <span>
-                  Worked: {Math.floor(week.workedMinutes / 60)}:
-                  {String(week.workedMinutes % 60).padStart(2, "0")}
-                </span>
-                <span>{week.workdays}d</span>
-              </div>
-              {week.holidays.length > 0 && (
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {week.holidays.map((h) => (
-                    <span
-                      key={h.date}
-                      className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700"
-                    >
-                      {h.name}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      )}
+      </div>
+
+      <button
+        onClick={handleSave}
+        disabled={saving || !paycheckMonth}
+        className="w-full py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+      >
+        {saved ? "Saved!" : saving ? "Saving..." : "Save"}
+      </button>
     </div>
   );
 }

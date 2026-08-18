@@ -40,6 +40,8 @@ interface AppContextValue {
   isAuthLoading: boolean;
   logout: () => Promise<void>;
   onLogin: (auth: AuthState) => void;
+  /** Re-run the full data load (entries, flex entries, holidays). */
+  resync: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -108,7 +110,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider
-      value={{ state, dispatch, api, isConnected, isAuthLoading, logout, onLogin }}
+      value={{
+        state,
+        dispatch,
+        api,
+        isConnected,
+        isAuthLoading,
+        logout,
+        onLogin,
+        resync: () => setSyncCounter((n) => n + 1),
+      }}
     >
       {children}
     </AppContext.Provider>

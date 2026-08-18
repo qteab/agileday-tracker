@@ -1,8 +1,7 @@
-import { useState, useMemo } from "react";
 import { useApp } from "../store/context";
-import { calculateFlex, formatFlexMinutes, type FlexWeek } from "../utils/flex";
-import { saveFlexConfig, type FlexConfig } from "../store/flex-store";
-import { fmtDate } from "../utils/week";
+import { formatFlexMinutes, type FlexWeek, type MonthSummary } from "../utils/flex";
+import { useLiveFlex } from "../hooks/useLiveFlex";
+import { MonthProgressCard } from "./MonthProgressCard";
 
 function formatHM(minutes: number): string {
   const h = Math.floor(minutes / 60);
@@ -10,160 +9,198 @@ function formatHM(minutes: number): string {
   return `${h}:${String(m).padStart(2, "0")}`;
 }
 
-export function FlexView() {
-  const { state, dispatch } = useApp();
-  const { flexConfig, entries, flexEntries, holidays } = state;
+/** First counted day (day after the stored start date), e.g. "Sep 1" */
+function flexStartLabel(startDate: string): string {
+  const d = new Date(startDate + "T12:00:00");
+  d.setDate(d.getDate() + 1);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
 
-  const [editMode, setEditMode] = useState(!flexConfig);
-  const [startDate, setStartDate] = useState(flexConfig?.startDate ?? fmtDate(new Date()));
-  const [initialHours, setInitialHours] = useState(flexConfig?.initialHours?.toString() ?? "0");
-  const [saving, setSaving] = useState(false);
+interface FlexViewProps {
+  onBack: () => void;
+  onOpenSettings: () => void;
+}
 
-  const flex = useMemo(() => {
-    if (!flexConfig) return null;
-    const allEntries = flexEntries ? [...entries, ...flexEntries] : entries;
-    return calculateFlex(
-      allEntries,
-      flexConfig.startDate,
-      flexConfig.initialHours,
-      holidays,
-      new Date()
-    );
-  }, [flexConfig, entries, flexEntries, holidays]);
-
-  async function handleSave() {
-    const hours = parseFloat(initialHours);
-    if (!startDate || isNaN(hours)) return;
-
-    setSaving(true);
-    const config: FlexConfig = { startDate, initialHours: hours };
-    try {
-      await saveFlexConfig(config);
-      dispatch({ type: "SET_FLEX_CONFIG", payload: config });
-      setEditMode(false);
-    } catch {
-      dispatch({ type: "SET_ERROR", payload: "Failed to save flex config" });
-    } finally {
-      setSaving(false);
-    }
-  }
+/** Dedicated flex view: live balance, month progress, and weekly breakdown. */
+export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
+  const { state } = useApp();
+  const { flexConfig } = state;
+  const { flex, month, lastMonth, now } = useLiveFlex();
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-3">
-      {/* Settings section */}
-      {editMode ? (
-        <div className="bg-bg-card rounded-xl p-4 mb-4 border border-border">
-          <h3 className="text-sm font-semibold text-text mb-3">Flex Setup</h3>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs text-text-muted mb-1">
-                Start date (flex counts from the day after)
-              </label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-text-muted mb-1">
-                Initial flex balance (hours, can be negative)
-              </label>
-              <input
-                type="number"
-                step="0.5"
-                value={initialHours}
-                onChange={(e) => setInitialHours(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={handleSave}
-                disabled={saving || !startDate}
-                className="flex-1 py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
-              >
-                {saving ? "Saving..." : "Save"}
-              </button>
-              {flexConfig && (
-                <button
-                  onClick={() => {
-                    setStartDate(flexConfig.startDate);
-                    setInitialHours(flexConfig.initialHours.toString());
-                    setEditMode(false);
-                  }}
-                  className="px-4 py-2 text-sm text-text-muted hover:text-text transition-colors"
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between bg-bg-card rounded-xl p-4 mb-4 border border-border">
-          <div>
-            <div className="text-xs text-text-muted">Flex balance (through yesterday)</div>
-            <div
-              className={`text-2xl font-bold tabular-nums ${
-                flex && flex.totalMinutes >= 0 ? "text-emerald-600" : "text-danger"
-              }`}
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* Header with back button and settings link */}
+      <div className="flex shrink-0 items-center gap-2 px-4 py-3 border-b border-border">
+        <button
+          onClick={onBack}
+          className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text transition-colors rounded-lg hover:bg-bg"
+          title="Back"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
+          </svg>
+        </button>
+        <span className="flex-1 text-sm font-semibold text-text">Flex</span>
+        <button
+          onClick={onOpenSettings}
+          className="px-2.5 py-1 text-xs font-medium text-text-muted border border-border rounded-lg hover:text-text hover:bg-bg transition-colors"
+        >
+          Configure flex settings
+        </button>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4">
+        {!flexConfig ? (
+          <div className="text-center py-8 space-y-3">
+            <p className="text-sm text-text-muted">
+              Set your paycheck month and initial balance to start tracking flex.
+            </p>
+            <button
+              onClick={onOpenSettings}
+              className="px-4 py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
             >
-              {flex ? formatFlexMinutes(flex.totalMinutes) : "—"}
-            </div>
-            {flexConfig && (
-              <div className="text-xs text-text-muted mt-1">
-                Starting {formatFlexMinutes(Math.round(flexConfig.initialHours * 60))} on{" "}
-                {new Date(flexConfig.startDate + "T12:00:00").toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
+              Open flex settings
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Live balance: big number left, today/yesterday detail right */}
+            {flex && (
+              <div className="bg-bg-card rounded-xl p-4 border border-border">
+                <div className="flex items-center gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-text-muted">Flex balance</div>
+                    <div
+                      className={`text-3xl font-bold tabular-nums mt-1 ${
+                        flex.totalMinutes >= 0 ? "text-emerald-600" : "text-danger"
+                      }`}
+                    >
+                      {formatFlexMinutes(flex.totalMinutes)}
+                    </div>
+                  </div>
+                  <div className="flex-1 space-y-1 text-sm border-l border-border pl-4">
+                    {flex.countsToday ? (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-text-muted">Today</span>
+                          <span className="font-semibold tabular-nums text-text">
+                            {formatHM(flex.todayWorkedMinutes)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-text-muted">Expected</span>
+                          <span className="tabular-nums text-text">
+                            {formatHM(flex.todayExpectedMinutes)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-text-muted">Before today</span>
+                          <span
+                            className={`tabular-nums ${
+                              flex.baseMinutes >= 0 ? "text-emerald-600" : "text-danger"
+                            }`}
+                          >
+                            {formatFlexMinutes(flex.baseMinutes)}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-xs text-text-muted">
+                        Counting starts {flexStartLabel(flexConfig.startDate)} — hours until then
+                        are covered by your paycheck balance.
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
+
+            {/* This month: worked vs target */}
+            <MonthProgressCard month={month} now={now} />
+
+            {/* Last month: closed summary */}
+            {lastMonth && <LastMonthCard summary={lastMonth} />}
+
+            {/* Weekly breakdown */}
+            {flex && flex.weeks.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide">
+                  Weekly breakdown
+                </h3>
+                {[...flex.weeks].reverse().map((week) => (
+                  <WeekRow key={week.startDate} week={week} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LastMonthCard({ summary }: { summary: MonthSummary }) {
+  const monthLabel = new Date(summary.monthStart + "T12:00:00").toLocaleDateString("en-US", {
+    month: "long",
+  });
+  const deltaPositive = summary.deltaMinutes >= 0;
+
+  return (
+    <div className="bg-bg-card rounded-xl p-4 border border-border">
+      <h3 className="text-sm font-semibold text-text mb-3">Last month — {monthLabel}</h3>
+      <div className="space-y-1 text-sm">
+        <div className="flex items-center justify-between">
+          <span className="text-text-muted">Worked</span>
+          <span className="font-semibold tabular-nums text-text">
+            {formatHM(summary.workedMinutes)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-text-muted">Target</span>
+          <span className="tabular-nums text-text">
+            {formatHM(summary.expectedMinutes)}
+            <span className="text-text-muted"> · {summary.workdays} days</span>
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-text-muted">Flex in</span>
+          <span className="tabular-nums text-text">{formatFlexMinutes(summary.flexInMinutes)}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-text-muted">Flex out</span>
+          <span className="tabular-nums text-text">
+            {formatFlexMinutes(summary.flexOutMinutes)}
+          </span>
+        </div>
+        {summary.resetPayoutMinutes > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-text-muted">Reset payout</span>
+            <span className="tabular-nums text-text">
+              {formatFlexMinutes(-summary.resetPayoutMinutes)}
+            </span>
           </div>
-          <button
-            onClick={() => setEditMode(true)}
-            className="p-2 text-text-muted hover:text-text transition-colors rounded-lg hover:bg-bg"
-            title="Edit flex settings"
+        )}
+        <div className="flex items-center justify-between">
+          <span className="text-text-muted">Change</span>
+          <span
+            className={`font-semibold tabular-nums ${
+              deltaPositive ? "text-emerald-600" : "text-danger"
+            }`}
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-              />
-            </svg>
-          </button>
+            {formatFlexMinutes(summary.deltaMinutes)}
+          </span>
         </div>
-      )}
-
-      {/* Weekly breakdown */}
-      {flex && flex.weeks.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide px-1">
-            Weekly breakdown
-          </h3>
-          {[...flex.weeks].reverse().map((week) => (
-            <WeekRow key={week.startDate} week={week} />
-          ))}
-        </div>
-      )}
-
-      {!flexConfig && (
-        <div className="text-center text-sm text-text-muted py-8">
-          Set up your flex start date and initial balance above to start tracking.
-        </div>
-      )}
+      </div>
     </div>
   );
 }
 
 function WeekRow({ week }: { week: FlexWeek }) {
-  const isPositive = week.deltaMinutes >= 0;
-
   return (
     <div className="bg-bg-card rounded-xl p-3 border border-border">
       <div className="flex items-center justify-between mb-1">
@@ -174,10 +211,15 @@ function WeekRow({ week }: { week: FlexWeek }) {
               partial
             </span>
           )}
+          {week.isOngoing && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+              open
+            </span>
+          )}
         </div>
         <span
           className={`text-sm font-semibold tabular-nums ${
-            isPositive ? "text-emerald-600" : "text-danger"
+            week.deltaMinutes >= 0 ? "text-emerald-600" : "text-danger"
           }`}
         >
           {formatFlexMinutes(week.deltaMinutes)}
@@ -186,7 +228,7 @@ function WeekRow({ week }: { week: FlexWeek }) {
       <div className="flex items-center gap-3 text-xs text-text-muted">
         <span>Expected: {formatHM(week.expectedMinutes)}</span>
         <span>Worked: {formatHM(week.workedMinutes)}</span>
-        <span>{week.workdays} workdays</span>
+        <span>{week.workdays}d</span>
       </div>
       {week.holidays.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-1">
