@@ -15,7 +15,7 @@ export function FlexBadge({ onClick }: FlexBadgeProps) {
   return (
     <button
       onClick={onClick}
-      className={`text-xs font-medium tabular-nums transition-colors ${
+      className={`text-sm font-medium tabular-nums transition-colors ${
         isPositive ? "text-emerald-600" : "text-danger"
       } hover:opacity-70`}
       title="Flex balance (live, includes today)"
