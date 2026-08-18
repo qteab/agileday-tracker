@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev              # Start Vite dev server (port 1420)
 npm run tauri dev        # Start full Tauri app in dev mode (Rust + Vite)
 npm run check            # Run all checks: typecheck → lint → format:check → test
-npm run test             # Vitest (220 tests, single run)
+npm run test             # Vitest (235 tests, single run)
 npm run test:watch       # Vitest watch mode
 npm run lint             # ESLint (src/ only)
 npm run typecheck        # tsc --noEmit
@@ -71,7 +71,7 @@ Tests live mostly in `src/api/__tests__/` (plus `src/utils/__tests__/` and `src/
 - `entry-sync.test.ts` — 15 tests for the create/update/delete/read sync journey
 - Plus flex, rounding, holidays, date-range, week, description and inactivity suites
 
-Total: 220 tests. Run a single file: `npx vitest run src/api/__tests__/mock-provider.test.ts`
+Total: 235 tests. Run a single file: `npx vitest run src/api/__tests__/mock-provider.test.ts`
 
 ## CI/CD
 
@@ -101,7 +101,7 @@ Comprehensive specs for AI agents and contributors in `.claude/docs/`:
 
 - [Architecture](.claude/docs/architecture.md) — Three-layer design (Tauri shell, React frontend, API abstraction), state management, data flow, timer logic, entry consolidation
 - [API & Auth](.claude/docs/api-and-auth.md) — AgileDay REST endpoints, OAuth 2.1 PKCE flow, token management, ApiProvider interface
-- [UI Components](.claude/docs/ui-components.md) — All 18 components, layout structure, hooks, styling (Tailwind theme)
+- [UI Components](.claude/docs/ui-components.md) — All components, layout structure, hooks, styling (Tailwind theme)
 - [Conventions](.claude/docs/conventions.md) — TypeScript strict mode, Prettier/ESLint config, React patterns, naming, file organization
-- [Testing](.claude/docs/testing.md) — Vitest setup, 220 tests, test patterns, coverage scope
+- [Testing](.claude/docs/testing.md) — Vitest setup, 235 tests, test patterns, coverage scope
 - [Domain Glossary](.claude/docs/domain.md) — AgileDay concepts, entry status lifecycle, app-specific terms

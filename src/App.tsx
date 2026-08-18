@@ -68,19 +68,23 @@ function AuthenticatedApp() {
             getCurrentWindow().startDragging();
           }
         }}
-        className="flex items-center justify-between px-4 pt-5 pb-2 bg-bg-card border-b border-border cursor-default"
+        className="grid grid-cols-[1fr_auto_1fr] items-center px-4 pt-7 pb-0.5 bg-bg-card border-b border-border cursor-default"
       >
-        <div className="w-16" />
-        <span className="text-xs font-semibold tracking-wide text-primary uppercase pointer-events-none">
-          QTE Time Tracker
-        </span>
-        <div className="flex items-center gap-1">
+        {/* Left cell: flex badge, left-aligned on the same row as the right-side
+            buttons. The equal 1fr side columns keep the title centered no matter
+            what either side contains. */}
+        <div className="flex items-center justify-start min-w-0">
           <FlexBadge
             onClick={() => {
               setShowFinalize(false);
               setSettingsTab("flex");
             }}
           />
+        </div>
+        <span className="text-xs font-semibold tracking-wide text-primary uppercase pointer-events-none">
+          QTE Time Tracker
+        </span>
+        <div className="flex items-center justify-end gap-1">
           <button
             onClick={() => {
               setSettingsTab(null);

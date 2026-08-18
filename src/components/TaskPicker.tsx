@@ -7,6 +7,10 @@ interface TaskPickerProps {
   selectedId: string | null;
   onSelect: (taskId: string | null) => void;
   variant?: "field" | "chip";
+  /** Task ids to hide from the list (e.g. already used for this project+date). */
+  excludeIds?: Set<string>;
+  /** Called when the picker is dismissed by clicking outside it. */
+  onClose?: () => void;
 }
 
 export function TaskPicker({
@@ -14,11 +18,15 @@ export function TaskPicker({
   selectedId,
   onSelect,
   variant = "field",
+  excludeIds,
+  onClose,
 }: TaskPickerProps) {
   const { state, dispatch } = useApp();
   const api = useApi();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   const selected = state.tasks.find((t) => t.id === selectedId);
 
@@ -44,6 +52,7 @@ export function TaskPicker({
     function handleClick(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
+        onCloseRef.current?.();
       }
     }
     document.addEventListener("mousedown", handleClick);
@@ -97,13 +106,17 @@ export function TaskPicker({
 
       {open && (
         <div
-          className="fixed left-3 right-3 mt-1 bg-bg-card rounded-lg shadow-lg border border-divider z-50 py-1 max-h-56 overflow-y-auto"
+          className="fixed mt-1 bg-bg-card rounded-lg shadow-lg border border-divider z-50 py-1 max-h-56 overflow-y-auto"
           style={{
-            top: ref.current ? ref.current.getBoundingClientRect().bottom + "px" : undefined,
+            // Anchor below the trigger, matching its width exactly.
+            top: ref.current?.getBoundingClientRect().bottom,
+            left: ref.current?.getBoundingClientRect().left,
+            width: ref.current?.getBoundingClientRect().width,
           }}
         >
           {state.tasks
             .filter((t) => t.active)
+            .filter((t) => !excludeIds?.has(t.id) || t.id === selectedId)
             .map((task) => (
               <button
                 type="button"

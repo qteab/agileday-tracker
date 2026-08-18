@@ -448,6 +448,7 @@ export function createAgileDayProvider(
           id,
           ...(updates.description !== undefined ? { description: updates.description } : {}),
           ...(updates.projectId ? { projectId: updates.projectId } : {}),
+          ...(updates.openingId ? { openingId: updates.openingId } : {}),
           ...(updates.taskId ? { taskId: updates.taskId } : {}),
           ...(updates.minutes !== undefined ? { minutes: updates.minutes } : {}),
           ...(updates.status ? { status: updates.status } : {}),
