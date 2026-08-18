@@ -9,6 +9,13 @@ function formatHM(minutes: number): string {
   return `${h}:${String(m).padStart(2, "0")}`;
 }
 
+/** First counted day (day after the stored start date), e.g. "Sep 1" */
+function flexStartLabel(startDate: string): string {
+  const d = new Date(startDate + "T12:00:00");
+  d.setDate(d.getDate() + 1);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 interface FlexViewProps {
   onBack: () => void;
   onOpenSettings: () => void;
@@ -68,11 +75,20 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
                   {formatFlexMinutes(flex.totalMinutes)}
                 </div>
                 <div className="text-[10px] text-text-muted mt-1">
-                  Live · today: {formatHM(flex.todayWorkedMinutes)} worked
-                  {flex.todayExpectedMinutes > 0 && (
-                    <> of {formatHM(flex.todayExpectedMinutes)} expected</>
-                  )}{" "}
-                  · through yesterday: {formatFlexMinutes(flex.baseMinutes)}
+                  {flex.countsToday ? (
+                    <>
+                      Live · today: {formatHM(flex.todayWorkedMinutes)} worked
+                      {flex.todayExpectedMinutes > 0 && (
+                        <> of {formatHM(flex.todayExpectedMinutes)} expected</>
+                      )}{" "}
+                      · through yesterday: {formatFlexMinutes(flex.baseMinutes)}
+                    </>
+                  ) : (
+                    <>
+                      Counting starts {flexStartLabel(flexConfig.startDate)} — hours until then are
+                      covered by your paycheck balance
+                    </>
+                  )}
                 </div>
               </div>
             )}

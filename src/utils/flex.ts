@@ -131,6 +131,8 @@ export interface LiveFlexResult extends FlexResult {
   todayWorkedMinutes: number;
   /** 480 if today is a workday inside the flex period, otherwise 0. */
   todayExpectedMinutes: number;
+  /** False when today is still before the flex period (nothing counted yet). */
+  countsToday: boolean;
 }
 
 /**
@@ -161,6 +163,7 @@ export function calculateLiveFlex(
       baseMinutes: base.totalMinutes,
       todayWorkedMinutes: 0,
       todayExpectedMinutes: 0,
+      countsToday: false,
     };
   }
 
@@ -180,6 +183,7 @@ export function calculateLiveFlex(
     totalMinutes: base.totalMinutes + todayWorkedMinutes - todayExpectedMinutes,
     todayWorkedMinutes,
     todayExpectedMinutes,
+    countsToday: true,
   };
 }
 

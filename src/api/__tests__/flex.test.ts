@@ -485,6 +485,7 @@ describe("calculateLiveFlex", () => {
     expect(result.baseMinutes).toBe(0);
     expect(result.todayWorkedMinutes).toBe(360);
     expect(result.todayExpectedMinutes).toBe(480);
+    expect(result.countsToday).toBe(true);
     expect(result.totalMinutes).toBe(-120);
   });
 
@@ -541,6 +542,7 @@ describe("calculateLiveFlex", () => {
     );
     expect(result.todayWorkedMinutes).toBe(0);
     expect(result.todayExpectedMinutes).toBe(0);
+    expect(result.countsToday).toBe(false);
     expect(result.totalMinutes).toBe(300);
   });
 
