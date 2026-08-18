@@ -10,9 +10,6 @@ import {
   type ThemeMode,
   type DisplayPrefs,
 } from "../store/display-store";
-import { formatFlexMinutes } from "../utils/flex";
-import { useLiveFlex } from "../hooks/useLiveFlex";
-import { MonthProgressCard } from "./MonthProgressCard";
 import { fmtDate } from "../utils/week";
 
 export type SettingsTab = "flex" | "display" | "account";
@@ -156,7 +153,6 @@ function DisplaySettings() {
 function FlexSettings() {
   const { state, dispatch } = useApp();
   const { flexConfig } = state;
-  const { flex, month, now } = useLiveFlex();
 
   // Derive month from stored start date (which is last day of month)
   function dateToMonth(dateStr: string): string {
@@ -203,29 +199,6 @@ function FlexSettings() {
 
   return (
     <div className="px-4 py-4 space-y-4">
-      {/* Current balance */}
-      {flex && (
-        <div className="bg-bg-card rounded-xl p-4 border border-border text-center">
-          <div className="text-xs text-text-muted mb-1">Current flex balance</div>
-          <div
-            className={`text-2xl font-bold tabular-nums ${
-              flex.totalMinutes >= 0 ? "text-emerald-600" : "text-danger"
-            }`}
-          >
-            {formatFlexMinutes(flex.totalMinutes)}
-          </div>
-          <div className="text-[10px] text-text-muted mt-1">
-            Live · today: {Math.floor(flex.todayWorkedMinutes / 60)}:
-            {String(flex.todayWorkedMinutes % 60).padStart(2, "0")} worked
-            {flex.todayExpectedMinutes > 0 && <> of 8:00 expected</>} · through yesterday:{" "}
-            {formatFlexMinutes(flex.baseMinutes)}
-          </div>
-        </div>
-      )}
-
-      {/* This month: worked vs target */}
-      <MonthProgressCard month={month} now={now} />
-
       {/* Config form */}
       <div className="bg-bg-card rounded-xl p-4 border border-border space-y-3">
         <div>
@@ -258,59 +231,6 @@ function FlexSettings() {
           {saved ? "Saved!" : saving ? "Saving..." : "Save"}
         </button>
       </div>
-
-      {/* Weekly breakdown */}
-      {flex && flex.weeks.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide">
-            Weekly breakdown
-          </h3>
-          {[...flex.weeks].reverse().map((week) => (
-            <div key={week.startDate} className="bg-bg-card rounded-xl p-3 border border-border">
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-text">{week.weekLabel}</span>
-                  {week.isPartial && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                      partial
-                    </span>
-                  )}
-                </div>
-                <span
-                  className={`text-sm font-semibold tabular-nums ${
-                    week.deltaMinutes >= 0 ? "text-emerald-600" : "text-danger"
-                  }`}
-                >
-                  {formatFlexMinutes(week.deltaMinutes)}
-                </span>
-              </div>
-              <div className="flex items-center gap-3 text-xs text-text-muted">
-                <span>
-                  Expected: {Math.floor(week.expectedMinutes / 60)}:
-                  {String(week.expectedMinutes % 60).padStart(2, "0")}
-                </span>
-                <span>
-                  Worked: {Math.floor(week.workedMinutes / 60)}:
-                  {String(week.workedMinutes % 60).padStart(2, "0")}
-                </span>
-                <span>{week.workdays}d</span>
-              </div>
-              {week.holidays.length > 0 && (
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {week.holidays.map((h) => (
-                    <span
-                      key={h.date}
-                      className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700"
-                    >
-                      {h.name}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
