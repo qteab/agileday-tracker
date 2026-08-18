@@ -86,9 +86,17 @@ function AuthenticatedApp() {
             }}
           />
         </div>
-        <span className="text-xs font-semibold tracking-wide text-primary uppercase pointer-events-none">
+        <button
+          onClick={() => {
+            setSettingsTab(null);
+            setShowFinalize(false);
+            setShowFlex(false);
+          }}
+          className="h-8 text-xs font-semibold tracking-wide text-primary uppercase hover:opacity-70 transition-opacity"
+          title="Home"
+        >
           QTE Time Tracker
-        </span>
+        </button>
         <div className="flex items-center justify-end gap-1">
           <button
             onClick={() => {
