@@ -151,7 +151,7 @@ function DisplaySettings() {
 }
 
 function FlexSettings() {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, resync } = useApp();
   const { flexConfig } = state;
 
   // Derive month from stored start date (which is last day of month)
@@ -188,6 +188,9 @@ function FlexSettings() {
     try {
       await saveFlexConfig(config);
       dispatch({ type: "SET_FLEX_CONFIG", payload: config });
+      // The pre-window entries (flexEntries) were fetched for the old start
+      // date — reload so an earlier start date gets its entries
+      resync();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch {
