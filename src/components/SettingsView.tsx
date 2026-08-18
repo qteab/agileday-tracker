@@ -229,8 +229,9 @@ function FlexSettings() {
 
   return (
     <div className="px-4 py-4 space-y-4">
-      {/* Config form */}
+      {/* Balance config */}
       <div className="bg-bg-card rounded-xl p-4 border border-border space-y-3">
+        <h3 className="text-sm font-semibold text-text">Flex balance</h3>
         <div>
           <label className="block text-xs text-text-muted mb-1">Latest paycheck month</label>
           <input
@@ -253,8 +254,12 @@ function FlexSettings() {
             className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
+      </div>
+
+      {/* Reset config */}
+      <div className="bg-bg-card rounded-xl p-4 border border-border space-y-3">
+        <h3 className="text-sm font-semibold text-text">Flex resets</h3>
         <div>
-          <label className="block text-xs text-text-muted mb-1">Flex reset months</label>
           <p className="text-[10px] text-text-muted mb-1.5">
             At the end of a reset month, flex above 50h is paid out and the balance is floored to
             50h. Usually quarterly (Mar, Jun, Sep, Dec).
@@ -282,14 +287,15 @@ function FlexSettings() {
             })}
           </div>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving || !paycheckMonth}
-          className="w-full py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
-        >
-          {saved ? "Saved!" : saving ? "Saving..." : "Save"}
-        </button>
       </div>
+
+      <button
+        onClick={handleSave}
+        disabled={saving || !paycheckMonth}
+        className="w-full py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+      >
+        {saved ? "Saved!" : saving ? "Saving..." : "Save"}
+      </button>
     </div>
   );
 }
