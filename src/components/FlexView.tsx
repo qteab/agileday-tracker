@@ -137,7 +137,6 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
                 ))}
               </div>
             )}
-
           </>
         )}
       </div>
