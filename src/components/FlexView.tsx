@@ -171,6 +171,14 @@ function LastMonthCard({ summary }: { summary: MonthSummary }) {
             {formatFlexMinutes(summary.flexOutMinutes)}
           </span>
         </div>
+        {summary.resetPayoutMinutes > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-text-muted">Reset payout</span>
+            <span className="tabular-nums text-text">
+              {formatFlexMinutes(-summary.resetPayoutMinutes)}
+            </span>
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <span className="text-text-muted">Change</span>
           <span

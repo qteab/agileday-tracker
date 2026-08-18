@@ -662,3 +662,74 @@ describe("calculateLastMonthSummary", () => {
     expect(result!.expectedMinutes).toBe(21 * 480);
   });
 });
+
+describe("flex resets", () => {
+  const NO_HOLIDAYS: Holiday[] = [];
+
+  // Jan 2026 fully worked (delta 0 every day), so the balance stays at the
+  // initial value through the month.
+  function fullJanuary(): TimeEntry[] {
+    const entries: TimeEntry[] = [];
+    for (let d = 1; d <= 31; d++) {
+      const date = `2026-01-${String(d).padStart(2, "0")}`;
+      const day = new Date(date + "T12:00:00").getDay();
+      if (day !== 0 && day !== 6) entries.push(entry(date, 480));
+    }
+    return entries;
+  }
+
+  it("floors the balance to 50h after a completed reset month", () => {
+    // Initial 100h, January worked exactly → 100h at month end → floored to 50h
+    const result = calculateFlex(
+      fullJanuary(),
+      "2025-12-31",
+      100,
+      NO_HOLIDAYS,
+      new Date("2026-02-02T12:00:00"),
+      ["2026-01"]
+    );
+    expect(result.totalMinutes).toBe(3000); // 50h
+    expect(result.resets).toEqual([{ month: "2026-01", beforeMinutes: 6000, afterMinutes: 3000 }]);
+  });
+
+  it("does nothing when the balance is at or below 50h", () => {
+    const result = calculateFlex(
+      fullJanuary(),
+      "2025-12-31",
+      10,
+      NO_HOLIDAYS,
+      new Date("2026-02-02T12:00:00"),
+      ["2026-01"]
+    );
+    expect(result.totalMinutes).toBe(600); // 10h untouched
+    expect(result.resets).toEqual([]);
+  });
+
+  it("does not apply a reset while the month is still running", () => {
+    const result = calculateFlex(
+      fullJanuary(),
+      "2025-12-31",
+      100,
+      NO_HOLIDAYS,
+      new Date("2026-01-15T12:00:00"),
+      ["2026-01"]
+    );
+    expect(result.totalMinutes).toBe(6000); // still 100h mid-month
+    expect(result.resets).toEqual([]);
+  });
+
+  it("reports the payout in the last-month summary", () => {
+    const summary = calculateLastMonthSummary(
+      fullJanuary(),
+      "2025-12-31",
+      100,
+      NO_HOLIDAYS,
+      new Date("2026-02-10T12:00:00"),
+      ["2026-01"]
+    );
+    expect(summary!.flexInMinutes).toBe(6000); // 100h entering January
+    expect(summary!.flexOutMinutes).toBe(3000); // floored to 50h leaving
+    expect(summary!.resetPayoutMinutes).toBe(3000); // 50h paid out
+    expect(summary!.deltaMinutes).toBe(-3000);
+  });
+});

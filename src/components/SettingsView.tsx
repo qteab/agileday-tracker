@@ -175,8 +175,31 @@ function FlexSettings() {
     flexConfig?.startDate ? dateToMonth(flexConfig.startDate) : getDefaultMonth()
   );
   const [initialHours, setInitialHours] = useState(flexConfig?.initialHours?.toString() ?? "0");
+  const [resetMonths, setResetMonths] = useState<string[]>(flexConfig?.resetMonths ?? []);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // Selectable reset months: first counted month (after the paycheck month)
+  // through the current month
+  function resetMonthOptions(): string[] {
+    if (!paycheckMonth) return [];
+    const [y, m] = paycheckMonth.split("-").map(Number);
+    const cursor = new Date(y, m, 1); // month after paycheck month
+    const current = new Date();
+    const currentKey = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}`;
+    const options: string[] = [];
+    for (let i = 0; i < 48; i++) {
+      const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
+      if (key > currentKey) break;
+      options.push(key);
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    return options;
+  }
+
+  function toggleResetMonth(key: string) {
+    setResetMonths((prev) => (prev.includes(key) ? prev.filter((m) => m !== key) : [...prev, key]));
+  }
 
   async function handleSave() {
     const hours = parseFloat(initialHours);
@@ -184,7 +207,11 @@ function FlexSettings() {
 
     setSaving(true);
     const startDate = monthToLastDay(paycheckMonth);
-    const config: FlexConfig = { startDate, initialHours: hours };
+    const config: FlexConfig = {
+      startDate,
+      initialHours: hours,
+      resetMonths: [...resetMonths].sort(),
+    };
     try {
       await saveFlexConfig(config);
       dispatch({ type: "SET_FLEX_CONFIG", payload: config });
@@ -225,6 +252,35 @@ function FlexSettings() {
             onChange={(e) => setInitialHours(e.target.value)}
             className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
+        </div>
+        <div>
+          <label className="block text-xs text-text-muted mb-1">Flex reset months</label>
+          <p className="text-[10px] text-text-muted mb-1.5">
+            At the end of a reset month, flex above 50h is paid out and the balance is floored to
+            50h. Usually quarterly (Mar, Jun, Sep, Dec).
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {resetMonthOptions().map((key) => {
+              const active = resetMonths.includes(key);
+              const label = new Date(key + "-15T12:00:00").toLocaleDateString("en-US", {
+                month: "short",
+                year: "2-digit",
+              });
+              return (
+                <button
+                  key={key}
+                  onClick={() => toggleResetMonth(key)}
+                  className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                    active
+                      ? "bg-primary text-white border-primary"
+                      : "bg-transparent text-text-muted border-border hover:text-text"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <button
           onClick={handleSave}

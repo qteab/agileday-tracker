@@ -47,7 +47,8 @@ export function useLiveFlex(): LiveFlex {
       flexConfig.initialHours,
       holidays,
       now,
-      runningMinutes
+      runningMinutes,
+      flexConfig.resetMonths ?? []
     );
   }, [flexConfig, allEntries, holidays, now, runningMinutes]);
 
@@ -63,7 +64,8 @@ export function useLiveFlex(): LiveFlex {
       flexConfig.startDate,
       flexConfig.initialHours,
       holidays,
-      now
+      now,
+      flexConfig.resetMonths ?? []
     );
   }, [flexConfig, allEntries, holidays, now]);
 
