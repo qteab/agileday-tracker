@@ -69,6 +69,7 @@ struct TrayState {
     last_title: Mutex<Option<String>>,
     last_headline: Mutex<String>,
     menu_bar_mode: Mutex<MenuBarMode>,
+    show_tray_icon: Mutex<bool>,
     window_layout: Mutex<WindowLayout>,
     inactivity_enabled: Mutex<bool>,
     inactivity_minutes: Mutex<u32>,
@@ -195,6 +196,7 @@ fn apply_tray_state(
         .set_enabled(running)
         .map_err(|e| e.to_string())?;
 
+    let show_icon = *state.show_tray_icon.lock().unwrap();
     let icon = if inactive {
         &state.icon_inactive
     } else if running {
@@ -204,7 +206,7 @@ fn apply_tray_state(
     };
     state
         .tray
-        .set_icon(Some(icon.clone()))
+        .set_icon(show_icon.then(|| icon.clone()))
         .map_err(|e| e.to_string())?;
 
     // Minutes only so the title width changes once per minute rather than once
@@ -213,7 +215,13 @@ fn apply_tray_state(
     // case uses an empty string instead.
     let mode = *state.menu_bar_mode.lock().unwrap();
     let title: Option<String> = match mode {
-        MenuBarMode::Off => Some(String::new()),
+        // With the icon hidden an empty title would leave nothing to click, so
+        // Off keeps a bare glyph in that case.
+        MenuBarMode::Off if show_icon => Some(String::new()),
+        MenuBarMode::Off if !inactive => Some(format!(
+            "\u{2002}{}\u{2002}",
+            if running { "\u{23F8}" } else { "\u{25B6}" }
+        )),
         // While away, the always-visible title carries the inactive sentence
         // (the red icon still signals even in Off mode).
         _ if inactive => Some(format!(
@@ -344,6 +352,7 @@ fn set_timer_status(
     description: Option<String>,
     day_base_seconds: Option<u64>,
     menu_bar_mode: String,
+    show_tray_icon: bool,
     inactivity_enabled: bool,
     inactivity_minutes: u32,
 ) -> Result<(), String> {
@@ -373,6 +382,7 @@ fn set_timer_status(
         let mut snap = state.snapshot.lock().unwrap();
         *snap = new_snapshot;
         *state.menu_bar_mode.lock().unwrap() = MenuBarMode::parse(&menu_bar_mode);
+        *state.show_tray_icon.lock().unwrap() = show_tray_icon;
         *state.inactivity_enabled.lock().unwrap() = inactivity_enabled;
         *state.inactivity_minutes.lock().unwrap() = inactivity_minutes;
     }
@@ -696,11 +706,18 @@ pub fn run() {
                             tauri::Size::Logical(s) => s.height,
                         };
                         let click_offset = position.x - rect_x;
-                        let icon_width = rect_height;
+                        let app = tray.app_handle();
+                        // A hidden icon takes no width, so the glyph slot moves
+                        // to the very start of the status item.
+                        let icon_width = if *app.state::<TrayState>().show_tray_icon.lock().unwrap()
+                        {
+                            rect_height
+                        } else {
+                            0.0
+                        };
                         let glyph_width = rect_height;
                         let in_glyph_zone =
                             click_offset >= icon_width && click_offset < icon_width + glyph_width;
-                        let app = tray.app_handle();
                         if in_glyph_zone {
                             let state = app.state::<TrayState>();
                             let is_running = state
@@ -794,6 +811,7 @@ pub fn run() {
                 last_title: Mutex::new(None),
                 last_headline: Mutex::new("Timer is not running".to_string()),
                 menu_bar_mode: Mutex::new(MenuBarMode::Off),
+                show_tray_icon: Mutex::new(true),
                 window_layout: Mutex::new(WindowLayout::default()),
                 inactivity_enabled: Mutex::new(false),
                 inactivity_minutes: Mutex::new(10),
