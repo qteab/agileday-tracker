@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { calculateFlex, formatFlexMinutes } from "../../utils/flex";
+import {
+  calculateFlex,
+  calculateLiveFlex,
+  calculateMonthStats,
+  formatFlexMinutes,
+} from "../../utils/flex";
 import type { TimeEntry } from "../types";
 import type { Holiday } from "../types";
 
@@ -452,5 +457,142 @@ describe("formatFlexMinutes", () => {
   it("formats negative flex", () => {
     expect(formatFlexMinutes(-150)).toBe("-2h 30m");
     expect(formatFlexMinutes(-480)).toBe("-8h");
+  });
+});
+
+describe("calculateLiveFlex", () => {
+  const NO_HOLIDAYS: Holiday[] = [];
+
+  it("adds today's worked minus expected on a workday", () => {
+    // startDate = Jan 4 (Sun) → counting starts Mon Jan 5
+    // Week Jan 5-11: 40h worked = 0 flex through yesterday
+    // Reference: Mon Jan 12, 6h worked today → 0 + 360 - 480 = -120
+    const entries = [
+      entry("2026-01-05", 480),
+      entry("2026-01-06", 480),
+      entry("2026-01-07", 480),
+      entry("2026-01-08", 480),
+      entry("2026-01-09", 480),
+      entry("2026-01-12", 360),
+    ];
+    const result = calculateLiveFlex(
+      entries,
+      "2026-01-04",
+      0,
+      NO_HOLIDAYS,
+      new Date("2026-01-12T15:00:00")
+    );
+    expect(result.baseMinutes).toBe(0);
+    expect(result.todayWorkedMinutes).toBe(360);
+    expect(result.todayExpectedMinutes).toBe(480);
+    expect(result.totalMinutes).toBe(-120);
+  });
+
+  it("includes running timer minutes via extraMinutes", () => {
+    const result = calculateLiveFlex(
+      [entry("2026-01-12", 300)],
+      "2026-01-11",
+      0,
+      NO_HOLIDAYS,
+      new Date("2026-01-12T15:00:00"),
+      90
+    );
+    // today: 300 + 90 = 390 worked, 480 expected → -90
+    expect(result.todayWorkedMinutes).toBe(390);
+    expect(result.totalMinutes).toBe(-90);
+  });
+
+  it("expects 0 on weekends", () => {
+    // Reference: Sat Jan 17, 2h worked today → flex goes up by 2h
+    const result = calculateLiveFlex(
+      [entry("2026-01-17", 120)],
+      "2026-01-11",
+      0,
+      NO_HOLIDAYS,
+      new Date("2026-01-17T15:00:00")
+    );
+    expect(result.todayExpectedMinutes).toBe(0);
+    // base: Mon-Fri Jan 12-16 with no entries = -2400
+    expect(result.baseMinutes).toBe(-2400);
+    expect(result.totalMinutes).toBe(-2280);
+  });
+
+  it("expects 0 on holidays", () => {
+    const holidays: Holiday[] = [{ date: "2026-01-12", name: "Test Holiday" }];
+    const result = calculateLiveFlex(
+      [],
+      "2026-01-11",
+      0,
+      holidays,
+      new Date("2026-01-12T15:00:00")
+    );
+    expect(result.todayExpectedMinutes).toBe(0);
+    expect(result.totalMinutes).toBe(0);
+  });
+
+  it("ignores today entirely before the flex period starts", () => {
+    // startDate = Jan 12 → counting starts Jan 13; today Jan 12 doesn't count
+    const result = calculateLiveFlex(
+      [entry("2026-01-12", 480)],
+      "2026-01-12",
+      5,
+      NO_HOLIDAYS,
+      new Date("2026-01-12T15:00:00")
+    );
+    expect(result.todayWorkedMinutes).toBe(0);
+    expect(result.todayExpectedMinutes).toBe(0);
+    expect(result.totalMinutes).toBe(300);
+  });
+
+  it("skips unsaved entries for today", () => {
+    const unsaved = { ...entry("2026-01-12", 240), syncStatus: "unsaved" as const };
+    const result = calculateLiveFlex(
+      [unsaved],
+      "2026-01-11",
+      0,
+      NO_HOLIDAYS,
+      new Date("2026-01-12T15:00:00")
+    );
+    expect(result.todayWorkedMinutes).toBe(0);
+    expect(result.totalMinutes).toBe(-480);
+  });
+});
+
+describe("calculateMonthStats", () => {
+  const NO_HOLIDAYS: Holiday[] = [];
+
+  it("counts workdays and worked minutes for January 2026", () => {
+    // Jan 2026: 31 days, Jan 1 is a Thursday → 22 weekdays
+    const entries = [
+      entry("2026-01-05", 480),
+      entry("2026-01-06", 510),
+      entry("2025-12-31", 480), // previous month, ignored
+      entry("2026-02-02", 480), // next month, ignored
+    ];
+    const result = calculateMonthStats(entries, NO_HOLIDAYS, new Date("2026-01-12T15:00:00"));
+    expect(result.workdays).toBe(22);
+    expect(result.expectedMinutes).toBe(22 * 480);
+    expect(result.workedMinutes).toBe(990);
+    // Workdays Jan 1-12: 1,2,5,6,7,8,9,12 = 8
+    expect(result.workdaysToDate).toBe(8);
+    expect(result.expectedToDateMinutes).toBe(8 * 480);
+  });
+
+  it("excludes holidays from workdays", () => {
+    const holidays: Holiday[] = [{ date: "2026-01-06", name: "Epiphany" }];
+    const result = calculateMonthStats([], holidays, new Date("2026-01-12T15:00:00"));
+    expect(result.workdays).toBe(21);
+    expect(result.workdaysToDate).toBe(7);
+  });
+
+  it("adds extraMinutes and skips unsaved entries", () => {
+    const unsaved = { ...entry("2026-01-12", 240), syncStatus: "unsaved" as const };
+    const result = calculateMonthStats(
+      [entry("2026-01-12", 300), unsaved],
+      NO_HOLIDAYS,
+      new Date("2026-01-12T15:00:00"),
+      45
+    );
+    expect(result.workedMinutes).toBe(345);
   });
 });

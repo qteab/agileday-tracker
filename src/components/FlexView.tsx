@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useApp } from "../store/context";
-import { calculateFlex, formatFlexMinutes, type FlexWeek } from "../utils/flex";
+import { formatFlexMinutes, type FlexWeek, type MonthStats } from "../utils/flex";
+import { useLiveFlex } from "../hooks/useLiveFlex";
 import { saveFlexConfig, type FlexConfig } from "../store/flex-store";
 import { fmtDate } from "../utils/week";
 
@@ -12,24 +13,13 @@ function formatHM(minutes: number): string {
 
 export function FlexView() {
   const { state, dispatch } = useApp();
-  const { flexConfig, entries, flexEntries, holidays } = state;
+  const { flexConfig } = state;
+  const { flex, month, now } = useLiveFlex();
 
   const [editMode, setEditMode] = useState(!flexConfig);
   const [startDate, setStartDate] = useState(flexConfig?.startDate ?? fmtDate(new Date()));
   const [initialHours, setInitialHours] = useState(flexConfig?.initialHours?.toString() ?? "0");
   const [saving, setSaving] = useState(false);
-
-  const flex = useMemo(() => {
-    if (!flexConfig) return null;
-    const allEntries = flexEntries ? [...entries, ...flexEntries] : entries;
-    return calculateFlex(
-      allEntries,
-      flexConfig.startDate,
-      flexConfig.initialHours,
-      holidays,
-      new Date()
-    );
-  }, [flexConfig, entries, flexEntries, holidays]);
 
   async function handleSave() {
     const hours = parseFloat(initialHours);
@@ -104,7 +94,7 @@ export function FlexView() {
       ) : (
         <div className="flex items-center justify-between bg-bg-card rounded-xl p-4 mb-4 border border-border">
           <div>
-            <div className="text-xs text-text-muted">Flex balance (through yesterday)</div>
+            <div className="text-xs text-text-muted">Flex balance (live, includes today)</div>
             <div
               className={`text-2xl font-bold tabular-nums ${
                 flex && flex.totalMinutes >= 0 ? "text-emerald-600" : "text-danger"
@@ -112,14 +102,13 @@ export function FlexView() {
             >
               {flex ? formatFlexMinutes(flex.totalMinutes) : "—"}
             </div>
-            {flexConfig && (
+            {flex && (
               <div className="text-xs text-text-muted mt-1">
-                Starting {formatFlexMinutes(Math.round(flexConfig.initialHours * 60))} on{" "}
-                {new Date(flexConfig.startDate + "T12:00:00").toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
+                Today: {formatHM(flex.todayWorkedMinutes)} worked
+                {flex.todayExpectedMinutes > 0 && (
+                  <> of {formatHM(flex.todayExpectedMinutes)} expected</>
+                )}
+                {" · "}through yesterday: {formatFlexMinutes(flex.baseMinutes)}
               </div>
             )}
           </div>
@@ -140,6 +129,9 @@ export function FlexView() {
         </div>
       )}
 
+      {/* This month */}
+      <MonthCard month={month} now={now} />
+
       {/* Weekly breakdown */}
       {flex && flex.weeks.length > 0 && (
         <div className="space-y-2">
@@ -157,6 +149,86 @@ export function FlexView() {
           Set up your flex start date and initial balance above to start tracking.
         </div>
       )}
+    </div>
+  );
+}
+
+function MonthCard({ month, now }: { month: MonthStats; now: Date }) {
+  const monthLabel = now.toLocaleDateString("en-US", { month: "long" });
+  const percent =
+    month.expectedMinutes > 0 ? (month.workedMinutes / month.expectedMinutes) * 100 : 0;
+  const paceDelta = month.workedMinutes - month.expectedToDateMinutes;
+  const onPace = paceDelta >= 0;
+
+  return (
+    <div className="bg-bg-card rounded-xl p-4 mb-4 border border-border">
+      <h3 className="text-sm font-semibold text-text mb-3">This month — {monthLabel}</h3>
+      <div className="flex items-center gap-4">
+        <MonthDonut percent={percent} />
+        <div className="flex-1 space-y-1 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-text-muted">Worked</span>
+            <span className="font-semibold tabular-nums text-text">
+              {formatHM(month.workedMinutes)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-text-muted">Month target</span>
+            <span className="tabular-nums text-text">
+              {formatHM(month.expectedMinutes)}
+              <span className="text-text-muted"> · {month.workdays} days</span>
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-text-muted">Expected by today</span>
+            <span className="tabular-nums text-text">{formatHM(month.expectedToDateMinutes)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-text-muted">Pace</span>
+            <span
+              className={`font-semibold tabular-nums ${onPace ? "text-emerald-600" : "text-danger"}`}
+            >
+              {formatFlexMinutes(paceDelta)}
+              <span className="font-normal">
+                {" "}
+                (
+                {month.expectedToDateMinutes > 0
+                  ? Math.round((month.workedMinutes / month.expectedToDateMinutes) * 100)
+                  : 100}
+                %)
+              </span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Circular progress: worked vs full-month target */
+function MonthDonut({ percent }: { percent: number }) {
+  const r = 42;
+  const circumference = 2 * Math.PI * r;
+  const clamped = Math.max(0, Math.min(percent, 100));
+
+  return (
+    <div className="relative w-24 h-24 shrink-0">
+      <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+        <circle cx="50" cy="50" r={r} fill="none" strokeWidth="9" className="stroke-border" />
+        <circle
+          cx="50"
+          cy="50"
+          r={r}
+          fill="none"
+          strokeWidth="9"
+          strokeLinecap="round"
+          strokeDasharray={`${(circumference * clamped) / 100} ${circumference}`}
+          className="stroke-primary transition-[stroke-dasharray] duration-500"
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-base font-bold tabular-nums text-text">{Math.round(percent)}%</span>
+      </div>
     </div>
   );
 }

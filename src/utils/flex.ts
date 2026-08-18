@@ -125,6 +125,120 @@ export function calculateFlex(
   return { totalMinutes, weeks };
 }
 
+export interface LiveFlexResult extends FlexResult {
+  /** Balance through yesterday (what calculateFlex returns). */
+  baseMinutes: number;
+  todayWorkedMinutes: number;
+  /** 480 if today is a workday inside the flex period, otherwise 0. */
+  todayExpectedMinutes: number;
+}
+
+/**
+ * Live flex balance: through-yesterday balance plus today counted as a full
+ * day (worked − expected). Starts the morning a workday down and climbs back
+ * as hours are logged, so the number never jumps at midnight.
+ *
+ * @param extraMinutes - Minutes worked today that aren't in entries yet
+ *   (the running timer's elapsed time)
+ */
+export function calculateLiveFlex(
+  entries: TimeEntry[],
+  startDate: string,
+  initialHours: number,
+  holidays: Holiday[],
+  now: Date,
+  extraMinutes = 0
+): LiveFlexResult {
+  const base = calculateFlex(entries, startDate, initialHours, holidays, now);
+
+  // Today counts only if it's on/after the first counted day
+  const firstDay = new Date(startDate + "T12:00:00");
+  firstDay.setDate(firstDay.getDate() + 1);
+  const todayStr = fmtDate(now);
+  if (todayStr < fmtDate(firstDay)) {
+    return {
+      ...base,
+      baseMinutes: base.totalMinutes,
+      todayWorkedMinutes: 0,
+      todayExpectedMinutes: 0,
+    };
+  }
+
+  let todayWorkedMinutes = extraMinutes;
+  for (const entry of entries) {
+    if (entry.syncStatus === "unsaved") continue;
+    if (entry.date === todayStr) todayWorkedMinutes += entry.minutes;
+  }
+
+  const dayOfWeek = now.getDay();
+  const isWorkday = dayOfWeek !== 0 && dayOfWeek !== 6 && !holidaySet(holidays).has(todayStr);
+  const todayExpectedMinutes = isWorkday ? WORKDAY_MINUTES : 0;
+
+  return {
+    ...base,
+    baseMinutes: base.totalMinutes,
+    totalMinutes: base.totalMinutes + todayWorkedMinutes - todayExpectedMinutes,
+    todayWorkedMinutes,
+    todayExpectedMinutes,
+  };
+}
+
+export interface MonthStats {
+  /** Minutes worked this calendar month, including today (and extraMinutes). */
+  workedMinutes: number;
+  /** Full-month target: workdays in the month × 480. */
+  expectedMinutes: number;
+  /** Target through today: elapsed workdays × 480. */
+  expectedToDateMinutes: number;
+  workdays: number;
+  workdaysToDate: number;
+}
+
+/**
+ * Worked vs expected hours for the calendar month containing `now`.
+ *
+ * @param extraMinutes - Minutes worked today that aren't in entries yet
+ *   (the running timer's elapsed time)
+ */
+export function calculateMonthStats(
+  entries: TimeEntry[],
+  holidays: Holiday[],
+  now: Date,
+  extraMinutes = 0
+): MonthStats {
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}-`;
+  const todayStr = fmtDate(now);
+  const hSet = holidaySet(holidays);
+
+  let workdays = 0;
+  let workdaysToDate = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const day = new Date(year, month, d);
+    const dayStr = fmtDate(day);
+    const dayOfWeek = day.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6 || hSet.has(dayStr)) continue;
+    workdays++;
+    if (dayStr <= todayStr) workdaysToDate++;
+  }
+
+  let workedMinutes = extraMinutes;
+  for (const entry of entries) {
+    if (entry.syncStatus === "unsaved") continue;
+    if (entry.date.startsWith(monthPrefix)) workedMinutes += entry.minutes;
+  }
+
+  return {
+    workedMinutes,
+    expectedMinutes: workdays * WORKDAY_MINUTES,
+    expectedToDateMinutes: workdaysToDate * WORKDAY_MINUTES,
+    workdays,
+    workdaysToDate,
+  };
+}
+
 function getSunday(monday: Date): Date {
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
