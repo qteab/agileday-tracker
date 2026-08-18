@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useApp, useApi } from "../store/context";
 import { useTimer, formatTime, formatMinutes } from "../hooks/useTimer";
-import { BillableIndicator } from "./BillableIndicator";
 import { ProjectPicker } from "./ProjectPicker";
 import { TaskPicker } from "./TaskPicker";
 import { Modal } from "./Modal";
@@ -53,7 +52,6 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
 
   const project = state.projects.find((p) => p.id === entry.projectId);
   const taskName = entry.taskId ? state.taskNamesById[entry.taskId] : undefined;
-  const billable = entry.taskId ? state.taskBillableById[entry.taskId] : undefined;
   const isSubmitted = entry.status === "SUBMITTED" || entry.status === "APPROVED";
   const isEditable = !isSubmitted && entry.syncStatus !== "pending";
 
@@ -460,7 +458,7 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
     >
       {/* Header */}
       <div className="px-4 pt-[14px] pb-3">
-        {/* Row 1: project name + billable, time, play/stop */}
+        {/* Row 1: project name, time, play/stop */}
         <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0">
             {editMode === "project" ? (
@@ -702,12 +700,9 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
         </div>
       </div>
 
-      {/* Footer: billable indicator (left) + delete button or lock indicator (right) */}
-      {(isEditable || isSubmitted || billable !== undefined) && (
+      {/* Footer: delete button or lock indicator (right) */}
+      {(isEditable || isSubmitted) && (
         <div className="flex items-center px-4 pb-3 -mt-1">
-          {/* Negative margin cancels the indicator's internal centering so the $
-              glyph left-aligns with the rows above. */}
-          <BillableIndicator billable={billable} className="-ml-[7px]" />
           {isEditable && (
             <button
               onClick={() => {
