@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useApp } from "../store/context";
 import { saveFlexConfig, type FlexConfig } from "../store/flex-store";
 import {
@@ -10,7 +10,9 @@ import {
   type ThemeMode,
   type DisplayPrefs,
 } from "../store/display-store";
-import { calculateFlex, formatFlexMinutes } from "../utils/flex";
+import { formatFlexMinutes } from "../utils/flex";
+import { useLiveFlex } from "../hooks/useLiveFlex";
+import { MonthProgressCard } from "./MonthProgressCard";
 import { fmtDate } from "../utils/week";
 
 export type SettingsTab = "flex" | "display" | "account";
@@ -153,7 +155,8 @@ function DisplaySettings() {
 
 function FlexSettings() {
   const { state, dispatch } = useApp();
-  const { flexConfig, entries, flexEntries, holidays } = state;
+  const { flexConfig } = state;
+  const { flex, month, now } = useLiveFlex();
 
   // Derive month from stored start date (which is last day of month)
   function dateToMonth(dateStr: string): string {
@@ -178,18 +181,6 @@ function FlexSettings() {
   const [initialHours, setInitialHours] = useState(flexConfig?.initialHours?.toString() ?? "0");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-
-  const flex = useMemo(() => {
-    if (!flexConfig) return null;
-    const allEntries = flexEntries ? [...entries, ...flexEntries] : entries;
-    return calculateFlex(
-      allEntries,
-      flexConfig.startDate,
-      flexConfig.initialHours,
-      holidays,
-      new Date()
-    );
-  }, [flexConfig, entries, flexEntries, holidays]);
 
   async function handleSave() {
     const hours = parseFloat(initialHours);
@@ -223,9 +214,17 @@ function FlexSettings() {
           >
             {formatFlexMinutes(flex.totalMinutes)}
           </div>
-          <div className="text-[10px] text-text-muted mt-1">Through yesterday</div>
+          <div className="text-[10px] text-text-muted mt-1">
+            Live · today: {Math.floor(flex.todayWorkedMinutes / 60)}:
+            {String(flex.todayWorkedMinutes % 60).padStart(2, "0")} worked
+            {flex.todayExpectedMinutes > 0 && <> of 8:00 expected</>} · through yesterday:{" "}
+            {formatFlexMinutes(flex.baseMinutes)}
+          </div>
         </div>
       )}
+
+      {/* This month: worked vs target */}
+      <MonthProgressCard month={month} now={now} />
 
       {/* Config form */}
       <div className="bg-bg-card rounded-xl p-4 border border-border space-y-3">
