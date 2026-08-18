@@ -45,7 +45,13 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
             />
           </svg>
         </button>
-        <span className="text-sm font-semibold text-text">Flex</span>
+        <span className="flex-1 text-sm font-semibold text-text">Flex</span>
+        <button
+          onClick={onOpenSettings}
+          className="px-2.5 py-1 text-xs font-medium text-text-muted border border-border rounded-lg hover:text-text hover:bg-bg transition-colors"
+        >
+          Configure flex settings
+        </button>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4">
@@ -132,12 +138,6 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
               </div>
             )}
 
-            <button
-              onClick={onOpenSettings}
-              className="w-full py-2 text-sm font-medium text-text-muted border border-border rounded-lg hover:text-text hover:bg-bg-card transition-colors"
-            >
-              Configure flex settings
-            </button>
           </>
         )}
       </div>
