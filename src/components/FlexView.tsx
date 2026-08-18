@@ -131,6 +131,13 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
                 ))}
               </div>
             )}
+
+            <button
+              onClick={onOpenSettings}
+              className="w-full py-2 text-sm font-medium text-text-muted border border-border rounded-lg hover:text-text hover:bg-bg-card transition-colors"
+            >
+              Configure flex settings
+            </button>
           </>
         )}
       </div>
