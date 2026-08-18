@@ -10,7 +10,7 @@ export const INACTIVITY_MAX_MINUTES = 120;
 
 export interface DisplayPrefs {
   menuBarMode: MenuBarMode;
-  /** Show the QTE icon next to the menu bar time, or just the text. */
+  /** Show the bear icon next to the menu bar time, or just the text. */
   showTrayIcon: boolean;
   theme: ThemeMode;
   /** Warn after this many idle minutes while a timer runs. Off by default. */

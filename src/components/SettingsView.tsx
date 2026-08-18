@@ -152,11 +152,11 @@ function DisplaySettings() {
 
       <div className="bg-bg-card rounded-xl p-4 border border-border">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-medium text-text">Menu bar icon</div>
+          <div className="text-sm font-medium text-text">Bear icon</div>
           <button
             role="switch"
             aria-checked={displayPrefs.showTrayIcon}
-            aria-label="Show the QTE icon in the menu bar"
+            aria-label="Show the bear icon in the menu bar"
             onClick={toggleTrayIcon}
             className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${
               displayPrefs.showTrayIcon ? "bg-primary" : "bg-border"
@@ -170,7 +170,7 @@ function DisplaySettings() {
           </button>
         </div>
         <p className="text-xs text-text-muted mt-1">
-          Show the QTE icon in the menu bar. Turn it off for a text-only tray — the play/pause
+          Show the bear icon in the menu bar. Turn it off for a text-only tray — the play/pause
           control and the dropdown keep working.
         </p>
       </div>
