@@ -5,6 +5,14 @@ export type MenuBarMode = "off" | "compact" | "full";
 /** "system" follows the macOS appearance via prefers-color-scheme. */
 export type ThemeMode = "system" | "light" | "dark";
 
+/**
+ * Which entry cards in the day list start collapsed:
+ * - "off":   nothing is auto-collapsed
+ * - "days":  everything before today
+ * - "weeks": everything before the current week (Monday)
+ */
+export type ListAutoCollapse = "off" | "days" | "weeks";
+
 export const INACTIVITY_MIN_MINUTES = 1;
 export const INACTIVITY_MAX_MINUTES = 120;
 
@@ -16,6 +24,10 @@ export interface DisplayPrefs {
   /** Warn after this many idle minutes while a timer runs. Off by default. */
   inactivityEnabled: boolean;
   inactivityMinutes: number;
+  /** Which day-list cards start collapsed. */
+  listAutoCollapse: ListAutoCollapse;
+  /** Render a week heading in the day list whenever a new week starts. */
+  listGroupByWeek: boolean;
 }
 
 export const DEFAULT_DISPLAY_PREFS: DisplayPrefs = {
@@ -24,6 +36,8 @@ export const DEFAULT_DISPLAY_PREFS: DisplayPrefs = {
   theme: "system",
   inactivityEnabled: false,
   inactivityMinutes: 10,
+  listAutoCollapse: "off",
+  listGroupByWeek: false,
 };
 
 export function clampInactivityMinutes(minutes: number): number {
@@ -50,6 +64,8 @@ interface LegacyDisplayPrefs {
   theme?: ThemeMode;
   inactivityEnabled?: boolean;
   inactivityMinutes?: number;
+  listAutoCollapse?: ListAutoCollapse;
+  listGroupByWeek?: boolean;
 }
 
 export async function loadDisplayPrefs(): Promise<DisplayPrefs> {
@@ -69,7 +85,17 @@ export async function loadDisplayPrefs(): Promise<DisplayPrefs> {
         : "off"
       : DEFAULT_DISPLAY_PREFS.menuBarMode;
   const showTrayIcon = saved.showTrayIcon ?? DEFAULT_DISPLAY_PREFS.showTrayIcon;
-  return { menuBarMode, showTrayIcon, theme, inactivityEnabled, inactivityMinutes };
+  const listAutoCollapse = saved.listAutoCollapse ?? DEFAULT_DISPLAY_PREFS.listAutoCollapse;
+  const listGroupByWeek = saved.listGroupByWeek ?? DEFAULT_DISPLAY_PREFS.listGroupByWeek;
+  return {
+    menuBarMode,
+    showTrayIcon,
+    theme,
+    inactivityEnabled,
+    inactivityMinutes,
+    listAutoCollapse,
+    listGroupByWeek,
+  };
 }
 
 export async function saveDisplayPrefs(prefs: DisplayPrefs): Promise<void> {

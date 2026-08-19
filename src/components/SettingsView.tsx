@@ -8,12 +8,13 @@ import {
   INACTIVITY_MAX_MINUTES,
   type MenuBarMode,
   type ThemeMode,
+  type ListAutoCollapse,
   type DisplayPrefs,
 } from "../store/display-store";
 import { fmtDate } from "../utils/week";
 import bearIcon from "../assets/bear.png";
 
-export type SettingsPage = "flex" | "menubar" | "appearance" | "timer";
+export type SettingsPage = "flex" | "menubar" | "appearance" | "timer" | "list";
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -26,6 +27,7 @@ const PAGE_TITLES: Record<SettingsPage, string> = {
   menubar: "Menu bar",
   appearance: "Appearance",
   timer: "Timer",
+  list: "Entry list",
 };
 
 export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) {
@@ -63,6 +65,7 @@ export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) 
         {page === "menubar" && <MenuBarSettings />}
         {page === "appearance" && <AppearanceSettings />}
         {page === "timer" && <TimerSettings />}
+        {page === "list" && <ListSettings />}
       </div>
     </div>
   );
@@ -93,6 +96,12 @@ const MENU_ITEMS: { page: SettingsPage; label: string; hint: string; icon: strin
     label: "Timer",
     hint: "Change how the timer behaves",
     icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
+  },
+  {
+    page: "list",
+    label: "Entry list",
+    hint: "Change how the day list is grouped and collapsed",
+    icon: "M4 6h16M4 12h16M4 18h7",
   },
 ];
 
@@ -397,6 +406,97 @@ function TimerSettings() {
             <span className="text-xs text-text-muted">minutes of inactivity</span>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function ListSettings() {
+  const { state, dispatch } = useApp();
+  const { displayPrefs } = state;
+
+  async function persist(next: DisplayPrefs) {
+    dispatch({ type: "SET_DISPLAY_PREFS", payload: next });
+    await saveDisplayPrefs(next).catch(() => {});
+  }
+
+  async function setAutoCollapse(mode: ListAutoCollapse) {
+    if (mode === displayPrefs.listAutoCollapse) return;
+    await persist({ ...displayPrefs, listAutoCollapse: mode });
+  }
+
+  async function toggleGroupByWeek() {
+    await persist({ ...displayPrefs, listGroupByWeek: !displayPrefs.listGroupByWeek });
+  }
+
+  const collapseOptions: { value: ListAutoCollapse; label: string; hint: string }[] = [
+    { value: "off", label: "Never", hint: "All expanded" },
+    { value: "days", label: "Past days", hint: "Today expanded" },
+    { value: "weeks", label: "Past weeks", hint: "This week expanded" },
+  ];
+
+  return (
+    <div className="px-4 py-4 space-y-4">
+      <div className="bg-bg-card rounded-xl p-4 border border-border">
+        <div className="text-sm font-medium text-text">Collapse entries</div>
+        <p className="text-xs text-text-muted mt-1 mb-3">
+          Which entries start collapsed to a single line. You can still expand or collapse any card
+          by hand.
+        </p>
+        <div className="flex rounded-full border border-border overflow-hidden">
+          {collapseOptions.map((opt) => {
+            const active = displayPrefs.listAutoCollapse === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setAutoCollapse(opt.value)}
+                className={`flex-1 py-1.5 text-xs font-medium transition-all ${
+                  active
+                    ? "bg-primary text-white"
+                    : "bg-transparent text-text-muted hover:text-text"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex mt-1.5">
+          {collapseOptions.map((opt) => (
+            <div
+              key={opt.value}
+              className={`flex-1 text-center text-[10px] ${
+                displayPrefs.listAutoCollapse === opt.value ? "text-text" : "text-text-muted"
+              }`}
+            >
+              {opt.hint}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-bg-card rounded-xl p-4 border border-border">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium text-text">Group by week</div>
+          <button
+            role="switch"
+            aria-checked={displayPrefs.listGroupByWeek}
+            aria-label="Group the day list by week"
+            onClick={toggleGroupByWeek}
+            className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${
+              displayPrefs.listGroupByWeek ? "bg-primary" : "bg-border"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                displayPrefs.listGroupByWeek ? "translate-x-4" : ""
+              }`}
+            />
+          </button>
+        </div>
+        <p className="text-xs text-text-muted mt-1">
+          Add a heading with the week's total whenever a new week starts in the list.
+        </p>
       </div>
     </div>
   );

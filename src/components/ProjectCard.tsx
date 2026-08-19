@@ -34,11 +34,13 @@ export function joinDescriptions(lines: string[]): string {
 interface ProjectCardProps {
   entry: TimeEntry;
   isToday: boolean;
+  /** Start collapsed, per the list's auto-collapse preference. */
+  autoCollapsed?: boolean;
 }
 
 type EditMode = "none" | "time" | "project" | "task" | "delete";
 
-export function ProjectCard({ entry, isToday }: ProjectCardProps) {
+export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCardProps) {
   const { state, dispatch } = useApp();
   const api = useApi();
   const {
@@ -72,8 +74,11 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
   const editRef = useRef<HTMLSpanElement>(null);
 
   // Collapsed cards keep the header (project, task, description count, time)
-  // and animate everything below it away.
-  const [collapsed, setCollapsed] = useState(false);
+  // and animate everything below it away. The auto-collapse preference sets the
+  // baseline; toggling the card overrides it until the preference changes.
+  const [collapseOverride, setCollapseOverride] = useState<boolean | null>(null);
+  const collapsed = collapseOverride ?? autoCollapsed;
+  const setCollapsed = setCollapseOverride;
 
   // Inline field editing (time / project / task / delete-confirm)
   const [editMode, setEditMode] = useState<EditMode>("none");
@@ -117,11 +122,12 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
     }
   }, [editMode]);
 
-  // The stop button only exists on the expanded card, so a card whose timer
-  // starts running expands itself to keep it reachable.
+  // The stop button only exists on the expanded card, so a running card forces
+  // itself open. Otherwise a changed preference drops any manual override and
+  // the card falls back to the new baseline.
   useEffect(() => {
-    if (isThisRunning) setCollapsed(false);
-  }, [isThisRunning]);
+    setCollapseOverride(isThisRunning ? false : null);
+  }, [isThisRunning, autoCollapsed]);
 
   // The detail section animates between 0 and its natural height, so that
   // height has to be an explicit pixel value. A ResizeObserver keeps it in
