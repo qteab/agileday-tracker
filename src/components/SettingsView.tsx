@@ -68,11 +68,11 @@ export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) 
   );
 }
 
-const MENU_ITEMS: { page: SettingsPage; label: string; hint: string }[] = [
-  { page: "flex", label: "Flex", hint: "Starting balance and reset months" },
-  { page: "menubar", label: "Menu bar", hint: "How much the tray shows while running" },
-  { page: "appearance", label: "Appearance", hint: "Light, dark, or follow the system" },
-  { page: "timer", label: "Timer", hint: "Inactivity warnings" },
+const MENU_ITEMS: { page: SettingsPage; label: string }[] = [
+  { page: "flex", label: "Flex" },
+  { page: "menubar", label: "Menu bar" },
+  { page: "appearance", label: "Appearance" },
+  { page: "timer", label: "Timer" },
 ];
 
 function SettingsMenu({
@@ -96,10 +96,7 @@ function SettingsMenu({
               i > 0 ? "border-t border-border" : ""
             }`}
           >
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium text-text">{item.label}</div>
-              <div className="text-xs text-text-muted mt-0.5">{item.hint}</div>
-            </div>
+            <div className="min-w-0 flex-1 text-sm font-medium text-text">{item.label}</div>
             <svg
               className="w-4 h-4 shrink-0 text-text-muted"
               fill="none"
