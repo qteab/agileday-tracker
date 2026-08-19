@@ -1,9 +1,10 @@
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useApp, useApi } from "../store/context";
 import { useTimer, formatTime, formatMinutes } from "../hooks/useTimer";
 import { ProjectPicker } from "./ProjectPicker";
 import { TaskPicker } from "./TaskPicker";
 import { Modal } from "./Modal";
+import { Collapsible } from "./Collapsible";
 import {
   parseDurationInput,
   formatDurationInput,
@@ -129,22 +130,7 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
     setCollapseOverride(isThisRunning ? false : null);
   }, [isThisRunning, autoCollapsed]);
 
-  // The detail section animates between 0 and its natural height, so that
-  // height has to be an explicit pixel value. A ResizeObserver keeps it in
-  // sync as descriptions are added, removed or reflowed.
-  const detailRef = useRef<HTMLDivElement>(null);
-  const [detailHeight, setDetailHeight] = useState(0);
-  useLayoutEffect(() => {
-    const el = detailRef.current;
-    if (!el) return;
-    setDetailHeight(el.offsetHeight);
-    const ro = new ResizeObserver(() => setDetailHeight(el.offsetHeight));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  // Transitions stay off for the first paint so cards don't animate open on
-  // mount — the measured height above would otherwise animate up from 0.
+  // Transitions stay off for the first paint so nothing animates on mount.
   const [animated, setAnimated] = useState(false);
   useEffect(() => {
     const id = requestAnimationFrame(() => setAnimated(true));
@@ -493,6 +479,16 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
     startForCard,
   ]);
 
+  // What the collapsed header has to repeat from the hidden detail section: a
+  // failed or in-flight save, an action error, or the submitted lock.
+  const collapsedStatus: "unsaved" | "error" | "pending" | null = actionError
+    ? "error"
+    : entry.syncStatus === "unsaved"
+      ? "unsaved"
+      : entry.syncStatus === "pending"
+        ? "pending"
+        : null;
+
   // Dot color: green for active/external, purple for internal, intense for absence/idle
   const dotColor = (() => {
     const pt = entry.projectType ?? project?.projectType;
@@ -503,10 +499,33 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
 
   return (
     <div
-      className={`bg-bg-card border border-border rounded-xl shadow-[0_1px_2px_rgba(11,4,21,0.04)]`}
+      className={`relative bg-bg-card border border-border rounded-xl shadow-[0_1px_2px_rgba(11,4,21,0.04)]`}
     >
-      {/* Header */}
-      <div className="px-4 pt-[14px] pb-3">
+      {/* Submitted lock — the expanded card shows it in the footer, which is
+          folded away when collapsed, so mirror it in the bottom-right corner. */}
+      {isSubmitted && (
+        <span
+          className={`absolute bottom-[8px] right-3 flex items-center gap-0.5 text-[10px] text-text-muted/50 ${motion} ${
+            collapsed ? "opacity-100" : "opacity-0"
+          }`}
+          aria-hidden={!collapsed}
+        >
+          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2.5}
+              d="M12 15v2m0 0v2m0-2h2m-2 0H10m-4-6V7a4 4 0 118 0v4m-8 0h12a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6a2 2 0 012-2z"
+            />
+          </svg>
+          Submitted in AgileDay
+        </span>
+      )}
+      {/* Header — gains a bottom strip when collapsed on a submitted entry, so
+          the corner label below has room of its own. */}
+      <div
+        className={`px-4 pt-[14px] ${motion} ${collapsed && isSubmitted ? "pb-[26px]" : "pb-3"}`}
+      >
         {/* Row 1: project name, time, play/stop */}
         <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0">
@@ -564,6 +583,26 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
                 {displayTime}
               </span>
             )}
+            {/* Sync state and the submitted lock live in the collapsed section,
+                so a collapsed card would otherwise hide a failed save. Repeat
+                them here as a compact marker. */}
+            <span
+              aria-hidden={!collapsed}
+              className={`flex items-center overflow-hidden whitespace-nowrap ${motion} ${
+                collapsed && collapsedStatus ? "max-w-[70px] opacity-100" : "max-w-0 opacity-0"
+              }`}
+            >
+              {collapsedStatus === "unsaved" && (
+                <span className="text-[11px] font-semibold text-danger">Unsaved</span>
+              )}
+              {collapsedStatus === "error" && (
+                <span className="text-[11px] font-semibold text-danger">Error</span>
+              )}
+              {collapsedStatus === "pending" && (
+                <span className="text-[11px] font-medium text-text-muted">Saving…</span>
+              )}
+            </span>
+
             {/* Button slot: the timer (or quick-open) button when expanded
                 cross-fades with the expand chevron when collapsed. Fixed size
                 so the header text never shifts as they swap. */}
@@ -721,179 +760,172 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
       </div>
 
       {/* Everything below the header collapses away. */}
-      <div
-        className={`overflow-hidden ${motion} ${collapsed ? "opacity-0" : "opacity-100"}`}
-        style={{ height: collapsed ? 0 : detailHeight }}
-        aria-hidden={collapsed}
-        inert={collapsed}
-      >
-        <div ref={detailRef}>
-          {/* Empty description warning while running */}
-          {isThisRunning && descriptions.length === 0 && (
-            <div className="flex items-center gap-2 mx-4 mb-2 px-3 py-1.5 text-xs text-amber-700 bg-amber-50 rounded-lg">
-              <svg
-                className="w-3.5 h-3.5 shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-              <span>No description — the customer sees this on the invoice</span>
-            </div>
-          )}
-
-          {/* Sync status indicators */}
-          {entry.syncStatus === "unsaved" && (
-            <div className="px-4 pb-2">
-              <span className="text-xs text-danger font-medium">Unsaved</span>
-            </div>
-          )}
-          {entry.syncStatus === "pending" && (
-            <div className="px-4 pb-2">
-              <span className="text-xs text-text-muted font-medium">Saving...</span>
-            </div>
-          )}
-
-          {/* Action error */}
-          {actionError && (
-            <div className="px-4 pb-2">
-              <span className="text-xs text-danger font-medium">{actionError}</span>
-            </div>
-          )}
-
-          {/* Description stack */}
-          <div className="px-4 pb-3">
-            <div className="border-l-2 border-border ml-1 pl-[14px] flex flex-col gap-[9px]">
-              {descriptions.map((desc, i) => (
-                <div key={i} className="flex gap-[9px] items-start text-sm text-text leading-[1.4]">
-                  <span className="w-[5px] h-[5px] rounded-full bg-primary shrink-0 mt-[7px]" />
-                  {isEditable ? (
-                    <span
-                      ref={editingIndex === i ? editRef : undefined}
-                      contentEditable
-                      suppressContentEditableWarning
-                      className="desc-editable flex-1 outline-none rounded-[4px] focus:bg-bg-edit focus:ring-2 focus:ring-primary/25"
-                      data-placeholder="Describe what you worked on…"
-                      onFocus={() => setEditingIndex(i)}
-                      onBlur={(e) => handleBlur(i, e.currentTarget.textContent ?? "")}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          (e.target as HTMLElement).blur();
-                        }
-                      }}
-                    >
-                      {desc}
-                    </span>
-                  ) : (
-                    <span className="flex-1">{desc || "—"}</span>
-                  )}
-                </div>
-              ))}
-
-              {/* Empty state placeholder */}
-              {descriptions.length === 0 && !isEditable && (
-                <div className="text-sm text-text-subtle">No description</div>
-              )}
-
-              {/* Add description button */}
-              {isEditable && (
-                <button
-                  onClick={handleAddDescription}
-                  className="inline-flex items-center gap-[6px] text-[13px] font-semibold text-text-subtle hover:text-primary transition-colors py-1 -ml-1"
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.75"
-                    strokeLinecap="round"
-                  >
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
-                  add description
-                </button>
-              )}
-            </div>
+      <Collapsible collapsed={collapsed}>
+        {/* Empty description warning while running */}
+        {isThisRunning && descriptions.length === 0 && (
+          <div className="flex items-center gap-2 mx-4 mb-2 px-3 py-1.5 text-xs text-amber-700 bg-amber-50 rounded-lg">
+            <svg
+              className="w-3.5 h-3.5 shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <span>No description — the customer sees this on the invoice</span>
           </div>
+        )}
 
-          {/* Footer: delete (left), collapse (right), lock indicator when submitted */}
-          <div className="flex items-center gap-3 px-4 pb-3 -mt-1">
+        {/* Sync status indicators */}
+        {entry.syncStatus === "unsaved" && (
+          <div className="px-4 pb-2">
+            <span className="text-xs text-danger font-medium">Unsaved</span>
+          </div>
+        )}
+        {entry.syncStatus === "pending" && (
+          <div className="px-4 pb-2">
+            <span className="text-xs text-text-muted font-medium">Saving...</span>
+          </div>
+        )}
+
+        {/* Action error */}
+        {actionError && (
+          <div className="px-4 pb-2">
+            <span className="text-xs text-danger font-medium">{actionError}</span>
+          </div>
+        )}
+
+        {/* Description stack */}
+        <div className="px-4 pb-3">
+          <div className="border-l-2 border-border ml-1 pl-[14px] flex flex-col gap-[9px]">
+            {descriptions.map((desc, i) => (
+              <div key={i} className="flex gap-[9px] items-start text-sm text-text leading-[1.4]">
+                <span className="w-[5px] h-[5px] rounded-full bg-primary shrink-0 mt-[7px]" />
+                {isEditable ? (
+                  <span
+                    ref={editingIndex === i ? editRef : undefined}
+                    contentEditable
+                    suppressContentEditableWarning
+                    className="desc-editable flex-1 outline-none rounded-[4px] focus:bg-bg-edit focus:ring-2 focus:ring-primary/25"
+                    data-placeholder="Describe what you worked on…"
+                    onFocus={() => setEditingIndex(i)}
+                    onBlur={(e) => handleBlur(i, e.currentTarget.textContent ?? "")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        (e.target as HTMLElement).blur();
+                      }
+                    }}
+                  >
+                    {desc}
+                  </span>
+                ) : (
+                  <span className="flex-1">{desc || "—"}</span>
+                )}
+              </div>
+            ))}
+
+            {/* Empty state placeholder */}
+            {descriptions.length === 0 && !isEditable && (
+              <div className="text-sm text-text-subtle">No description</div>
+            )}
+
+            {/* Add description button */}
             {isEditable && (
               <button
-                onClick={() => {
-                  setActionError(null);
-                  setEditMode("delete");
-                }}
-                className="inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-danger transition-colors cursor-pointer"
-                aria-label="Delete entry"
+                onClick={handleAddDescription}
+                className="inline-flex items-center gap-[6px] text-[13px] font-semibold text-text-subtle hover:text-primary transition-colors py-1 -ml-1"
               >
                 <svg
-                  width="13"
-                  height="13"
+                  width="14"
+                  height="14"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="1.75"
                   strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="shrink-0"
                 >
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  <line x1="10" y1="11" x2="10" y2="17" />
-                  <line x1="14" y1="11" x2="14" y2="17" />
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
-                <span>Delete</span>
+                add description
               </button>
             )}
-            {isSubmitted && (
-              <span className="text-[10px] text-text-muted/50 flex items-center gap-0.5">
-                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2.5}
-                    d="M12 15v2m0 0v2m0-2h2m-2 0H10m-4-6V7a4 4 0 118 0v4m-8 0h12a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6a2 2 0 012-2z"
-                  />
-                </svg>
-                Submitted — edit in AgileDay
-              </span>
-            )}
+          </div>
+        </div>
+
+        {/* Footer: delete (left), collapse (right), lock indicator when submitted */}
+        <div className="flex items-center gap-3 px-4 pb-3 -mt-1">
+          {isEditable && (
             <button
-              type="button"
-              onClick={handleCollapse}
-              className="ml-auto inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-primary transition-colors cursor-pointer"
-              aria-label="Collapse entry"
-              aria-expanded={true}
+              onClick={() => {
+                setActionError(null);
+                setEditMode("delete");
+              }}
+              className="inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-danger transition-colors cursor-pointer"
+              aria-label="Delete entry"
             >
               <svg
-                width="14"
-                height="14"
+                width="13"
+                height="13"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="1.75"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 className="shrink-0"
               >
-                <polyline points="18 15 12 9 6 15" />
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                <line x1="10" y1="11" x2="10" y2="17" />
+                <line x1="14" y1="11" x2="14" y2="17" />
               </svg>
-              <span>Collapse</span>
+              <span>Delete</span>
             </button>
-          </div>
+          )}
+          {isSubmitted && (
+            <span className="text-[10px] text-text-muted/50 flex items-center gap-0.5">
+              <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M12 15v2m0 0v2m0-2h2m-2 0H10m-4-6V7a4 4 0 118 0v4m-8 0h12a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6a2 2 0 012-2z"
+                />
+              </svg>
+              Submitted — edit in AgileDay
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={handleCollapse}
+            className="ml-auto inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-primary transition-colors cursor-pointer"
+            aria-label="Collapse entry"
+            aria-expanded={true}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0"
+            >
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+            <span>Collapse</span>
+          </button>
         </div>
-      </div>
+      </Collapsible>
 
       {/* Delete confirmation modal */}
       {editMode === "delete" && (

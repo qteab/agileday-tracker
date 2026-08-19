@@ -13,6 +13,14 @@ export type ThemeMode = "system" | "light" | "dark";
  */
 export type ListAutoCollapse = "off" | "days" | "weeks";
 
+/**
+ * Which day-list headings stay pinned to the top while scrolling:
+ * - "off":  neither
+ * - "days": the day heading only
+ * - "both": the week heading, with the day heading pinned below it
+ */
+export type ListStickyHeadings = "off" | "days" | "both";
+
 export const INACTIVITY_MIN_MINUTES = 1;
 export const INACTIVITY_MAX_MINUTES = 120;
 
@@ -28,6 +36,10 @@ export interface DisplayPrefs {
   listAutoCollapse: ListAutoCollapse;
   /** Render a week heading in the day list whenever a new week starts. */
   listGroupByWeek: boolean;
+  /** Let a whole day or week heading fold its entries away. */
+  listCollapsibleGroups: boolean;
+  /** Which day-list headings stick to the top while scrolling. */
+  listStickyHeadings: ListStickyHeadings;
 }
 
 export const DEFAULT_DISPLAY_PREFS: DisplayPrefs = {
@@ -38,6 +50,8 @@ export const DEFAULT_DISPLAY_PREFS: DisplayPrefs = {
   inactivityMinutes: 10,
   listAutoCollapse: "weeks",
   listGroupByWeek: true,
+  listCollapsibleGroups: false,
+  listStickyHeadings: "both",
 };
 
 export function clampInactivityMinutes(minutes: number): number {
@@ -66,6 +80,8 @@ interface LegacyDisplayPrefs {
   inactivityMinutes?: number;
   listAutoCollapse?: ListAutoCollapse;
   listGroupByWeek?: boolean;
+  listCollapsibleGroups?: boolean;
+  listStickyHeadings?: ListStickyHeadings;
 }
 
 export async function loadDisplayPrefs(): Promise<DisplayPrefs> {
@@ -87,6 +103,9 @@ export async function loadDisplayPrefs(): Promise<DisplayPrefs> {
   const showTrayIcon = saved.showTrayIcon ?? DEFAULT_DISPLAY_PREFS.showTrayIcon;
   const listAutoCollapse = saved.listAutoCollapse ?? DEFAULT_DISPLAY_PREFS.listAutoCollapse;
   const listGroupByWeek = saved.listGroupByWeek ?? DEFAULT_DISPLAY_PREFS.listGroupByWeek;
+  const listCollapsibleGroups =
+    saved.listCollapsibleGroups ?? DEFAULT_DISPLAY_PREFS.listCollapsibleGroups;
+  const listStickyHeadings = saved.listStickyHeadings ?? DEFAULT_DISPLAY_PREFS.listStickyHeadings;
   return {
     menuBarMode,
     showTrayIcon,
@@ -95,6 +114,8 @@ export async function loadDisplayPrefs(): Promise<DisplayPrefs> {
     inactivityMinutes,
     listAutoCollapse,
     listGroupByWeek,
+    listCollapsibleGroups,
+    listStickyHeadings,
   };
 }
 

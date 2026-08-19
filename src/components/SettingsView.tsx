@@ -9,6 +9,7 @@ import {
   type MenuBarMode,
   type ThemeMode,
   type ListAutoCollapse,
+  type ListStickyHeadings,
   type DisplayPrefs,
 } from "../store/display-store";
 import { fmtDate } from "../utils/week";
@@ -74,6 +75,12 @@ export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) 
 /** Keep hints general — they describe the page, not the settings on it. */
 const MENU_ITEMS: { page: SettingsPage; label: string; hint: string; icon: string }[] = [
   {
+    page: "list",
+    label: "Entry list",
+    hint: "Change how the day list is grouped and collapsed",
+    icon: "M4 6h16M4 12h16M4 18h7",
+  },
+  {
     page: "flex",
     label: "Flex",
     hint: "Set up how your flex balance is tracked",
@@ -96,12 +103,6 @@ const MENU_ITEMS: { page: SettingsPage; label: string; hint: string; icon: strin
     label: "Timer",
     hint: "Change how the timer behaves",
     icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
-  },
-  {
-    page: "list",
-    label: "Entry list",
-    hint: "Change how the day list is grouped and collapsed",
-    icon: "M4 6h16M4 12h16M4 18h7",
   },
 ];
 
@@ -429,6 +430,24 @@ function ListSettings() {
     await persist({ ...displayPrefs, listGroupByWeek: !displayPrefs.listGroupByWeek });
   }
 
+  async function setStickyHeadings(mode: ListStickyHeadings) {
+    if (mode === displayPrefs.listStickyHeadings) return;
+    await persist({ ...displayPrefs, listStickyHeadings: mode });
+  }
+
+  async function toggleCollapsibleGroups() {
+    await persist({
+      ...displayPrefs,
+      listCollapsibleGroups: !displayPrefs.listCollapsibleGroups,
+    });
+  }
+
+  const stickyOptions: { value: ListStickyHeadings; label: string; hint: string }[] = [
+    { value: "off", label: "Never", hint: "Scroll away" },
+    { value: "days", label: "Days", hint: "Day pinned" },
+    { value: "both", label: "Days + weeks", hint: "Both pinned" },
+  ];
+
   const collapseOptions: { value: ListAutoCollapse; label: string; hint: string }[] = [
     { value: "off", label: "Never", hint: "All expanded" },
     { value: "days", label: "Past days", hint: "Today expanded" },
@@ -496,6 +515,69 @@ function ListSettings() {
         </div>
         <p className="text-xs text-text-muted mt-1">
           Add a heading with the week's total whenever a new week starts in the list.
+        </p>
+      </div>
+
+      <div className="bg-bg-card rounded-xl p-4 border border-border">
+        <div className="text-sm font-medium text-text">Pinned headings</div>
+        <p className="text-xs text-text-muted mt-1 mb-3">
+          Keep the heading you're scrolling through at the top of the list. Week headings can only
+          pin while "Group by week" is on.
+        </p>
+        <div className="flex rounded-full border border-border overflow-hidden">
+          {stickyOptions.map((opt) => {
+            const active = displayPrefs.listStickyHeadings === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setStickyHeadings(opt.value)}
+                className={`flex-1 py-1.5 text-xs font-medium transition-all ${
+                  active
+                    ? "bg-primary text-white"
+                    : "bg-transparent text-text-muted hover:text-text"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex mt-1.5">
+          {stickyOptions.map((opt) => (
+            <div
+              key={opt.value}
+              className={`flex-1 text-center text-[10px] ${
+                displayPrefs.listStickyHeadings === opt.value ? "text-text" : "text-text-muted"
+              }`}
+            >
+              {opt.hint}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-bg-card rounded-xl p-4 border border-border">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium text-text">Foldable days and weeks</div>
+          <button
+            role="switch"
+            aria-checked={displayPrefs.listCollapsibleGroups}
+            aria-label="Let day and week headings fold their entries away"
+            onClick={toggleCollapsibleGroups}
+            className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${
+              displayPrefs.listCollapsibleGroups ? "bg-primary" : "bg-border"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                displayPrefs.listCollapsibleGroups ? "translate-x-4" : ""
+              }`}
+            />
+          </button>
+        </div>
+        <p className="text-xs text-text-muted mt-1">
+          Click a day or week heading to fold every entry under it away, leaving just the heading
+          and its total.
         </p>
       </div>
     </div>
