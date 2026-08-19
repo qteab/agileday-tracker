@@ -13,22 +13,33 @@ import {
 import { fmtDate } from "../utils/week";
 import bearIcon from "../assets/bear.png";
 
-export type SettingsTab = "flex" | "display" | "account";
+export type SettingsPage = "flex" | "menubar" | "appearance" | "timer";
 
 interface SettingsViewProps {
   onBack: () => void;
-  defaultTab?: SettingsTab;
+  /** Open straight into a sub page. Omit (or null) to land on the page list. */
+  initialPage?: SettingsPage | null;
 }
 
-export function SettingsView({ onBack, defaultTab = "flex" }: SettingsViewProps) {
-  const [activeTab, setActiveTab] = useState<SettingsTab>(defaultTab);
+const PAGE_TITLES: Record<SettingsPage, string> = {
+  flex: "Flex",
+  menubar: "Menu bar",
+  appearance: "Appearance",
+  timer: "Timer",
+};
+
+export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) {
+  const [page, setPage] = useState<SettingsPage | null>(initialPage);
+
+  // Back steps out of a sub page first, then out of settings entirely
+  const goBack = page ? () => setPage(null) : onBack;
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Header with back button */}
       <div className="flex shrink-0 items-center gap-2 px-4 py-3 border-b border-border">
         <button
-          onClick={onBack}
+          onClick={goBack}
           className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text transition-colors rounded-lg hover:bg-bg"
           title="Back"
         >
@@ -41,53 +52,114 @@ export function SettingsView({ onBack, defaultTab = "flex" }: SettingsViewProps)
             />
           </svg>
         </button>
-        <span className="text-sm font-semibold text-text">Settings</span>
-      </div>
-
-      {/* Tab switcher */}
-      <div className="flex shrink-0 mx-4 mt-3 rounded-full border border-border overflow-hidden">
-        <button
-          onClick={() => setActiveTab("flex")}
-          className={`flex-1 py-1.5 text-xs font-medium transition-all ${
-            activeTab === "flex"
-              ? "bg-bg-card text-text"
-              : "bg-transparent text-text-muted hover:text-text"
-          }`}
-        >
-          Flex
-        </button>
-        <button
-          onClick={() => setActiveTab("display")}
-          className={`flex-1 py-1.5 text-xs font-medium transition-all ${
-            activeTab === "display"
-              ? "bg-bg-card text-text"
-              : "bg-transparent text-text-muted hover:text-text"
-          }`}
-        >
-          Display
-        </button>
-        <button
-          onClick={() => setActiveTab("account")}
-          className={`flex-1 py-1.5 text-xs font-medium transition-all ${
-            activeTab === "account"
-              ? "bg-bg-card text-text"
-              : "bg-transparent text-text-muted hover:text-text"
-          }`}
-        >
-          Account
-        </button>
+        <span className="text-sm font-semibold text-text">
+          {page ? PAGE_TITLES[page] : "Settings"}
+        </span>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {activeTab === "flex" && <FlexSettings />}
-        {activeTab === "display" && <DisplaySettings />}
-        {activeTab === "account" && <AccountSettings onBack={onBack} />}
+        {page === null && <SettingsMenu onOpen={setPage} onSignedOut={onBack} />}
+        {page === "flex" && <FlexSettings />}
+        {page === "menubar" && <MenuBarSettings />}
+        {page === "appearance" && <AppearanceSettings />}
+        {page === "timer" && <TimerSettings />}
       </div>
     </div>
   );
 }
 
-function DisplaySettings() {
+const MENU_ITEMS: { page: SettingsPage; label: string; hint: string }[] = [
+  { page: "flex", label: "Flex", hint: "Starting balance and reset months" },
+  { page: "menubar", label: "Menu bar", hint: "How much the tray shows while running" },
+  { page: "appearance", label: "Appearance", hint: "Light, dark, or follow the system" },
+  { page: "timer", label: "Timer", hint: "Inactivity warnings" },
+];
+
+function SettingsMenu({
+  onOpen,
+  onSignedOut,
+}: {
+  onOpen: (page: SettingsPage) => void;
+  onSignedOut: () => void;
+}) {
+  const { state, logout } = useApp();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  return (
+    <div className="px-4 py-4 space-y-4">
+      <div className="bg-bg-card rounded-xl border border-border overflow-hidden">
+        {MENU_ITEMS.map((item, i) => (
+          <button
+            key={item.page}
+            onClick={() => onOpen(item.page)}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-bg transition-colors ${
+              i > 0 ? "border-t border-border" : ""
+            }`}
+          >
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-text">{item.label}</div>
+              <div className="text-xs text-text-muted mt-0.5">{item.hint}</div>
+            </div>
+            <svg
+              className="w-4 h-4 shrink-0 text-text-muted"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        ))}
+      </div>
+
+      {/* Sign out */}
+      <div className="px-1">
+        {state.employee && (
+          <p className="text-xs text-text-muted mb-2">
+            Signed in as {state.employee.name} ({state.employee.email})
+          </p>
+        )}
+        {showLogoutConfirm ? (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-text-muted">Are you sure?</span>
+            <button
+              onClick={() => {
+                logout();
+                onSignedOut();
+              }}
+              className="px-3 py-1.5 text-xs font-medium text-white bg-danger rounded-lg hover:bg-danger/90 transition-colors"
+            >
+              Sign out
+            </button>
+            <button
+              onClick={() => setShowLogoutConfirm(false)}
+              className="px-3 py-1.5 text-xs font-medium text-text-muted bg-bg rounded-lg hover:bg-border transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowLogoutConfirm(true)}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-danger bg-danger/10 rounded-lg hover:bg-danger/20 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              />
+            </svg>
+            Sign out
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MenuBarSettings() {
   const { state, dispatch } = useApp();
   const { displayPrefs } = state;
 
@@ -184,11 +256,119 @@ function DisplaySettings() {
           control and the dropdown keep working.
         </p>
       </div>
+    </div>
+  );
+}
 
-      <p className="text-[11px] text-text-muted px-1">
-        The tray dropdown always shows the project, task, and description while a timer is running —
-        regardless of this setting.
-      </p>
+function AppearanceSettings() {
+  const { state, dispatch } = useApp();
+  const { displayPrefs } = state;
+
+  async function setTheme(theme: ThemeMode) {
+    if (theme === displayPrefs.theme) return;
+    const next = { ...displayPrefs, theme };
+    dispatch({ type: "SET_DISPLAY_PREFS", payload: next });
+    await saveDisplayPrefs(next).catch(() => {});
+  }
+
+  const themeOptions: { value: ThemeMode; label: string }[] = [
+    { value: "system", label: "System" },
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+  ];
+
+  return (
+    <div className="px-4 py-4 space-y-4">
+      <div className="bg-bg-card rounded-xl p-4 border border-border">
+        <div className="text-sm font-medium text-text">Theme</div>
+        <p className="text-xs text-text-muted mt-1 mb-3">
+          Pick a theme, or follow your macOS system setting.
+        </p>
+        <div className="flex rounded-full border border-border overflow-hidden">
+          {themeOptions.map((opt) => {
+            const active = displayPrefs.theme === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setTheme(opt.value)}
+                className={`flex-1 py-1.5 text-xs font-medium transition-all ${
+                  active
+                    ? "bg-primary text-white"
+                    : "bg-transparent text-text-muted hover:text-text"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TimerSettings() {
+  const { state, dispatch } = useApp();
+  const { displayPrefs } = state;
+  const [minutesInput, setMinutesInput] = useState(String(displayPrefs.inactivityMinutes));
+
+  async function persist(next: DisplayPrefs) {
+    dispatch({ type: "SET_DISPLAY_PREFS", payload: next });
+    await saveDisplayPrefs(next).catch(() => {});
+  }
+
+  async function toggleInactivity() {
+    await persist({ ...displayPrefs, inactivityEnabled: !displayPrefs.inactivityEnabled });
+  }
+
+  async function commitMinutes() {
+    const clamped = clampInactivityMinutes(parseInt(minutesInput, 10));
+    setMinutesInput(String(clamped));
+    await persist({ ...displayPrefs, inactivityMinutes: clamped });
+  }
+
+  return (
+    <div className="px-4 py-4 space-y-4">
+      <div className="bg-bg-card rounded-xl p-4 border border-border">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium text-text">Inactivity</div>
+          <button
+            role="switch"
+            aria-checked={displayPrefs.inactivityEnabled}
+            onClick={toggleInactivity}
+            className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${
+              displayPrefs.inactivityEnabled ? "bg-primary" : "bg-border"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                displayPrefs.inactivityEnabled ? "translate-x-4" : ""
+              }`}
+            />
+          </button>
+        </div>
+        <p className="text-xs text-text-muted mt-1">
+          Warn me when a timer keeps running while I'm away from the computer.
+        </p>
+        {displayPrefs.inactivityEnabled && (
+          <div className="flex items-center gap-2 mt-3">
+            <span className="text-xs text-text-muted">Warn after</span>
+            <input
+              type="number"
+              min={INACTIVITY_MIN_MINUTES}
+              max={INACTIVITY_MAX_MINUTES}
+              value={minutesInput}
+              onChange={(e) => setMinutesInput(e.target.value)}
+              onBlur={commitMinutes}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              }}
+              className="w-16 px-2 py-1 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <span className="text-xs text-text-muted">minutes of inactivity</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -339,158 +519,6 @@ function FlexSettings() {
       >
         {saved ? "Saved!" : saving ? "Saving..." : "Save"}
       </button>
-    </div>
-  );
-}
-
-function AccountSettings({ onBack }: { onBack: () => void }) {
-  const { state, dispatch, logout } = useApp();
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const { displayPrefs } = state;
-
-  async function setTheme(theme: ThemeMode) {
-    if (theme === displayPrefs.theme) return;
-    const next = { ...displayPrefs, theme };
-    dispatch({ type: "SET_DISPLAY_PREFS", payload: next });
-    await saveDisplayPrefs(next).catch(() => {});
-  }
-
-  const themeOptions: { value: ThemeMode; label: string }[] = [
-    { value: "system", label: "System" },
-    { value: "light", label: "Light" },
-    { value: "dark", label: "Dark" },
-  ];
-
-  const [minutesInput, setMinutesInput] = useState(String(displayPrefs.inactivityMinutes));
-
-  async function persistDisplay(next: DisplayPrefs) {
-    dispatch({ type: "SET_DISPLAY_PREFS", payload: next });
-    await saveDisplayPrefs(next).catch(() => {});
-  }
-
-  async function toggleInactivity() {
-    await persistDisplay({ ...displayPrefs, inactivityEnabled: !displayPrefs.inactivityEnabled });
-  }
-
-  async function commitMinutes() {
-    const clamped = clampInactivityMinutes(parseInt(minutesInput, 10));
-    setMinutesInput(String(clamped));
-    await persistDisplay({ ...displayPrefs, inactivityMinutes: clamped });
-  }
-
-  return (
-    <div className="px-4 py-4 space-y-4">
-      {/* Appearance */}
-      <div className="bg-bg-card rounded-xl p-4 border border-border">
-        <div className="text-sm font-medium text-text">Appearance</div>
-        <p className="text-xs text-text-muted mt-1 mb-3">
-          Pick a theme, or follow your macOS system setting.
-        </p>
-        <div className="flex rounded-full border border-border overflow-hidden">
-          {themeOptions.map((opt) => {
-            const active = displayPrefs.theme === opt.value;
-            return (
-              <button
-                key={opt.value}
-                onClick={() => setTheme(opt.value)}
-                className={`flex-1 py-1.5 text-xs font-medium transition-all ${
-                  active
-                    ? "bg-primary text-white"
-                    : "bg-transparent text-text-muted hover:text-text"
-                }`}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Inactivity */}
-      <div className="bg-bg-card rounded-xl p-4 border border-border">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-medium text-text">Inactivity</div>
-          <button
-            role="switch"
-            aria-checked={displayPrefs.inactivityEnabled}
-            onClick={toggleInactivity}
-            className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${
-              displayPrefs.inactivityEnabled ? "bg-primary" : "bg-border"
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                displayPrefs.inactivityEnabled ? "translate-x-4" : ""
-              }`}
-            />
-          </button>
-        </div>
-        <p className="text-xs text-text-muted mt-1">
-          Warn me when a timer keeps running while I'm away from the computer.
-        </p>
-        {displayPrefs.inactivityEnabled && (
-          <div className="flex items-center gap-2 mt-3">
-            <span className="text-xs text-text-muted">Warn after</span>
-            <input
-              type="number"
-              min={INACTIVITY_MIN_MINUTES}
-              max={INACTIVITY_MAX_MINUTES}
-              value={minutesInput}
-              onChange={(e) => setMinutesInput(e.target.value)}
-              onBlur={commitMinutes}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-              }}
-              className="w-16 px-2 py-1 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
-            <span className="text-xs text-text-muted">minutes of inactivity</span>
-          </div>
-        )}
-      </div>
-
-      {/* Account */}
-      <div className="bg-bg-card rounded-xl p-4 border border-border">
-        {state.employee && (
-          <p className="text-xs text-text-muted mb-3">
-            Signed in as {state.employee.name} ({state.employee.email})
-          </p>
-        )}
-        {showLogoutConfirm ? (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-text-muted">Are you sure?</span>
-            <button
-              onClick={() => {
-                logout();
-                onBack();
-              }}
-              className="px-3 py-1.5 text-xs font-medium text-white bg-danger rounded-lg hover:bg-danger/90 transition-colors"
-            >
-              Sign out
-            </button>
-            <button
-              onClick={() => setShowLogoutConfirm(false)}
-              className="px-3 py-1.5 text-xs font-medium text-text-muted bg-bg rounded-lg hover:bg-border transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowLogoutConfirm(true)}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-danger bg-danger/10 rounded-lg hover:bg-danger/20 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-              />
-            </svg>
-            Sign out
-          </button>
-        )}
-      </div>
     </div>
   );
 }

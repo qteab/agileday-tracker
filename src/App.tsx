@@ -6,7 +6,7 @@ import { ProjectCardList } from "./components/ProjectCardList";
 import { AllocationView } from "./components/AllocationView";
 import { LoginScreen } from "./components/LoginScreen";
 import { UpdateChecker } from "./components/UpdateChecker";
-import { SettingsView, type SettingsTab } from "./components/SettingsView";
+import { SettingsView, type SettingsPage } from "./components/SettingsView";
 import { FinalizeView } from "./components/FinalizeView";
 import { SubmissionAlert } from "./components/SubmissionAlert";
 import { FlexBadge } from "./components/FlexBadge";
@@ -37,20 +37,35 @@ export function App() {
 function AuthenticatedApp() {
   const { state, dispatch } = useApp();
   const [activeTab, setActiveTab] = useState<"list" | "allocation">("list");
-  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsPage, setSettingsPage] = useState<SettingsPage | null>(null);
   const [showFinalize, setShowFinalize] = useState(false);
   const [showFlex, setShowFlex] = useState(false);
   const [dismissedWeeks, setDismissedWeeks] = useState<Set<string>>(new Set());
+
+  function openSettings(page: SettingsPage | null = null) {
+    setShowFinalize(false);
+    setShowFlex(false);
+    setSettingsPage(page);
+    setShowSettings(true);
+  }
+
+  function closeSettings() {
+    setShowSettings(false);
+    setSettingsPage(null);
+  }
 
   // Listen for tray menu items
   useEffect(() => {
     const unlistenSettings = listen("tray-open-settings", () => {
       setShowFinalize(false);
       setShowFlex(false);
-      setSettingsTab("account");
+      setSettingsPage(null);
+      setShowSettings(true);
     });
     const unlistenFinalize = listen("tray-open-finalize", () => {
-      setSettingsTab(null);
+      setShowSettings(false);
+      setSettingsPage(null);
       setShowFlex(false);
       setShowFinalize(true);
     });
@@ -60,7 +75,7 @@ function AuthenticatedApp() {
     };
   }, []);
 
-  const showMainContent = !settingsTab && !showFinalize && !showFlex;
+  const showMainContent = !showSettings && !showFinalize && !showFlex;
 
   return (
     <div className="flex flex-col h-screen bg-bg relative">
@@ -81,14 +96,14 @@ function AuthenticatedApp() {
           <FlexBadge
             onClick={() => {
               setShowFinalize(false);
-              setSettingsTab(null);
+              closeSettings();
               setShowFlex(true);
             }}
           />
         </div>
         <button
           onClick={() => {
-            setSettingsTab(null);
+            closeSettings();
             setShowFinalize(false);
             setShowFlex(false);
           }}
@@ -100,7 +115,7 @@ function AuthenticatedApp() {
         <div className="flex items-center justify-end gap-1">
           <button
             onClick={() => {
-              setSettingsTab(null);
+              closeSettings();
               setShowFlex(false);
               setShowFinalize(true);
             }}
@@ -117,11 +132,7 @@ function AuthenticatedApp() {
             </svg>
           </button>
           <button
-            onClick={() => {
-              setShowFinalize(false);
-              setShowFlex(false);
-              setSettingsTab("account");
-            }}
+            onClick={() => openSettings()}
             className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text transition-colors rounded-lg hover:bg-bg"
             title="Settings"
           >
@@ -151,18 +162,13 @@ function AuthenticatedApp() {
         entries={state.entries}
         dismissedWeeks={dismissedWeeks}
         onOpenFinalize={() => {
-          setSettingsTab(null);
+          closeSettings();
           setShowFinalize(true);
         }}
       />
 
       {/* Flex setup prompt */}
-      <FlexSetupAlert
-        onOpenSettings={() => {
-          setShowFinalize(false);
-          setSettingsTab("flex");
-        }}
-      />
+      <FlexSetupAlert onOpenSettings={() => openSettings("flex")} />
 
       {/* Error banner */}
       {state.error && (
@@ -184,16 +190,14 @@ function AuthenticatedApp() {
         </div>
       )}
 
-      {settingsTab ? (
-        <SettingsView onBack={() => setSettingsTab(null)} defaultTab={settingsTab} />
-      ) : showFlex ? (
-        <FlexView
-          onBack={() => setShowFlex(false)}
-          onOpenSettings={() => {
-            setShowFlex(false);
-            setSettingsTab("flex");
-          }}
+      {showSettings ? (
+        <SettingsView
+          key={settingsPage ?? "root"}
+          onBack={closeSettings}
+          initialPage={settingsPage}
         />
+      ) : showFlex ? (
+        <FlexView onBack={() => setShowFlex(false)} onOpenSettings={() => openSettings("flex")} />
       ) : showFinalize ? (
         <FinalizeView
           onBack={() => setShowFinalize(false)}
