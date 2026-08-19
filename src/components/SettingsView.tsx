@@ -123,7 +123,7 @@ function SettingsMenu({
               viewBox="0 0 24 24"
               stroke="currentColor"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={item.icon} />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
             </svg>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium text-text">{item.label}</div>
