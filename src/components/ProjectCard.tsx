@@ -71,6 +71,9 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const editRef = useRef<HTMLSpanElement>(null);
 
+  // Collapsed cards show only a one-line summary (see the early return below).
+  const [collapsed, setCollapsed] = useState(false);
+
   // Inline field editing (time / project / task / delete-confirm)
   const [editMode, setEditMode] = useState<EditMode>("none");
   const [timeInput, setTimeInput] = useState("");
@@ -112,6 +115,12 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
       timeInputRef.current.select();
     }
   }, [editMode]);
+
+  // The stop button only exists on the expanded card, so a card whose timer
+  // starts running expands itself to keep it reachable.
+  useEffect(() => {
+    if (isThisRunning) setCollapsed(false);
+  }, [isThisRunning]);
 
   // Re-render every second while running for elapsed time display
   const [, setTick] = useState(0);
@@ -452,6 +461,74 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
     return "bg-[#18a058]"; // green for external/active
   })();
 
+  // Collapsed card: project, task, description count, time and an expand
+  // button. No delete and no start/stop — those live on the expanded card.
+  if (collapsed) {
+    return (
+      <div className="bg-bg-card border border-border rounded-xl shadow-[0_1px_2px_rgba(11,4,21,0.04)] px-4 py-[11px]">
+        <div className="flex items-center gap-3">
+          <span className={`w-[9px] h-[9px] rounded-full shrink-0 ${dotColor}`} />
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-[15px] leading-[1.3] text-text truncate">
+              {project?.name ?? entry.projectName ?? "Unknown project"}
+            </div>
+            <div className="flex items-center gap-1.5 text-[12.5px] leading-[1.3] text-text-muted min-w-0">
+              <span className="truncate">{taskName ?? "No task"}</span>
+              <span className="shrink-0 text-text-subtle">·</span>
+              <span className="shrink-0 inline-flex items-center gap-[3px] text-text-subtle tabular-nums">
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
+                  <line x1="8" y1="6" x2="21" y2="6" />
+                  <line x1="8" y1="12" x2="21" y2="12" />
+                  <line x1="8" y1="18" x2="21" y2="18" />
+                  <line x1="3" y1="6" x2="3.01" y2="6" />
+                  <line x1="3" y1="12" x2="3.01" y2="12" />
+                  <line x1="3" y1="18" x2="3.01" y2="18" />
+                </svg>
+                {descriptions.length}
+              </span>
+            </div>
+          </div>
+          <span
+            className={`text-[16px] font-semibold tabular-nums shrink-0 ${
+              isThisRunning ? "text-primary" : "text-text"
+            }`}
+          >
+            {displayTime}
+          </span>
+          <button
+            type="button"
+            onClick={() => setCollapsed(false)}
+            className="shrink-0 w-[26px] h-[26px] -mr-1 rounded-md flex items-center justify-center text-text-subtle hover:text-primary hover:bg-bg-edit transition-colors cursor-pointer"
+            aria-label="Expand entry"
+            aria-expanded={false}
+            title="Expand"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={`bg-bg-card border border-border rounded-xl shadow-[0_1px_2px_rgba(11,4,21,0.04)]`}
@@ -700,52 +777,72 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
         </div>
       </div>
 
-      {/* Footer: delete button or lock indicator (right) */}
-      {(isEditable || isSubmitted) && (
-        <div className="flex items-center px-4 pb-3 -mt-1">
-          {isEditable && (
-            <button
-              onClick={() => {
-                setActionError(null);
-                setEditMode("delete");
-              }}
-              className="ml-auto inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-danger transition-colors cursor-pointer"
-              aria-label="Delete entry"
+      {/* Footer: delete (left), collapse (right), lock indicator when submitted */}
+      <div className="flex items-center gap-3 px-4 pb-3 -mt-1">
+        {isEditable && (
+          <button
+            onClick={() => {
+              setActionError(null);
+              setEditMode("delete");
+            }}
+            className="inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-danger transition-colors cursor-pointer"
+            aria-label="Delete entry"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0"
             >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              <line x1="10" y1="11" x2="10" y2="17" />
+              <line x1="14" y1="11" x2="14" y2="17" />
+            </svg>
+            <span>Delete</span>
+          </button>
+        )}
+        {isSubmitted && (
+          <span className="text-[10px] text-text-muted/50 flex items-center gap-0.5">
+            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="shrink-0"
-              >
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                <line x1="10" y1="11" x2="10" y2="17" />
-                <line x1="14" y1="11" x2="14" y2="17" />
-              </svg>
-              <span>Delete</span>
-            </button>
-          )}
-          {isSubmitted && (
-            <span className="ml-auto text-[10px] text-text-muted/50 flex items-center gap-0.5">
-              <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2.5}
-                  d="M12 15v2m0 0v2m0-2h2m-2 0H10m-4-6V7a4 4 0 118 0v4m-8 0h12a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6a2 2 0 012-2z"
-                />
-              </svg>
-              Submitted — edit in AgileDay
-            </span>
-          )}
-        </div>
-      )}
+                strokeWidth={2.5}
+                d="M12 15v2m0 0v2m0-2h2m-2 0H10m-4-6V7a4 4 0 118 0v4m-8 0h12a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6a2 2 0 012-2z"
+              />
+            </svg>
+            Submitted — edit in AgileDay
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => setCollapsed(true)}
+          className="ml-auto inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-primary transition-colors cursor-pointer"
+          aria-label="Collapse entry"
+          aria-expanded={true}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="shrink-0"
+          >
+            <polyline points="18 15 12 9 6 15" />
+          </svg>
+          <span>Collapse</span>
+        </button>
+      </div>
 
       {/* Delete confirmation modal */}
       {editMode === "delete" && (
