@@ -68,11 +68,32 @@ export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) 
   );
 }
 
-const MENU_ITEMS: { page: SettingsPage; label: string }[] = [
-  { page: "flex", label: "Flex" },
-  { page: "menubar", label: "Menu bar" },
-  { page: "appearance", label: "Appearance" },
-  { page: "timer", label: "Timer" },
+/** Keep hints general — they describe the page, not the settings on it. */
+const MENU_ITEMS: { page: SettingsPage; label: string; hint: string; icon: string }[] = [
+  {
+    page: "flex",
+    label: "Flex",
+    hint: "Set up how your flex balance is tracked",
+    icon: "M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3",
+  },
+  {
+    page: "menubar",
+    label: "Menu bar",
+    hint: "Change how the app appears in the menu bar",
+    icon: "M4 6h16M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6z",
+  },
+  {
+    page: "appearance",
+    label: "Appearance",
+    hint: "Change how the app looks",
+    icon: "M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z",
+  },
+  {
+    page: "timer",
+    label: "Timer",
+    hint: "Change how the timer behaves",
+    icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
+  },
 ];
 
 function SettingsMenu({
@@ -96,7 +117,18 @@ function SettingsMenu({
               i > 0 ? "border-t border-border" : ""
             }`}
           >
-            <div className="min-w-0 flex-1 text-sm font-medium text-text">{item.label}</div>
+            <svg
+              className="w-5 h-5 shrink-0 text-text-muted"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={item.icon} />
+            </svg>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-text">{item.label}</div>
+              <div className="text-xs text-text-muted mt-0.5">{item.hint}</div>
+            </div>
             <svg
               className="w-4 h-4 shrink-0 text-text-muted"
               fill="none"
