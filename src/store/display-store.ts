@@ -51,7 +51,7 @@ export const DEFAULT_DISPLAY_PREFS: DisplayPrefs = {
   listAutoCollapse: "weeks",
   listGroupByWeek: true,
   listCollapsibleGroups: false,
-  listStickyHeadings: "both",
+  listStickyHeadings: "days",
 };
 
 export function clampInactivityMinutes(minutes: number): number {
