@@ -4,6 +4,7 @@ import { useTimer, formatTime, formatMinutes } from "../hooks/useTimer";
 import { ProjectPicker } from "./ProjectPicker";
 import { TaskPicker } from "./TaskPicker";
 import { Modal } from "./Modal";
+import { Collapsible } from "./Collapsible";
 import {
   parseDurationInput,
   formatDurationInput,
@@ -34,11 +35,13 @@ export function joinDescriptions(lines: string[]): string {
 interface ProjectCardProps {
   entry: TimeEntry;
   isToday: boolean;
+  /** Start collapsed, per the list's auto-collapse preference. */
+  autoCollapsed?: boolean;
 }
 
 type EditMode = "none" | "time" | "project" | "task" | "delete";
 
-export function ProjectCard({ entry, isToday }: ProjectCardProps) {
+export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCardProps) {
   const { state, dispatch } = useApp();
   const api = useApi();
   const {
@@ -70,6 +73,13 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
   const [descriptions, setDescriptions] = useState(() => splitDescriptions(entry.description));
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const editRef = useRef<HTMLSpanElement>(null);
+
+  // Collapsed cards keep the header (project, task, description count, time)
+  // and animate everything below it away. The auto-collapse preference sets the
+  // baseline; toggling the card overrides it until the preference changes.
+  const [collapseOverride, setCollapseOverride] = useState<boolean | null>(null);
+  const collapsed = collapseOverride ?? autoCollapsed;
+  const setCollapsed = setCollapseOverride;
 
   // Inline field editing (time / project / task / delete-confirm)
   const [editMode, setEditMode] = useState<EditMode>("none");
@@ -112,6 +122,30 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
       timeInputRef.current.select();
     }
   }, [editMode]);
+
+  // The stop button only exists on the expanded card, so a running card forces
+  // itself open. Otherwise a changed preference drops any manual override and
+  // the card falls back to the new baseline.
+  useEffect(() => {
+    setCollapseOverride(isThisRunning ? false : null);
+  }, [isThisRunning, autoCollapsed]);
+
+  // Transitions stay off for the first paint so nothing animates on mount.
+  const [animated, setAnimated] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setAnimated(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  const motion = animated
+    ? "transition-all duration-200 ease-out motion-reduce:transition-none"
+    : "";
+
+  // Collapsing closes any open inline editor, which would otherwise be hidden
+  // mid-edit inside the collapsed section.
+  const handleCollapse = useCallback(() => {
+    setEditMode("none");
+    setCollapsed(true);
+  }, []);
 
   // Re-render every second while running for elapsed time display
   const [, setTick] = useState(0);
@@ -405,6 +439,7 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
     const n = new Date();
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
   })();
+  const showTimerButton = isToday && !isSubmitted;
   const canQuickOpen = !isToday && !!entry.taskId;
   const alreadyTrackedToday = entry.taskId
     ? usedTaskIds(state.entries, "", entry.projectId, todayStr).has(entry.taskId)
@@ -444,6 +479,16 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
     startForCard,
   ]);
 
+  // What the collapsed header has to repeat from the hidden detail section: a
+  // failed or in-flight save, an action error, or the submitted lock.
+  const collapsedStatus: "unsaved" | "error" | "pending" | null = actionError
+    ? "error"
+    : entry.syncStatus === "unsaved"
+      ? "unsaved"
+      : entry.syncStatus === "pending"
+        ? "pending"
+        : null;
+
   // Dot color: green for active/external, purple for internal, intense for absence/idle
   const dotColor = (() => {
     const pt = entry.projectType ?? project?.projectType;
@@ -454,10 +499,33 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
 
   return (
     <div
-      className={`bg-bg-card border border-border rounded-xl shadow-[0_1px_2px_rgba(11,4,21,0.04)]`}
+      className={`relative bg-bg-card border border-border rounded-xl shadow-[0_1px_2px_rgba(11,4,21,0.04)]`}
     >
-      {/* Header */}
-      <div className="px-4 pt-[14px] pb-3">
+      {/* Submitted lock — the expanded card shows it in the footer, which is
+          folded away when collapsed, so mirror it in the bottom-right corner. */}
+      {isSubmitted && (
+        <span
+          className={`absolute bottom-[8px] right-3 flex items-center gap-0.5 text-[10px] text-text-muted/50 ${motion} ${
+            collapsed ? "opacity-100" : "opacity-0"
+          }`}
+          aria-hidden={!collapsed}
+        >
+          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2.5}
+              d="M12 15v2m0 0v2m0-2h2m-2 0H10m-4-6V7a4 4 0 118 0v4m-8 0h12a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6a2 2 0 012-2z"
+            />
+          </svg>
+          Submitted in AgileDay
+        </span>
+      )}
+      {/* Header — gains a bottom strip when collapsed on a submitted entry, so
+          the corner label below has room of its own. */}
+      <div
+        className={`px-4 pt-[14px] ${motion} ${collapsed && isSubmitted ? "pb-[26px]" : "pb-3"}`}
+      >
         {/* Row 1: project name, time, play/stop */}
         <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0">
@@ -515,47 +583,107 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
                 {displayTime}
               </span>
             )}
-            {isToday && !isSubmitted && (
-              <button
-                onClick={() => {
-                  if (isThisRunning) {
-                    void stop();
-                  } else {
-                    void startForCard(entry.projectId, entry.taskId!);
-                  }
-                }}
-                disabled={!entry.taskId && !isThisRunning}
-                className={`w-[36px] h-[36px] rounded-full flex items-center justify-center text-white transition-all active:scale-[0.94] disabled:opacity-40 disabled:cursor-not-allowed ${
-                  isThisRunning
-                    ? "bg-danger hover:bg-[#d8363c]"
-                    : "bg-primary hover:bg-primary-dark"
-                }`}
-                aria-label={isThisRunning ? "Stop timer" : "Start timer"}
-              >
-                {isThisRunning ? (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                    <rect x="6" y="6" width="12" height="12" rx="2.5" />
-                  </svg>
-                ) : (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            {/* Sync state and the submitted lock live in the collapsed section,
+                so a collapsed card would otherwise hide a failed save. Repeat
+                them here as a compact marker. */}
+            <span
+              aria-hidden={!collapsed}
+              className={`flex items-center overflow-hidden whitespace-nowrap ${motion} ${
+                collapsed && collapsedStatus ? "max-w-[70px] opacity-100" : "max-w-0 opacity-0"
+              }`}
+            >
+              {collapsedStatus === "unsaved" && (
+                <span className="text-[11px] font-semibold text-danger">Unsaved</span>
+              )}
+              {collapsedStatus === "error" && (
+                <span className="text-[11px] font-semibold text-danger">Error</span>
+              )}
+              {collapsedStatus === "pending" && (
+                <span className="text-[11px] font-medium text-text-muted">Saving…</span>
+              )}
+            </span>
+
+            {/* Button slot: the timer (or quick-open) button when expanded
+                cross-fades with the expand chevron when collapsed. Fixed size
+                so the header text never shifts as they swap. */}
+            <div
+              className={`relative h-[36px] shrink-0 overflow-hidden ${motion} ${
+                collapsed || showTimerButton || canQuickOpen ? "w-[36px]" : "w-0"
+              }`}
+            >
+              {showTimerButton && (
+                <button
+                  onClick={() => {
+                    if (isThisRunning) {
+                      void stop();
+                    } else {
+                      void startForCard(entry.projectId, entry.taskId!);
+                    }
+                  }}
+                  disabled={!entry.taskId && !isThisRunning}
+                  tabIndex={collapsed ? -1 : undefined}
+                  aria-hidden={collapsed}
+                  className={`absolute inset-0 rounded-full flex items-center justify-center text-white transition-all duration-200 active:scale-[0.94] disabled:opacity-40 disabled:cursor-not-allowed ${
+                    isThisRunning
+                      ? "bg-danger hover:bg-[#d8363c]"
+                      : "bg-primary hover:bg-primary-dark"
+                  } ${collapsed ? "opacity-0 scale-90 pointer-events-none" : "opacity-100"}`}
+                  aria-label={isThisRunning ? "Stop timer" : "Start timer"}
+                >
+                  {isThisRunning ? (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                      <rect x="6" y="6" width="12" height="12" rx="2.5" />
+                    </svg>
+                  ) : (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="6 4 20 12 6 20 6 4" />
+                    </svg>
+                  )}
+                </button>
+              )}
+              {canQuickOpen && (
+                <button
+                  onClick={handleQuickOpen}
+                  disabled={alreadyTrackedToday}
+                  tabIndex={collapsed ? -1 : undefined}
+                  aria-hidden={collapsed}
+                  title={alreadyTrackedToday ? "Already tracked today" : "Start today"}
+                  className={`absolute inset-0 rounded-full flex items-center justify-center transition-all duration-200 active:scale-[0.94] border-2 border-primary text-primary hover:bg-primary hover:text-white disabled:opacity-40 disabled:border-border disabled:text-text-subtle disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-text-subtle ${
+                    collapsed ? "opacity-0 scale-90 pointer-events-none" : "opacity-100"
+                  }`}
+                  aria-label="Start today"
+                >
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
                     <polygon points="6 4 20 12 6 20 6 4" />
                   </svg>
-                )}
-              </button>
-            )}
-            {canQuickOpen && (
+                </button>
+              )}
               <button
-                onClick={handleQuickOpen}
-                disabled={alreadyTrackedToday}
-                title={alreadyTrackedToday ? "Already tracked today" : "Start today"}
-                className="w-[36px] h-[36px] rounded-full flex items-center justify-center transition-all active:scale-[0.94] border-2 border-primary text-primary hover:bg-primary hover:text-white disabled:opacity-40 disabled:border-border disabled:text-text-subtle disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-text-subtle"
-                aria-label="Start today"
+                type="button"
+                onClick={() => setCollapsed(false)}
+                tabIndex={collapsed ? undefined : -1}
+                aria-hidden={!collapsed}
+                aria-label="Expand entry"
+                aria-expanded={false}
+                title="Expand"
+                className={`absolute inset-0 rounded-full flex items-center justify-center text-text-subtle hover:text-primary hover:bg-bg-edit transition-all duration-200 cursor-pointer ${
+                  collapsed ? "opacity-100" : "opacity-0 scale-90 pointer-events-none"
+                }`}
               >
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
-                  <polygon points="6 4 20 12 6 20 6 4" />
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="6 9 12 15 18 9" />
                 </svg>
               </button>
-            )}
+            </div>
           </div>
         </div>
 
@@ -599,117 +727,147 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
               <span className="truncate">{taskName ?? "Select task"}</span>
             </button>
           )}
-        </div>
-      </div>
-
-      {/* Empty description warning while running */}
-      {isThisRunning && descriptions.length === 0 && (
-        <div className="flex items-center gap-2 mx-4 mb-2 px-3 py-1.5 text-xs text-amber-700 bg-amber-50 rounded-lg">
-          <svg
-            className="w-3.5 h-3.5 shrink-0"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+          {/* Description count — collapsed only, so it grows in from zero
+              width rather than pushing the task name on every render. */}
+          <span
+            aria-hidden={!collapsed}
+            className={`flex items-center gap-1.5 shrink-0 overflow-hidden whitespace-nowrap text-text-subtle ${motion} ${
+              collapsed ? "max-w-[80px] opacity-100" : "max-w-0 opacity-0"
+            }`}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            />
-          </svg>
-          <span>No description — the customer sees this on the invoice</span>
-        </div>
-      )}
-
-      {/* Sync status indicators */}
-      {entry.syncStatus === "unsaved" && (
-        <div className="px-4 pb-2">
-          <span className="text-xs text-danger font-medium">Unsaved</span>
-        </div>
-      )}
-      {entry.syncStatus === "pending" && (
-        <div className="px-4 pb-2">
-          <span className="text-xs text-text-muted font-medium">Saving...</span>
-        </div>
-      )}
-
-      {/* Action error */}
-      {actionError && (
-        <div className="px-4 pb-2">
-          <span className="text-xs text-danger font-medium">{actionError}</span>
-        </div>
-      )}
-
-      {/* Description stack */}
-      <div className="px-4 pb-3">
-        <div className="border-l-2 border-border ml-1 pl-[14px] flex flex-col gap-[9px]">
-          {descriptions.map((desc, i) => (
-            <div key={i} className="flex gap-[9px] items-start text-sm text-text leading-[1.4]">
-              <span className="w-[5px] h-[5px] rounded-full bg-primary shrink-0 mt-[7px]" />
-              {isEditable ? (
-                <span
-                  ref={editingIndex === i ? editRef : undefined}
-                  contentEditable
-                  suppressContentEditableWarning
-                  className="desc-editable flex-1 outline-none rounded-[4px] focus:bg-bg-edit focus:ring-2 focus:ring-primary/25"
-                  data-placeholder="Describe what you worked on…"
-                  onFocus={() => setEditingIndex(i)}
-                  onBlur={(e) => handleBlur(i, e.currentTarget.textContent ?? "")}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      (e.target as HTMLElement).blur();
-                    }
-                  }}
-                >
-                  {desc}
-                </span>
-              ) : (
-                <span className="flex-1">{desc || "—"}</span>
-              )}
-            </div>
-          ))}
-
-          {/* Empty state placeholder */}
-          {descriptions.length === 0 && !isEditable && (
-            <div className="text-sm text-text-subtle">No description</div>
-          )}
-
-          {/* Add description button */}
-          {isEditable && (
-            <button
-              onClick={handleAddDescription}
-              className="inline-flex items-center gap-[6px] text-[13px] font-semibold text-text-subtle hover:text-primary transition-colors py-1 -ml-1"
-            >
+            <span>·</span>
+            <span className="inline-flex items-center gap-[3px] tabular-nums">
               <svg
-                width="14"
-                height="14"
+                width="11"
+                height="11"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="1.75"
+                strokeWidth="2"
                 strokeLinecap="round"
               >
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
+                <line x1="8" y1="6" x2="21" y2="6" />
+                <line x1="8" y1="12" x2="21" y2="12" />
+                <line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3" y1="6" x2="3.01" y2="6" />
+                <line x1="3" y1="12" x2="3.01" y2="12" />
+                <line x1="3" y1="18" x2="3.01" y2="18" />
               </svg>
-              add description
-            </button>
-          )}
+              {descriptions.length}
+            </span>
+          </span>
         </div>
       </div>
 
-      {/* Footer: delete button or lock indicator (right) */}
-      {(isEditable || isSubmitted) && (
-        <div className="flex items-center px-4 pb-3 -mt-1">
+      {/* Everything below the header collapses away. */}
+      <Collapsible collapsed={collapsed}>
+        {/* Empty description warning while running */}
+        {isThisRunning && descriptions.length === 0 && (
+          <div className="flex items-center gap-2 mx-4 mb-2 px-3 py-1.5 text-xs text-amber-700 bg-amber-50 rounded-lg">
+            <svg
+              className="w-3.5 h-3.5 shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <span>No description — the customer sees this on the invoice</span>
+          </div>
+        )}
+
+        {/* Sync status indicators */}
+        {entry.syncStatus === "unsaved" && (
+          <div className="px-4 pb-2">
+            <span className="text-xs text-danger font-medium">Unsaved</span>
+          </div>
+        )}
+        {entry.syncStatus === "pending" && (
+          <div className="px-4 pb-2">
+            <span className="text-xs text-text-muted font-medium">Saving...</span>
+          </div>
+        )}
+
+        {/* Action error */}
+        {actionError && (
+          <div className="px-4 pb-2">
+            <span className="text-xs text-danger font-medium">{actionError}</span>
+          </div>
+        )}
+
+        {/* Description stack */}
+        <div className="px-4 pb-3">
+          <div className="border-l-2 border-border ml-1 pl-[14px] flex flex-col gap-[9px]">
+            {descriptions.map((desc, i) => (
+              <div key={i} className="flex gap-[9px] items-start text-sm text-text leading-[1.4]">
+                <span className="w-[5px] h-[5px] rounded-full bg-primary shrink-0 mt-[7px]" />
+                {isEditable ? (
+                  <span
+                    ref={editingIndex === i ? editRef : undefined}
+                    contentEditable
+                    suppressContentEditableWarning
+                    className="desc-editable flex-1 outline-none rounded-[4px] focus:bg-bg-edit focus:ring-2 focus:ring-primary/25"
+                    data-placeholder="Describe what you worked on…"
+                    onFocus={() => setEditingIndex(i)}
+                    onBlur={(e) => handleBlur(i, e.currentTarget.textContent ?? "")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        (e.target as HTMLElement).blur();
+                      }
+                    }}
+                  >
+                    {desc}
+                  </span>
+                ) : (
+                  <span className="flex-1">{desc || "—"}</span>
+                )}
+              </div>
+            ))}
+
+            {/* Empty state placeholder */}
+            {descriptions.length === 0 && !isEditable && (
+              <div className="text-sm text-text-subtle">No description</div>
+            )}
+
+            {/* Add description button */}
+            {isEditable && (
+              <button
+                onClick={handleAddDescription}
+                className="inline-flex items-center gap-[6px] text-[13px] font-semibold text-text-subtle hover:text-primary transition-colors py-1 -ml-1"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                >
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                add description
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Footer: delete (left), collapse (right), lock indicator when submitted */}
+        <div className="flex items-center gap-3 px-4 pb-3 -mt-1">
           {isEditable && (
             <button
               onClick={() => {
                 setActionError(null);
                 setEditMode("delete");
               }}
-              className="ml-auto inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-danger transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-danger transition-colors cursor-pointer"
               aria-label="Delete entry"
             >
               <svg
@@ -732,7 +890,7 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
             </button>
           )}
           {isSubmitted && (
-            <span className="ml-auto text-[10px] text-text-muted/50 flex items-center gap-0.5">
+            <span className="text-[10px] text-text-muted/50 flex items-center gap-0.5">
               <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
                   strokeLinecap="round"
@@ -744,8 +902,30 @@ export function ProjectCard({ entry, isToday }: ProjectCardProps) {
               Submitted — edit in AgileDay
             </span>
           )}
+          <button
+            type="button"
+            onClick={handleCollapse}
+            className="ml-auto inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-primary transition-colors cursor-pointer"
+            aria-label="Collapse entry"
+            aria-expanded={true}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0"
+            >
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+            <span>Collapse</span>
+          </button>
         </div>
-      )}
+      </Collapsible>
 
       {/* Delete confirmation modal */}
       {editMode === "delete" && (

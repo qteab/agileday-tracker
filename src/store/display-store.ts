@@ -5,6 +5,22 @@ export type MenuBarMode = "off" | "compact" | "full";
 /** "system" follows the macOS appearance via prefers-color-scheme. */
 export type ThemeMode = "system" | "light" | "dark";
 
+/**
+ * Which entry cards in the day list start collapsed:
+ * - "off":   nothing is auto-collapsed
+ * - "days":  everything before today
+ * - "weeks": everything before the current week (Monday)
+ */
+export type ListAutoCollapse = "off" | "days" | "weeks";
+
+/**
+ * Which day-list headings stay pinned to the top while scrolling:
+ * - "off":  neither
+ * - "days": the day heading only
+ * - "both": the week heading, with the day heading pinned below it
+ */
+export type ListStickyHeadings = "off" | "days" | "both";
+
 export const INACTIVITY_MIN_MINUTES = 1;
 export const INACTIVITY_MAX_MINUTES = 120;
 
@@ -16,6 +32,14 @@ export interface DisplayPrefs {
   /** Warn after this many idle minutes while a timer runs. Off by default. */
   inactivityEnabled: boolean;
   inactivityMinutes: number;
+  /** Which day-list cards start collapsed. */
+  listAutoCollapse: ListAutoCollapse;
+  /** Render a week heading in the day list whenever a new week starts. */
+  listGroupByWeek: boolean;
+  /** Let a whole day or week heading fold its entries away. */
+  listCollapsibleGroups: boolean;
+  /** Which day-list headings stick to the top while scrolling. */
+  listStickyHeadings: ListStickyHeadings;
 }
 
 export const DEFAULT_DISPLAY_PREFS: DisplayPrefs = {
@@ -24,6 +48,10 @@ export const DEFAULT_DISPLAY_PREFS: DisplayPrefs = {
   theme: "system",
   inactivityEnabled: false,
   inactivityMinutes: 10,
+  listAutoCollapse: "weeks",
+  listGroupByWeek: true,
+  listCollapsibleGroups: false,
+  listStickyHeadings: "days",
 };
 
 export function clampInactivityMinutes(minutes: number): number {
@@ -50,6 +78,10 @@ interface LegacyDisplayPrefs {
   theme?: ThemeMode;
   inactivityEnabled?: boolean;
   inactivityMinutes?: number;
+  listAutoCollapse?: ListAutoCollapse;
+  listGroupByWeek?: boolean;
+  listCollapsibleGroups?: boolean;
+  listStickyHeadings?: ListStickyHeadings;
 }
 
 export async function loadDisplayPrefs(): Promise<DisplayPrefs> {
@@ -69,7 +101,22 @@ export async function loadDisplayPrefs(): Promise<DisplayPrefs> {
         : "off"
       : DEFAULT_DISPLAY_PREFS.menuBarMode;
   const showTrayIcon = saved.showTrayIcon ?? DEFAULT_DISPLAY_PREFS.showTrayIcon;
-  return { menuBarMode, showTrayIcon, theme, inactivityEnabled, inactivityMinutes };
+  const listAutoCollapse = saved.listAutoCollapse ?? DEFAULT_DISPLAY_PREFS.listAutoCollapse;
+  const listGroupByWeek = saved.listGroupByWeek ?? DEFAULT_DISPLAY_PREFS.listGroupByWeek;
+  const listCollapsibleGroups =
+    saved.listCollapsibleGroups ?? DEFAULT_DISPLAY_PREFS.listCollapsibleGroups;
+  const listStickyHeadings = saved.listStickyHeadings ?? DEFAULT_DISPLAY_PREFS.listStickyHeadings;
+  return {
+    menuBarMode,
+    showTrayIcon,
+    theme,
+    inactivityEnabled,
+    inactivityMinutes,
+    listAutoCollapse,
+    listGroupByWeek,
+    listCollapsibleGroups,
+    listStickyHeadings,
+  };
 }
 
 export async function saveDisplayPrefs(prefs: DisplayPrefs): Promise<void> {
