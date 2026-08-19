@@ -36,8 +36,8 @@ export const DEFAULT_DISPLAY_PREFS: DisplayPrefs = {
   theme: "system",
   inactivityEnabled: false,
   inactivityMinutes: 10,
-  listAutoCollapse: "off",
-  listGroupByWeek: false,
+  listAutoCollapse: "weeks",
+  listGroupByWeek: true,
 };
 
 export function clampInactivityMinutes(minutes: number): number {
