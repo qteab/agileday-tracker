@@ -45,6 +45,12 @@ export function TaskPicker({
       }
       dispatch({ type: "MERGE_TASK_BILLABLE", payload: billable });
       dispatch({ type: "MERGE_TASK_NAMES", payload: names });
+      if (tasks.length > 0) {
+        dispatch({
+          type: "MERGE_PROJECT_BILLABLE",
+          payload: { [projectId]: tasks.some((t) => t.billable) },
+        });
+      }
     });
   }, [projectId, api, dispatch]);
 
@@ -59,7 +65,9 @@ export function TaskPicker({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  if (!projectId || state.tasks.length === 0) return null;
+  const activeTasks = state.tasks.filter((t) => t.active);
+
+  if (!projectId || activeTasks.length === 0) return null;
 
   const rootClass = variant === "chip" ? "relative min-w-0 flex-1" : "relative min-w-0 w-full";
   const buttonClass =
@@ -114,8 +122,7 @@ export function TaskPicker({
             width: ref.current?.getBoundingClientRect().width,
           }}
         >
-          {state.tasks
-            .filter((t) => t.active)
+          {activeTasks
             .filter((t) => !excludeIds?.has(t.id) || t.id === selectedId)
             .map((task) => (
               <button

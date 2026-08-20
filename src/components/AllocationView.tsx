@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useApp, useApi } from "../store/context";
 import type { Allocation } from "../api/types";
 import { fmtDate } from "../utils/week";
+import { resolveEntryBillable } from "../utils/billable";
 
 type Period = "week" | "month";
 
@@ -303,13 +304,13 @@ export function AllocationView() {
     let nonBillable = 0;
     for (const e of state.entries) {
       if (e.date < range.start || e.date > range.end) continue;
-      // Bucket as billable strictly when the task is known billable; tasks
-      // that aren't loaded yet (or entries without a taskId) fall into
-      // non-billable until task data arrives. This keeps segment widths
-      // summing to the displayed total.
-      const isBillable = e.taskId ? state.taskBillableById[e.taskId] === true : false;
-      if (isBillable) billable += e.minutes;
-      else nonBillable += e.minutes;
+      // Entries whose billability can't be resolved yet (task list still
+      // loading) are left out of both buckets — counting them as non-billable
+      // would overstate non-billable time. They show as empty track until the
+      // task data arrives.
+      const isBillable = resolveEntryBillable(e, state.taskBillableById, state.projectBillableById);
+      if (isBillable === true) billable += e.minutes;
+      else if (isBillable === false) nonBillable += e.minutes;
     }
     const segs: BarSegment[] = [];
     if (billable > 0)
@@ -322,12 +323,15 @@ export function AllocationView() {
         minutes: nonBillable,
       });
     return segs;
-  }, [state.entries, state.taskBillableById, range.start, range.end]);
+  }, [state.entries, state.taskBillableById, state.projectBillableById, range.start, range.end]);
 
   const billableMinutes = billableSegments.find((s) => s.key === "billable")?.minutes ?? 0;
   const nonBillableMinutes = billableSegments.find((s) => s.key === "non-billable")?.minutes ?? 0;
-  const billablePct = totalTracked > 0 ? (billableMinutes / totalTracked) * 100 : 0;
-  const nonBillablePct = totalTracked > 0 ? (nonBillableMinutes / totalTracked) * 100 : 0;
+  // Percentages are of the classified time, so they still read as a split while
+  // some entries are unresolved.
+  const classifiedMinutes = billableMinutes + nonBillableMinutes;
+  const billablePct = classifiedMinutes > 0 ? (billableMinutes / classifiedMinutes) * 100 : 0;
+  const nonBillablePct = classifiedMinutes > 0 ? (nonBillableMinutes / classifiedMinutes) * 100 : 0;
 
   // Per-project rows for the allocation list. Multiple openings on the same
   // project (common for vacation) are merged into a single row by summing

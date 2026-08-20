@@ -215,23 +215,21 @@ describe("getTasks", () => {
 
     const [url] = mockFetch.mock.calls[0];
     expect(url).toBe("https://qvik.agileday.io/api/v1/project/id/p1/task");
-    // Only active tasks returned
-    expect(tasks).toHaveLength(1);
+    expect(tasks).toHaveLength(2);
     expect(tasks[0].name).toBe("Dev");
   });
 
-  it("filters out inactive tasks", async () => {
+  it("keeps inactive tasks so already-logged entries can resolve them", async () => {
     mockFetch.mockResolvedValueOnce(
       jsonResponse([
         { id: "t1", name: "Active", projectId: "p1", billable: true, active: true },
-        { id: "t2", name: "Inactive", projectId: "p1", billable: false, active: false },
-        { id: "t3", name: "Also Active", projectId: "p1", billable: true, active: true },
+        { id: "t2", name: "Inactive", projectId: "p1", billable: true, active: false },
       ])
     );
 
     const tasks = await provider.getTasks("p1");
-    expect(tasks).toHaveLength(2);
-    expect(tasks.every((t) => t.active)).toBe(true);
+    expect(tasks.map((t) => t.id)).toEqual(["t1", "t2"]);
+    expect(tasks.find((t) => t.id === "t2")).toMatchObject({ active: false, billable: true });
   });
 });
 
