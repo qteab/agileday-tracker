@@ -27,6 +27,12 @@ export interface AppState {
   tasks: Task[];
   /** Per-task billable flag, used to render billable indicators on entries. */
   taskBillableById: Record<string, boolean>;
+  /**
+   * Per-project billable fallback: true when the project has at least one
+   * billable task. Used for entries whose task can't be resolved (e.g. entries
+   * derived from the timesheet summary, which carries no task id).
+   */
+  projectBillableById: Record<string, boolean>;
   /** Per-task display name, cached across project switches so the menu bar can show the task while paused. */
   taskNamesById: Record<string, string>;
   entries: TimeEntry[];
@@ -49,6 +55,7 @@ export const initialState: AppState = {
   projectOpeningMap: {},
   tasks: [],
   taskBillableById: {},
+  projectBillableById: {},
   taskNamesById: {},
   entries: [],
   allocations: [],
@@ -75,6 +82,7 @@ export type AppAction =
   | { type: "SET_PROJECT_OPENING_MAP"; payload: Record<string, string> }
   | { type: "SET_TASKS"; payload: Task[] }
   | { type: "MERGE_TASK_BILLABLE"; payload: Record<string, boolean> }
+  | { type: "MERGE_PROJECT_BILLABLE"; payload: Record<string, boolean> }
   | { type: "MERGE_TASK_NAMES"; payload: Record<string, string> }
   | { type: "SET_ENTRIES"; payload: TimeEntry[] }
   | { type: "SET_ALLOCATIONS"; payload: { allocations: Allocation[]; fetchedAt: number } }
@@ -109,6 +117,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         taskBillableById: { ...state.taskBillableById, ...action.payload },
+      };
+    case "MERGE_PROJECT_BILLABLE":
+      return {
+        ...state,
+        projectBillableById: { ...state.projectBillableById, ...action.payload },
       };
     case "MERGE_TASK_NAMES":
       return {

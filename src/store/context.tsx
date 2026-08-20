@@ -651,17 +651,23 @@ async function hydrateTaskMetadataForEntries(
 ) {
   const projectIds = [...new Set(entries.map((entry) => entry.projectId))];
   const taskLists = await Promise.all(
-    projectIds.map((projectId) => api.getTasks(projectId).catch(() => []))
+    projectIds.map((projectId) => api.getTasks(projectId).catch(() => null))
   );
   if (isCancelled()) return;
   const billable: Record<string, boolean> = {};
   const names: Record<string, string> = {};
-  for (const tasks of taskLists) {
+  const projectBillable: Record<string, boolean> = {};
+  taskLists.forEach((tasks, index) => {
+    // A null list means the fetch failed — leave that project unresolved rather
+    // than recording it as having no billable tasks.
+    if (!tasks || tasks.length === 0) return;
+    projectBillable[projectIds[index]] = tasks.some((task) => task.billable);
     for (const task of tasks) {
       billable[task.id] = task.billable;
       names[task.id] = task.name;
     }
-  }
+  });
   dispatch({ type: "MERGE_TASK_BILLABLE", payload: billable });
+  dispatch({ type: "MERGE_PROJECT_BILLABLE", payload: projectBillable });
   dispatch({ type: "MERGE_TASK_NAMES", payload: names });
 }

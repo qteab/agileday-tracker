@@ -233,15 +233,16 @@ export function createAgileDayProvider(
         }>
       >(`/v1/project/id/${projectId}/task`);
 
-      return tasks
-        .filter((t) => t.active)
-        .map((t) => ({
-          id: t.id,
-          projectId: t.projectId,
-          name: t.name,
-          billable: t.billable,
-          active: t.active,
-        }));
+      // Inactive tasks are kept: entries already logged against a task that was
+      // later deactivated still need its billable flag. Pickers filter on
+      // `active` so deactivated tasks can't be selected for new time.
+      return tasks.map((t) => ({
+        id: t.id,
+        projectId: t.projectId,
+        name: t.name,
+        billable: t.billable,
+        active: t.active,
+      }));
     },
 
     async getTimeEntries(
