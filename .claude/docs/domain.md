@@ -7,6 +7,8 @@
 | **Employee** | A user in AgileDay, identified by ID. Has name and email. |
 | **Project** | A billable or internal project. Has name, customer, color, type (INTERNAL/EXTERNAL/ABSENCE/IDLE). |
 | **Task** | A line item within a project. Has billable flag and active status. Required for time entries. |
+| **Task template** | A tenant-level task with `projectId: null`. Project-owned tasks descend from one via `parentTaskId`. Not loggable itself unless it is also a global default. |
+| **Global default task** | A task template with `defaultTemplate: true`. Offered on *every* project, labelled "(global default)", and the only way to log time against the ~15% of projects that own no tasks. Note `defaultTemplate: true` also appears on project-owned tasks — a global default is specifically `projectId === null && defaultTemplate === true`. |
 | **Time Entry** | A logged block of time: project + task + date + minutes + description. Has status lifecycle. |
 | **Opening** | An allocation of an employee to a project. Contains percentage, hours, and date range. |
 | **Allocation** | The percentage of time an employee is expected to spend on a project, with periods of varying percentages. |

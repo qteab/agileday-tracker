@@ -44,6 +44,13 @@ src/
 
 Provider is created in `context.tsx` based on auth state. If authenticated, `createAgileDayProvider()` is used. Otherwise `null` (login screen shown).
 
+`global-tasks.ts` sits alongside them as a helper rather than a provider:
+`createGlobalDefaultTaskLoader` discovers the tenant's "(global default)" tasks
+and is memoised **per provider instance**, so the page-the-whole-catalogue cost
+is paid once per session and only on first use. It resolves to `[]` on any
+failure, which is what keeps `getTasks` degrading to the project's own tasks
+instead of breaking when an undocumented endpoint changes.
+
 ## State Management
 
 Uses React Context + `useReducer` (no external state library).

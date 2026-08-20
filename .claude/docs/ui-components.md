@@ -25,9 +25,29 @@ Settings and Finalize are triggered by tray menu events or header buttons.
 | **Fab** | `Fab.tsx` | Floating + button (bottom-right). Opens a centered `Modal` with ProjectPicker + TaskPicker to create a new Today entry and auto-start the timer. The task picker hides tasks already tracked today for the selected project (one entry per project+task+date). Locally-created entries get a `local-` id prefix until first synced. |
 | **entry-edit** (helpers) | `entry-edit.ts` | Pure helpers for card editing: `parseDurationInput`/`formatDurationInput` (duration ⇄ minutes), `computeRunningTimeEdit` (running-time edit math), `isLocalOnlyEntry` (`local-` id prefix check), `usedTaskIds` (task ids already used for a project+date, used to filter the picker). Unit-tested in `entry-edit.test.ts`. |
 | **ProjectPicker** | `ProjectPicker.tsx` | Dropdown for selecting a project. Three groups: "My projects" (allocated, non-absence — plus, when `usageDate` is set, any non-absence project already tracked that day, and the currently-selected project), "Other projects" (shown when searching), and "Absence" (always visible, all `projectType: "ABSENCE"` projects regardless of allocation). Search bar searches all active projects; absence matches stay in the Absence group. The optional `usageDate` prop surfaces that day's tracked projects so a card's own (possibly non-allocated) project is always pickable. |
-| **TaskPicker** | `TaskPicker.tsx` | Dropdown filtered by selected project. Shows billable indicator. Optional `excludeIds` set hides tasks (used inline to hide tasks already logged for the same project+date, preventing duplicate entries). |
+| **TaskPicker** | `TaskPicker.tsx` | Dropdown filtered by selected project. Shows billable indicator, and a muted "(global default)" hint on tenant-level tasks. Optional `excludeIds` set hides tasks (used inline to hide tasks already logged for the same project+date, preventing duplicate entries). Renders a disabled "No tasks available" / "Couldn't load tasks" notice instead of vanishing — see below. |
 | **BillableIndicator** | `BillableIndicator.tsx` | 22px square display-only indicator showing if a task is billable (accent $ when billable, grey when not). |
 | **Modal** | `Modal.tsx` | Generic centered modal dialog over a slightly blurred backdrop (`bg-black/20 backdrop-blur-[2px]`). Closes on backdrop click or Escape via `onClose`. Owns the layout so all modals look alike: `title` (bold), optional `subtitle`, optional custom `children`, and `actions` — full-width buttons with `primary`/`secondary`/`danger` variants, `disabled` and `autoFocus` flags. Used for the delete confirmation in ProjectCard and the new-entry dialog in Fab. |
+
+#### TaskPicker states
+
+The picker used to `return null` whenever its task list was empty, which made
+three different situations look identical: no project selected, a project with no
+tasks, and a failed fetch. Combined with the FAB's `disabled={!projectId || !taskId}`
+gate, the 75 projects that own no tasks showed no picker and no explanation — the
+timer simply could not start and nothing said why.
+
+`describeTaskPickerState` (`src/utils/task-picker.ts`) now decides what to show,
+as a pure function so the states are unit-testable without a DOM:
+
+| State | When | Renders |
+|---|---|---|
+| `hidden` | no project selected, or the fetch is still in flight | nothing (loading stays hidden to avoid flashing an empty state) |
+| `notice` | task list empty → "No tasks available"; fetch rejected → "Couldn't load tasks" | a disabled, non-interactive control carrying the label |
+| `ready` | at least one active task | the dropdown; rows whose task is a global default get a muted "(global default)" hint |
+
+The error check comes *before* the task list, so a stale list left over from the
+previously selected project cannot mask a failed fetch.
 
 ### Views
 

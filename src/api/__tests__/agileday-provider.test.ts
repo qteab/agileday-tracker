@@ -233,6 +233,181 @@ describe("getTasks", () => {
   });
 });
 
+// --- Global default tasks: 75 of ~495 active projects own no tasks, so the
+// picker has to offer the tenant-level "(global default)" the way AgileDay's
+// own web UI does. See specs/fix-missing-global-default-tasks/spec.md ---
+
+describe("getTasks + global default tasks", () => {
+  const GLOBAL_DEV = {
+    id: "global-dev",
+    name: "Development",
+    projectId: null,
+    active: false, // the one real global default really is inactive
+    billable: true,
+    defaultTemplate: true,
+  };
+
+  /** Route by URL — getTasks fires the project read and /v2/task concurrently. */
+  function routeFetch(options: {
+    projectTasks?: unknown;
+    projectTasksStatus?: number;
+    globalPage?: unknown;
+    globalFails?: boolean;
+  }) {
+    mockFetch.mockImplementation((url: string) => {
+      if (url.includes("/v2/task")) {
+        if (options.globalFails) return Promise.resolve(errorResponse(500, "boom"));
+        return Promise.resolve(
+          jsonResponse(
+            options.globalPage ?? {
+              data: [GLOBAL_DEV],
+              pagination: { page: 1, pageSize: 200, totalItems: 1, totalPages: 1 },
+            }
+          )
+        );
+      }
+      if (url.includes("/task")) {
+        return Promise.resolve(
+          options.projectTasksStatus
+            ? errorResponse(options.projectTasksStatus)
+            : jsonResponse(options.projectTasks ?? [])
+        );
+      }
+      return Promise.resolve(jsonResponse([]));
+    });
+  }
+
+  it("offers the global default when the project owns no tasks", async () => {
+    routeFetch({ projectTasks: [] });
+
+    const tasks = await provider.getTasks("p1");
+
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({
+      id: "global-dev",
+      name: "Development",
+      defaultTemplate: true,
+      billable: true,
+    });
+  });
+
+  it("rewrites the global default's projectId to the requested project", async () => {
+    routeFetch({ projectTasks: [] });
+
+    const [task] = await provider.getTasks("p1");
+
+    // Task.projectId is a non-null string; globals arrive with none of their own.
+    expect(task.projectId).toBe("p1");
+  });
+
+  it("keeps a global default whose active flag is false", async () => {
+    routeFetch({ projectTasks: [] });
+
+    const [task] = await provider.getTasks("p1");
+
+    expect(task.active).toBe(true);
+  });
+
+  it("appends globals after the project's own tasks", async () => {
+    routeFetch({
+      projectTasks: [
+        { id: "t1", name: "Own A", projectId: "p1", billable: true, active: true },
+        { id: "t2", name: "Own B", projectId: "p1", billable: false, active: true },
+      ],
+    });
+
+    const tasks = await provider.getTasks("p1");
+
+    expect(tasks.map((t) => t.id)).toEqual(["t1", "t2", "global-dev"]);
+    expect(tasks.filter((t) => t.defaultTemplate)).toHaveLength(1);
+  });
+
+  it("keeps the project's own inactive tasks, leaving the active filter to the picker", async () => {
+    // Entries already logged against a task that was later deactivated still
+    // need its billable flag, so getTasks returns inactive tasks and the picker
+    // filters them (see describeTaskPickerState).
+    routeFetch({
+      projectTasks: [
+        { id: "t1", name: "Own", projectId: "p1", billable: true, active: true },
+        { id: "t2", name: "Archived", projectId: "p1", billable: true, active: false },
+      ],
+    });
+
+    const tasks = await provider.getTasks("p1");
+
+    expect(tasks.map((t) => t.id)).toEqual(["t1", "t2", "global-dev"]);
+    expect(tasks.find((t) => t.id === "t2")?.active).toBe(false);
+  });
+
+  it("ignores defaultTemplate rows that belong to a project", async () => {
+    // 314 such rows exist in the real tenant — they are per-project instances,
+    // not global defaults.
+    routeFetch({
+      projectTasks: [],
+      globalPage: {
+        data: [
+          { ...GLOBAL_DEV },
+          {
+            id: "other-project-default",
+            name: "Backend Development",
+            projectId: "p-other",
+            active: true,
+            billable: true,
+            defaultTemplate: true,
+          },
+        ],
+        pagination: { page: 1, pageSize: 200, totalItems: 2, totalPages: 1 },
+      },
+    });
+
+    const tasks = await provider.getTasks("p1");
+
+    expect(tasks.map((t) => t.id)).toEqual(["global-dev"]);
+  });
+
+  it("does not duplicate a task the project already owns", async () => {
+    routeFetch({
+      projectTasks: [
+        { id: "global-dev", name: "Development", projectId: "p1", billable: true, active: true },
+      ],
+    });
+
+    const tasks = await provider.getTasks("p1");
+
+    expect(tasks).toHaveLength(1);
+    // The project's own copy wins — it carries the real project scoping.
+    expect(tasks[0].defaultTemplate).toBeUndefined();
+  });
+
+  it("returns the project's own tasks unaffected when /v2/task fails", async () => {
+    routeFetch({
+      projectTasks: [{ id: "t1", name: "Own", projectId: "p1", billable: true, active: true }],
+      globalFails: true,
+    });
+
+    const tasks = await provider.getTasks("p1");
+
+    expect(tasks.map((t) => t.id)).toEqual(["t1"]);
+  });
+
+  it("discovers the global catalogue only once across many getTasks calls", async () => {
+    routeFetch({ projectTasks: [] });
+
+    await provider.getTasks("p1");
+    await provider.getTasks("p2");
+    await provider.getTasks("p3");
+
+    const globalCalls = mockFetch.mock.calls.filter((c) => (c[0] as string).includes("/v2/task"));
+    expect(globalCalls).toHaveLength(1);
+  });
+
+  it("still propagates a failure of the project's own task read", async () => {
+    routeFetch({ projectTasksStatus: 500 });
+
+    await expect(provider.getTasks("p1")).rejects.toThrow();
+  });
+});
+
 describe("getTimeEntries", () => {
   it("fetches from the date-range endpoint and timesheets summary", async () => {
     // First call: date-range read (detailed entries with descriptions)

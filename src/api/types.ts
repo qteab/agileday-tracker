@@ -14,6 +14,12 @@ export interface Task {
   name: string;
   billable: boolean;
   active: boolean;
+  /**
+   * True for AgileDay's tenant-level "(global default)" task — a catalogue row
+   * with no project of its own that every project may log against. Absent on
+   * ordinary project-owned tasks.
+   */
+  defaultTemplate?: boolean;
 }
 
 export type TimeEntryStatus = "NEW" | "SAVED" | "CHANGE_REQUESTED" | "SUBMITTED" | "APPROVED";

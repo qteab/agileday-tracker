@@ -4,6 +4,7 @@ import {
   MOCK_PROJECTS,
   MOCK_ABSENCE_PROJECTS,
   MOCK_TASKS,
+  MOCK_GLOBAL_DEFAULT_TASKS,
   MOCK_EMPLOYEE,
   type EntryStore,
 } from "../mock-core";
@@ -138,6 +139,47 @@ describe("getTasks", () => {
   it("returns empty array for unknown project", async () => {
     const tasks = await provider.getTasks("nonexistent");
     expect(tasks).toEqual([]);
+  });
+
+  describe("in a tenant that has global default tasks", () => {
+    let withGlobals: ApiProvider;
+
+    beforeEach(() => {
+      withGlobals = createMockProvider(
+        createInMemoryStore(),
+        MOCK_PROJECTS,
+        // p9 owns no tasks — the case that makes 75 real projects untrackable.
+        { ...MOCK_TASKS, p9: [] },
+        MOCK_EMPLOYEE,
+        undefined,
+        undefined,
+        MOCK_GLOBAL_DEFAULT_TASKS
+      );
+    });
+
+    it("offers the global default on a project that owns no tasks", async () => {
+      const tasks = await withGlobals.getTasks("p9");
+
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0]).toMatchObject({
+        id: "global-dev",
+        projectId: "p9",
+        defaultTemplate: true,
+      });
+    });
+
+    it("appends the global default after a project's own tasks", async () => {
+      const tasks = await withGlobals.getTasks("p1");
+
+      expect(tasks.map((t) => t.id)).toEqual(["t1", "t2", "t3", "global-dev"]);
+      expect(tasks.every((t) => t.projectId === "p1")).toBe(true);
+    });
+
+    it("marks only the global default with defaultTemplate", async () => {
+      const tasks = await withGlobals.getTasks("p1");
+
+      expect(tasks.filter((t) => t.defaultTemplate).map((t) => t.id)).toEqual(["global-dev"]);
+    });
   });
 
   it("every task has required fields", async () => {
