@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useApp, useApi } from "../store/context";
 import { BillableIndicator } from "./BillableIndicator";
+import { describeTaskPickerState, type TaskLoadStatus } from "../utils/task-picker";
 
 interface TaskPickerProps {
   projectId: string | null;
@@ -24,6 +25,7 @@ export function TaskPicker({
   const { state, dispatch } = useApp();
   const api = useApi();
   const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState<TaskLoadStatus>("ready");
   const ref = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -32,26 +34,45 @@ export function TaskPicker({
 
   useEffect(() => {
     if (!projectId) {
+      setStatus("ready");
       dispatch({ type: "SET_TASKS", payload: [] });
       return;
     }
-    api.getTasks(projectId).then((tasks) => {
-      dispatch({ type: "SET_TASKS", payload: tasks });
-      const billable: Record<string, boolean> = {};
-      const names: Record<string, string> = {};
-      for (const t of tasks) {
-        billable[t.id] = t.billable;
-        names[t.id] = t.name;
-      }
-      dispatch({ type: "MERGE_TASK_BILLABLE", payload: billable });
-      dispatch({ type: "MERGE_TASK_NAMES", payload: names });
-      if (tasks.length > 0) {
-        dispatch({
-          type: "MERGE_PROJECT_BILLABLE",
-          payload: { [projectId]: tasks.some((t) => t.billable) },
-        });
-      }
-    });
+    let cancelled = false;
+    setStatus("loading");
+    api
+      .getTasks(projectId)
+      .then((tasks) => {
+        if (cancelled) return;
+        setStatus("ready");
+        dispatch({ type: "SET_TASKS", payload: tasks });
+        const billable: Record<string, boolean> = {};
+        const names: Record<string, string> = {};
+        for (const t of tasks) {
+          billable[t.id] = t.billable;
+          names[t.id] = t.name;
+        }
+        dispatch({ type: "MERGE_TASK_BILLABLE", payload: billable });
+        dispatch({ type: "MERGE_TASK_NAMES", payload: names });
+        // Derived from the project's own tasks only. The tenant-wide global
+        // default is billable and is appended to every project, so counting it
+        // here would mark every project billable.
+        const ownTasks = tasks.filter((t) => !t.defaultTemplate);
+        if (ownTasks.length > 0) {
+          dispatch({
+            type: "MERGE_PROJECT_BILLABLE",
+            payload: { [projectId]: ownTasks.some((t) => t.billable) },
+          });
+        }
+      })
+      .catch(() => {
+        // Surfaced in the picker rather than swallowed — an unreachable task
+        // list used to look identical to a project with no tasks.
+        if (!cancelled) setStatus("error");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [projectId, api, dispatch]);
 
   useEffect(() => {
@@ -65,15 +86,44 @@ export function TaskPicker({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const activeTasks = state.tasks.filter((t) => t.active);
+  const pickerState = describeTaskPickerState({ projectId, tasks: state.tasks, status });
 
-  if (!projectId || activeTasks.length === 0) return null;
+  if (pickerState.kind === "hidden") return null;
 
   const rootClass = variant === "chip" ? "relative min-w-0 flex-1" : "relative min-w-0 w-full";
-  const buttonClass =
-    variant === "chip"
-      ? "flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-sm rounded-md bg-bg-card border border-divider hover:border-border cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
-      : "flex w-full items-center justify-between gap-2 px-3 py-2 text-sm rounded-lg bg-bg-card border border-divider hover:border-border cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20";
+  const sizingClass = variant === "chip" ? "px-2.5 py-1.5 rounded-md" : "px-3 py-2 rounded-lg";
+  const buttonClass = `flex w-full items-center justify-between gap-2 ${sizingClass} text-sm bg-bg-card border border-divider hover:border-border cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20`;
+
+  const clipboardIcon = (
+    <svg
+      className="w-3.5 h-3.5 text-text-muted shrink-0"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+      />
+    </svg>
+  );
+
+  // A project the user cannot track must say why instead of rendering nothing.
+  if (pickerState.kind === "notice") {
+    return (
+      <div className={rootClass}>
+        <div
+          className={`flex w-full items-center gap-2 ${sizingClass} text-sm bg-bg-card border border-divider text-text-muted cursor-not-allowed`}
+          aria-disabled="true"
+        >
+          {clipboardIcon}
+          <span className="truncate">{pickerState.label}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={ref} className={rootClass}>
@@ -85,19 +135,7 @@ export function TaskPicker({
         aria-expanded={open}
       >
         <span className="flex min-w-0 items-center gap-2">
-          <svg
-            className="w-3.5 h-3.5 text-text-muted shrink-0"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-            />
-          </svg>
+          {clipboardIcon}
           <span className={`truncate ${selected ? "text-text" : "text-text-muted"}`}>
             {selected ? selected.name : "Select task"}
           </span>
@@ -122,9 +160,9 @@ export function TaskPicker({
             width: ref.current?.getBoundingClientRect().width,
           }}
         >
-          {activeTasks
-            .filter((t) => !excludeIds?.has(t.id) || t.id === selectedId)
-            .map((task) => (
+          {pickerState.rows
+            .filter(({ task }) => !excludeIds?.has(task.id) || task.id === selectedId)
+            .map(({ task, hint }) => (
               <button
                 type="button"
                 key={task.id}
@@ -138,6 +176,7 @@ export function TaskPicker({
               >
                 <BillableIndicator billable={task.billable} />
                 <span className="truncate text-left flex-1">{task.name}</span>
+                {hint && <span className="text-xs text-text-muted shrink-0">{hint}</span>}
               </button>
             ))}
         </div>

@@ -17,7 +17,8 @@ All requests require `Origin: https://qvik.agileday.io` header (Tauri HTTP plugi
 | GET | `/v1/project?projectStage=ACTIVE` | List active projects |
 | GET | `/v1/absence` | List absence projects (vacation, sick leave, etc.) — a separate entity, NOT returned by `/v1/project` |
 | GET | `/v2/opening` | Allocated projects (with employee filter); also surfaces ABSENCE-typed projectlikes as a fallback |
-| GET | `/v1/project/id/{id}/task` | Tasks for a project |
+| GET | `/v1/project/id/{id}/task` | Tasks a project owns. Returns `200 []` for the ~15% of projects that own none |
+| GET | `/v2/task?limit=&offset=` | **Undocumented.** Whole-tenant task catalogue, used to discover global default tasks. Envelope `{ data, pagination }` |
 | GET | `/v1/holiday` | Public holidays by country |
 
 ### Request Headers
@@ -62,6 +63,50 @@ The read therefore layers:
 Flex depends entirely on this: `calculateFlex` never reduces *expected* hours
 for absence, it counts logged absence entries as worked minutes. A week whose
 entries fail to load therefore reads as five no-show days.
+
+### Global default tasks
+
+75 of ~495 active projects own **no tasks at all** — `/v1/project/id/{id}/task`
+returns `200 []`. Since the timer refuses to start without a `taskId`, those
+projects were untrackable in the app. AgileDay's own web UI covers the case by
+offering a tenant-level task labelled "(global default)".
+
+Those live in the tenant task catalogue at the undocumented **`/v2/task`**, as
+rows with `projectId: null` and `defaultTemplate: true`. Both conditions matter:
+314 rows carry `defaultTemplate: true` *while belonging to a project* — those are
+per-project instances of a template, not global defaults, and matching on
+`defaultTemplate` alone would offer hundreds of other projects' tasks everywhere.
+Project-owned tasks reference their template via `parentTaskId`.
+
+`getTasks(projectId)` therefore returns **own tasks + global defaults**, globals
+last, deduped by id with the project's own copy winning. Two rules differ from
+the project-owned path:
+
+- **`active` is not applied to globals.** The one real global default is
+  `active: false` and the web UI offers it regardless. Project-owned tasks are
+  still filtered on `active`.
+- **`projectId` is rewritten** to the requested project, so `Task.projectId`
+  stays a non-null `string`. `Task.defaultTemplate` preserves the real
+  provenance for the UI's "(global default)" hint.
+
+`src/api/global-tasks.ts` does the discovery. `/v2/task` has **no usable
+server-side filter** for these rows — `filter={"defaultTemplate":{"eq":true}}`,
+`filter={"projectId":{"is":null}}`, `?defaultTemplate=true`, `?parentTaskId=null`
+and `sortBy=` were all probed against the live API and are silently ignored,
+returning an unfiltered page. Only `filter={"projectId":{"in":[…]}}` works, which
+is the wrong direction. So discovery pages the whole catalogue (~1519 rows, 8
+pages of 200) and filters client-side:
+
+- page 1 first, to read `pagination.totalPages`; remaining pages in parallel
+- memoised per provider instance — one burst per session, started on the first
+  `getTasks` call, not at module load
+- **never rejects**: any failure resolves to `[]`, leaving the caller with the
+  project's own tasks. `/v2/task` is undocumented and carries no stability
+  guarantee, so a breaking change there must degrade to the app's previous
+  behaviour. A failed attempt clears the memo so a later call can retry.
+
+`GET /v2/task/id/{id}` also works if a single-fetch path is ever needed
+(`/v2/task/{id}` 404s — the `/id/` segment is required).
 
 ### Entry Status Flow
 
@@ -124,7 +169,7 @@ interface ApiProvider {
   getCurrentEmployee(): Promise<Employee>;
   getProjects(): Promise<Project[]>;
   getAbsenceProjects(): Promise<Project[]>; // /v1/absence, tagged projectType: "ABSENCE"; returns [] if unauthorized
-  getTasks(projectId: string): Promise<Task[]>;
+  getTasks(projectId: string): Promise<Task[]>; // project's own tasks + tenant global defaults (see above)
   getTimeEntries(employeeId: string, startDate: string, endDate: string): Promise<TimeEntry[]>;
   createTimeEntry(employeeId: string, entry: Omit<TimeEntry, "id" | "syncStatus">): Promise<TimeEntry>;
   updateTimeEntry(employeeId: string, id: string, updates: Partial<TimeEntry>): Promise<TimeEntry>;

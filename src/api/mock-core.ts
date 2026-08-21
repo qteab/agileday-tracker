@@ -40,6 +40,24 @@ export const MOCK_TASKS: Record<string, Task[]> = {
   a2: [{ id: "t11", projectId: "a2", name: "Sick leave", billable: false, active: true }],
 };
 
+/**
+ * A tenant-level "(global default)" task. In real AgileDay tenants this is a
+ * catalogue row with `projectId: null` and `defaultTemplate: true`, offered on
+ * every project — it is the only way to log time against the 15% of projects
+ * that own no tasks. Pass it to `createMockProvider` to model such a tenant;
+ * omit it to model one without global defaults.
+ */
+export const MOCK_GLOBAL_DEFAULT_TASKS: Task[] = [
+  {
+    id: "global-dev",
+    projectId: "",
+    name: "Development",
+    billable: true,
+    active: true,
+    defaultTemplate: true,
+  },
+];
+
 export const MOCK_EMPLOYEE: Employee = {
   id: "emp1",
   name: "Test User",
@@ -80,7 +98,9 @@ export function createMockProvider(
   tasks: Record<string, Task[]>,
   employee: Employee,
   allocations: Allocation[] = MOCK_ALLOCATIONS,
-  absenceProjects: Project[] = MOCK_ABSENCE_PROJECTS
+  absenceProjects: Project[] = MOCK_ABSENCE_PROJECTS,
+  /** Tenant-level global defaults, appended to every project's task list. */
+  globalDefaultTasks: Task[] = []
 ): ApiProvider {
   return {
     async getCurrentEmployee() {
@@ -96,7 +116,14 @@ export function createMockProvider(
     },
 
     async getTasks(projectId: string) {
-      return tasks[projectId] ?? [];
+      const own = tasks[projectId] ?? [];
+      const ownIds = new Set(own.map((t) => t.id));
+      // Mirrors the real provider: globals are appended, never substituted, and
+      // are scoped to the project being asked about.
+      const extras = globalDefaultTasks
+        .filter((t) => !ownIds.has(t.id))
+        .map((t) => ({ ...t, projectId }));
+      return [...own, ...extras];
     },
 
     async getTimeEntries(_employeeId: string, startDate: string, endDate: string) {

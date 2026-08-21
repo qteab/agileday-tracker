@@ -3,6 +3,7 @@ import type { Allocation, Employee, Holiday, Project, ProjectType, Task, TimeEnt
 import type { AuthConfig, AuthState } from "./auth";
 import { isTokenExpired, refreshAuthState } from "./auth";
 import { addDays, monthsInRange } from "../utils/date-range";
+import { createGlobalDefaultTaskLoader } from "./global-tasks";
 
 /**
  * Lookback for the /updated fallback read. That endpoint filters by last-update
@@ -146,6 +147,11 @@ export function createAgileDayProvider(
     return response.json();
   }
 
+  // Memoised per provider instance: discovered on first getTasks call, reused for
+  // the rest of the session. Resolves to [] on failure so a task-less project
+  // degrades to the app's previous behaviour rather than breaking.
+  const loadGlobalDefaultTasks = createGlobalDefaultTaskLoader((path) => apiFetch(path));
+
   return {
     async getCurrentEmployee(): Promise<Employee> {
       const auth = getAuthState();
@@ -223,26 +229,42 @@ export function createAgileDayProvider(
     },
 
     async getTasks(projectId: string): Promise<Task[]> {
-      const tasks = await apiFetch<
-        Array<{
-          id: string;
-          name: string;
-          projectId: string;
-          billable: boolean;
-          active: boolean;
-        }>
-      >(`/v1/project/id/${projectId}/task`);
+      // Both reads start together: the global catalogue is slow to discover and
+      // must never delay the project's own list beyond its own latency.
+      const [rawOwn, globalDefaults] = await Promise.all([
+        apiFetch<
+          Array<{
+            id: string;
+            name: string;
+            projectId: string;
+            billable: boolean;
+            active: boolean;
+          }>
+        >(`/v1/project/id/${projectId}/task`),
+        loadGlobalDefaultTasks(),
+      ]);
 
       // Inactive tasks are kept: entries already logged against a task that was
       // later deactivated still need its billable flag. Pickers filter on
       // `active` so deactivated tasks can't be selected for new time.
-      return tasks.map((t) => ({
+      const own = rawOwn.map((t) => ({
         id: t.id,
         projectId: t.projectId,
         name: t.name,
         billable: t.billable,
         active: t.active,
       }));
+
+      // Globals are appended, never substituted — AgileDay's web UI labels them
+      // "(global default)" precisely so they can sit alongside a project's own
+      // tasks. The project's own copy wins on an id clash: it carries the real
+      // project scoping.
+      const ownIds = new Set(own.map((t) => t.id));
+      const extras = globalDefaults
+        .filter((t) => !ownIds.has(t.id))
+        .map((t) => ({ ...t, projectId }));
+
+      return [...own, ...extras];
     },
 
     async getTimeEntries(

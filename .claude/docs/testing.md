@@ -20,15 +20,19 @@ src/api/__tests__/
   flex.test.ts                    — Flex calculation
   rounding.test.ts                — 15-minute rounding
   holidays.test.ts                — Holiday set lookup
+  global-tasks.test.ts            — Tenant global-default discovery via /v2/task
+  billable.test.ts                — Billable resolution for unresolved tasks
 src/utils/__tests__/
   date-range.test.ts              — monthsInRange/addDays API window helpers
+  entry-list.test.ts              — Entry list grouping and display
   week.test.ts                    — Week utilities
   inactivity.test.ts              — Idle detection
+  task-picker.test.ts             — Task picker display states (pure, no DOM)
 src/store/__tests__/
   inactivity-reducer.test.ts      — Idle state transitions
 ```
 
-Total: 235 tests.
+Total: 300 tests.
 
 ## Test Patterns
 
@@ -72,7 +76,10 @@ npx vitest run <file>     # Single file
 
 ## What's NOT Tested
 
-- React components (no DOM/component tests)
+- React components (no DOM/component tests) — component *decisions* are extracted
+  into pure helpers instead, e.g. `describeTaskPickerState` in
+  `src/utils/task-picker.ts` covers the task picker's hidden/notice/ready states
+  without a renderer
 - Tauri commands (Rust side)
 - OAuth flow end-to-end
 - Timer hook behavior
