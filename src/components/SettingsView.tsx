@@ -820,29 +820,47 @@ function VacationSettings() {
             Days logged on this AgileDay project after the payslip month count down your balance (8h
             = 1 day).
           </p>
-          <select
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-            className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
-          >
-            <option value="">Select a project…</option>
-            {absenceProjects.length > 0 && (
-              <optgroup label="Absence projects">
-                {absenceProjects.map((p) => (
+          {/* Native select chrome clashes with the theme — strip it and draw our own chevron */}
+          <div className="relative">
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className={`w-full appearance-none px-3 py-2 pr-8 text-sm bg-bg border border-border rounded-lg cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 ${
+                projectId ? "text-text" : "text-text-muted"
+              }`}
+            >
+              <option value="">Select a project…</option>
+              {absenceProjects.length > 0 && (
+                <optgroup label="Absence projects">
+                  {absenceProjects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              <optgroup label="Other projects">
+                {otherProjects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
                 ))}
               </optgroup>
-            )}
-            <optgroup label="Other projects">
-              {otherProjects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </optgroup>
-          </select>
+            </select>
+            <svg
+              className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 9l4-4 4 4m0 6l-4 4-4-4"
+              />
+            </svg>
+          </div>
         </div>
       </div>
 
