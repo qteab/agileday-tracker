@@ -1,5 +1,6 @@
 import type { Allocation, Employee, Holiday, Project, Task, TimeEntry } from "../api/types";
 import type { FlexConfig } from "./flex-store";
+import type { VacationConfig } from "./vacation-store";
 import { DEFAULT_DISPLAY_PREFS, type DisplayPrefs } from "./display-store";
 
 export interface TimerState {
@@ -40,6 +41,9 @@ export interface AppState {
   allocationsFetchedAt: number | null;
   timer: TimerState;
   flexConfig: FlexConfig | null;
+  vacationConfig: VacationConfig | null;
+  /** Entries fetched before the 30-day window, back to the earliest
+   * configured start date (flex and/or vacation). */
   flexEntries: TimeEntry[] | null;
   holidays: Holiday[];
   displayPrefs: DisplayPrefs;
@@ -67,6 +71,7 @@ export const initialState: AppState = {
     startTime: null,
   },
   flexConfig: null,
+  vacationConfig: null,
   flexEntries: null,
   holidays: [],
   displayPrefs: DEFAULT_DISPLAY_PREFS,
@@ -93,6 +98,7 @@ export type AppAction =
   | { type: "SET_TIMER"; payload: Partial<TimerState> }
   | { type: "RESET_TIMER" }
   | { type: "SET_FLEX_CONFIG"; payload: FlexConfig | null }
+  | { type: "SET_VACATION_CONFIG"; payload: VacationConfig | null }
   | { type: "SET_FLEX_ENTRIES"; payload: TimeEntry[] | null }
   | { type: "SET_HOLIDAYS"; payload: Holiday[] }
   | { type: "SET_DISPLAY_PREFS"; payload: DisplayPrefs }
@@ -158,6 +164,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, timer: initialState.timer };
     case "SET_FLEX_CONFIG":
       return { ...state, flexConfig: action.payload };
+    case "SET_VACATION_CONFIG":
+      return { ...state, vacationConfig: action.payload };
     case "SET_FLEX_ENTRIES":
       return { ...state, flexEntries: action.payload };
     case "SET_HOLIDAYS":

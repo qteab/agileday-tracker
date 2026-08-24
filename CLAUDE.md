@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev              # Start Vite dev server (port 1420)
 npm run tauri dev        # Start full Tauri app in dev mode (Rust + Vite)
 npm run check            # Run all checks: typecheck → lint → format:check → test
-npm run test             # Vitest (300 tests, single run)
+npm run test             # Vitest (314 tests, single run)
 npm run test:watch       # Vitest watch mode
 npm run lint             # ESLint (src/ only)
 npm run typecheck        # tsc --noEmit
@@ -70,9 +70,9 @@ Tests live mostly in `src/api/__tests__/` (plus `src/utils/__tests__/` and `src/
 - `agileday-provider.test.ts` — 42 tests for the AgileDay client (mocked fetch, JWT decode, auth flow, global default tasks)
 - `entry-sync.test.ts` — 15 tests for the create/update/delete/read sync journey
 - `global-tasks.test.ts` — 13 tests for tenant global-default discovery via `/v2/task`
-- Plus flex, rounding, holidays, date-range, week, description, task-picker and inactivity suites
+- Plus flex, vacation, rounding, holidays, date-range, week, description, task-picker and inactivity suites
 
-Total: 300 tests. Run a single file: `npx vitest run src/api/__tests__/mock-provider.test.ts`
+Total: 314 tests. Run a single file: `npx vitest run src/api/__tests__/mock-provider.test.ts`
 
 ## CI/CD
 
