@@ -14,6 +14,7 @@ import {
   type DisplayPrefs,
 } from "../store/display-store";
 import { fmtDate } from "../utils/week";
+import { Dropdown } from "./Dropdown";
 import bearIcon from "../assets/bear.png";
 
 export type SettingsPage = "flex" | "vacation" | "menubar" | "appearance" | "timer" | "list";
@@ -755,9 +756,8 @@ function VacationSettings() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const absenceProjects = projects.filter((p) => p.projectType === "ABSENCE");
-  const otherProjects = projects
-    .filter((p) => p.projectType !== "ABSENCE")
+  const absenceProjects = projects
+    .filter((p) => p.projectType === "ABSENCE")
     .sort((a, b) => a.name.localeCompare(b.name));
 
   async function handleSave() {
@@ -820,47 +820,13 @@ function VacationSettings() {
             Days logged on this AgileDay project after the payslip month count down your balance (8h
             = 1 day).
           </p>
-          {/* Native select chrome clashes with the theme — strip it and draw our own chevron */}
-          <div className="relative">
-            <select
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              className={`w-full appearance-none px-3 py-2 pr-8 text-sm bg-bg border border-border rounded-lg cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 ${
-                projectId ? "text-text" : "text-text-muted"
-              }`}
-            >
-              <option value="">Select a project…</option>
-              {absenceProjects.length > 0 && (
-                <optgroup label="Absence projects">
-                  {absenceProjects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              <optgroup label="Other projects">
-                {otherProjects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
-            <svg
-              className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 9l4-4 4 4m0 6l-4 4-4-4"
-              />
-            </svg>
-          </div>
+          <Dropdown
+            options={absenceProjects.map((p) => ({ id: p.id, label: p.name, color: p.color }))}
+            selectedId={projectId || null}
+            onSelect={setProjectId}
+            placeholder="Select a project…"
+            emptyLabel="No absence projects found"
+          />
         </div>
       </div>
 
