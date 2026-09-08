@@ -197,7 +197,7 @@ function AuthenticatedApp() {
           initialPage={settingsPage}
         />
       ) : showFlex ? (
-        <FlexView onBack={() => setShowFlex(false)} onOpenSettings={() => openSettings("flex")} />
+        <FlexView onBack={() => setShowFlex(false)} onOpenSettings={(page) => openSettings(page)} />
       ) : showFinalize ? (
         <FinalizeView
           onBack={() => setShowFinalize(false)}

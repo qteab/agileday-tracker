@@ -1,7 +1,10 @@
 import { useApp } from "../store/context";
 import { formatFlexMinutes, type FlexWeek, type MonthSummary } from "../utils/flex";
+import { formatVacationDays, type VacationResult } from "../utils/vacation";
 import { useLiveFlex } from "../hooks/useLiveFlex";
+import { useVacation } from "../hooks/useVacation";
 import { MonthProgressCard } from "./MonthProgressCard";
+import type { SettingsPage } from "./SettingsView";
 
 function formatHM(minutes: number): string {
   const h = Math.floor(minutes / 60);
@@ -18,14 +21,31 @@ function flexStartLabel(startDate: string): string {
 
 interface FlexViewProps {
   onBack: () => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (page: SettingsPage) => void;
 }
 
-/** Dedicated flex view: live balance, month progress, and weekly breakdown. */
+/** Dedicated flex view: live balance, vacation days, month progress, and weekly breakdown. */
 export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
   const { state } = useApp();
-  const { flexConfig } = state;
+  const { flexConfig, vacationConfig } = state;
   const { flex, month, lastMonth, now } = useLiveFlex();
+  const vacation = useVacation();
+
+  const vacationSection =
+    vacationConfig && vacation ? (
+      <VacationCard vacation={vacation} onConfigure={() => onOpenSettings("vacation")} />
+    ) : (
+      <button
+        onClick={() => onOpenSettings("vacation")}
+        className="w-full text-left bg-bg-card rounded-xl p-4 border border-dashed border-border hover:bg-bg transition-colors"
+      >
+        <span className="text-sm font-medium text-text">Track vacation days</span>
+        <p className="text-xs text-text-muted mt-1">
+          Enter the balance from your latest payslip and pick the vacation project to count down
+          your remaining days.
+        </p>
+      </button>
+    );
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -47,7 +67,7 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
         </button>
         <span className="flex-1 text-sm font-semibold text-text">Flex</span>
         <button
-          onClick={onOpenSettings}
+          onClick={() => onOpenSettings("flex")}
           className="px-2.5 py-1 text-xs font-medium text-text-muted border border-border rounded-lg hover:text-text hover:bg-bg transition-colors"
         >
           Configure flex settings
@@ -55,19 +75,21 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4">
-        {!flexConfig ? (
+        {!flexConfig && (
           <div className="text-center py-8 space-y-3">
             <p className="text-sm text-text-muted">
               Set your paycheck month and initial balance to start tracking flex.
             </p>
             <button
-              onClick={onOpenSettings}
+              onClick={() => onOpenSettings("flex")}
               className="px-4 py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
             >
               Open flex settings
             </button>
+            <div className="text-left pt-4">{vacationSection}</div>
           </div>
-        ) : (
+        )}
+        {flexConfig && (
           <>
             {/* Live balance: big number left, today/yesterday detail right */}
             {flex && (
@@ -120,6 +142,9 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
               </div>
             )}
 
+            {/* Vacation day balance */}
+            {vacationSection}
+
             {/* This month: worked vs target */}
             <MonthProgressCard month={month} now={now} />
 
@@ -140,6 +165,82 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function VacationCard({
+  vacation,
+  onConfigure,
+}: {
+  vacation: VacationResult;
+  onConfigure: () => void;
+}) {
+  return (
+    <div className="bg-bg-card rounded-xl p-4 border border-border">
+      <div className="flex items-center gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-text-muted">Vacation days</span>
+            <button
+              onClick={onConfigure}
+              className="text-[10px] text-text-muted underline hover:text-text transition-colors"
+            >
+              configure
+            </button>
+          </div>
+          <div
+            className={`text-3xl font-bold tabular-nums mt-1 ${
+              vacation.remainingDays >= 0 ? "text-emerald-600" : "text-danger"
+            }`}
+          >
+            {formatVacationDays(vacation.remainingDays)}
+          </div>
+        </div>
+        <div className="flex-1 space-y-1 text-sm border-l border-border pl-4">
+          <div className="flex items-center justify-between">
+            <span className="text-text-muted">Used</span>
+            <span className="tabular-nums text-text">{formatVacationDays(vacation.usedDays)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-text-muted">Planned</span>
+            <span className="tabular-nums text-text">
+              {formatVacationDays(vacation.plannedDays)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-text-muted">After planned</span>
+            <span
+              className={`font-semibold tabular-nums ${
+                vacation.remainingAfterPlanned >= 0 ? "text-emerald-600" : "text-danger"
+              }`}
+            >
+              {formatVacationDays(vacation.remainingAfterPlanned)}
+            </span>
+          </div>
+        </div>
+      </div>
+      {vacation.plannedEntries.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-border">
+          <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mb-1">
+            Upcoming
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {vacation.plannedEntries.map((u) => (
+              <span
+                key={u.date}
+                className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary tabular-nums"
+              >
+                {new Date(u.date + "T12:00:00").toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                })}
+                {u.days !== 1 && ` · ${formatVacationDays(u.days)}d`}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

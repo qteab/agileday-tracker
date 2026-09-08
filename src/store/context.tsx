@@ -27,6 +27,7 @@ import {
 import type { Project, TimeEntry } from "../api/types";
 import { loadTimerState, saveTimerState, clearTimerState } from "./timer-store";
 import { loadFlexConfig } from "./flex-store";
+import { loadVacationConfig } from "./vacation-store";
 import { loadDisplayPrefs } from "./display-store";
 import { loadWindowLayout, saveWindowLayout, type WindowLayout } from "./window-store";
 import { applyTheme, watchSystemTheme } from "../utils/theme";
@@ -576,7 +577,7 @@ function useConnectedDataLoad(
         if (cancelled) return;
         dispatch({ type: "SET_ENTRIES", payload: entries });
 
-        loadAndApplyFlexConfig(api, employee.id, pastStr, () => cancelled, dispatch);
+        loadAndApplyBalanceConfigs(api, employee.id, pastStr, () => cancelled, dispatch);
         hydrateTaskMetadataForEntries(api, entries, () => cancelled, dispatch);
       } catch (err) {
         if (cancelled) return;
@@ -594,29 +595,36 @@ function useConnectedDataLoad(
   }, [api, isConnected, syncCounter, dispatch]);
 }
 
-async function loadAndApplyFlexConfig(
+async function loadAndApplyBalanceConfigs(
   api: ApiProvider,
   employeeId: string,
   windowStartDate: string,
   isCancelled: () => boolean,
   dispatch: React.Dispatch<AppAction>
 ) {
-  const flexConfig = await loadFlexConfig().catch(() => null);
-  if (isCancelled() || !flexConfig) return;
-  dispatch({ type: "SET_FLEX_CONFIG", payload: flexConfig });
+  const [flexConfig, vacationConfig] = await Promise.all([
+    loadFlexConfig().catch(() => null),
+    loadVacationConfig().catch(() => null),
+  ]);
+  if (isCancelled()) return;
+  if (flexConfig) dispatch({ type: "SET_FLEX_CONFIG", payload: flexConfig });
+  if (vacationConfig) dispatch({ type: "SET_VACATION_CONFIG", payload: vacationConfig });
+  if (!flexConfig && !vacationConfig) return;
 
-  await fetchFlexHolidays(api, flexConfig.startDate, isCancelled, dispatch);
+  if (flexConfig) await fetchFlexHolidays(api, flexConfig.startDate, isCancelled, dispatch);
 
-  if (flexConfig.startDate < windowStartDate) {
+  // Fetch pre-window entries back to the earliest configured start date so
+  // both the flex and vacation balances see their full history.
+  const startDates = [flexConfig?.startDate, vacationConfig?.startDate].filter(
+    (d): d is string => !!d
+  );
+  const earliestStart = startDates.sort()[0];
+  if (earliestStart < windowStartDate) {
     try {
-      const flexEntries = await api.getTimeEntries(
-        employeeId,
-        flexConfig.startDate,
-        windowStartDate
-      );
+      const flexEntries = await api.getTimeEntries(employeeId, earliestStart, windowStartDate);
       if (!isCancelled()) dispatch({ type: "SET_FLEX_ENTRIES", payload: flexEntries });
     } catch {
-      // Flex will use available entries only
+      // Balances will use available entries only
     }
   }
 }
