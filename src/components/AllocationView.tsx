@@ -76,7 +76,8 @@ function getAllocPercentageOnDate(alloc: Allocation, dateStr: string): number {
       pct = p.percentage;
     }
   }
-  return pct;
+  // Defensive: never let bad upstream data surface as "NaNh NaNm".
+  return Number.isFinite(pct) ? pct : 0;
 }
 
 /** Get allocated minutes for a date range across all allocations */

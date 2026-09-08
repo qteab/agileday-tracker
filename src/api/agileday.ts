@@ -4,6 +4,7 @@ import type { AuthConfig, AuthState } from "./auth";
 import { isTokenExpired, refreshAuthState } from "./auth";
 import { addDays, monthsInRange } from "../utils/date-range";
 import { createGlobalDefaultTaskLoader } from "./global-tasks";
+import { normalizeAllocationPeriods, type RawAllocationPeriod } from "../utils/allocation";
 
 /**
  * Lookback for the /updated fallback read. That endpoint filters by last-update
@@ -571,25 +572,23 @@ export function createAgileDayProvider(
           projectlikeName: string;
           allocation: number;
           allocationMode: string;
-          allocations: Array<{ allocation: number; startDate: string }>;
-          startDate: string;
-          endDate: string;
-          hours: number;
+          // In "hours" mode `allocation` is null and `hours` is set instead.
+          allocations: RawAllocationPeriod[] | null;
+          startDate: string | null;
+          endDate: string | null;
+          hours: number | null;
         }>;
       }>(`/v2/opening?limit=100&filter=${encodeURIComponent(filter)}`);
 
       return data.openings.map((o) => ({
         projectId: o.projectlikeId,
         projectName: o.projectlikeName,
-        startDate: o.startDate,
-        endDate: o.endDate,
-        percentage: o.allocation,
-        hours: o.hours,
+        startDate: o.startDate ?? null,
+        endDate: o.endDate ?? null,
+        percentage: Number.isFinite(o.allocation) ? o.allocation : 0,
+        hours: Number.isFinite(o.hours) ? (o.hours as number) : 0,
         allocationMode: o.allocationMode,
-        periods: (o.allocations ?? []).map((a) => ({
-          percentage: a.allocation,
-          startDate: a.startDate,
-        })),
+        periods: normalizeAllocationPeriods(o.allocations, o.allocationMode, o.endDate),
       }));
     },
 
