@@ -816,3 +816,70 @@ describe("batchUpdateEntries", () => {
     expect(results).toHaveLength(0);
   });
 });
+
+describe("getAllocations", () => {
+  function opening(overrides: Record<string, unknown>) {
+    return {
+      projectlikeId: "proj-1",
+      projectlikeName: "Project One",
+      allocation: 100,
+      allocationMode: "allocation",
+      allocations: [{ allocation: 100, hours: null, startDate: "2026-09-01" }],
+      startDate: "2026-09-01",
+      endDate: "2026-12-31",
+      hours: 700,
+      ...overrides,
+    };
+  }
+
+  it("maps percentage-mode openings straight through", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ openings: [opening({})] }));
+    const [alloc] = await provider.getAllocations("emp-1");
+    expect(alloc.periods).toEqual([{ startDate: "2026-09-01", percentage: 100 }]);
+    expect(alloc.percentage).toBe(100);
+  });
+
+  it("converts hours-mode openings to finite percentages instead of NaN", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({
+        openings: [
+          opening({
+            allocation: null,
+            allocationMode: "hours",
+            hours: 20,
+            // Week of Sep 7–13 has 5 weekdays → 20h of 40h = 50%
+            allocations: [{ allocation: null, hours: 20, startDate: "2026-09-07" }],
+            startDate: "2026-09-07",
+            endDate: "2026-09-13",
+          }),
+        ],
+      })
+    );
+    const [alloc] = await provider.getAllocations("emp-1");
+    expect(alloc.periods).toEqual([{ startDate: "2026-09-07", percentage: 50 }]);
+    expect(alloc.percentage).toBe(0);
+    expect(alloc.hours).toBe(20);
+    expect(Number.isFinite(alloc.percentage)).toBe(true);
+  });
+
+  it("tolerates openings with no periods and null dates", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({
+        openings: [
+          opening({
+            allocations: null,
+            startDate: null,
+            endDate: null,
+            allocation: null,
+            hours: null,
+          }),
+        ],
+      })
+    );
+    const [alloc] = await provider.getAllocations("emp-1");
+    expect(alloc.periods).toEqual([]);
+    expect(alloc.startDate).toBeNull();
+    expect(alloc.percentage).toBe(0);
+    expect(alloc.hours).toBe(0);
+  });
+});
