@@ -918,14 +918,20 @@ function BetaSettings() {
               tool. Submit from the AgileDay web app instead.
             </li>
             <li>
-              Task names aren&apos;t available — tasks show as a short id, and only tasks you have
-              logged against before can be picked.
+              <span className="text-text">Start a task in AgileDay web first.</span> Nothing in MCP
+              lists a project&apos;s tasks, so this app can only find tasks you have already logged
+              against — and it has no way to read their names, which is why they show as a garbled
+              id. Log an hour on the task in the web app once and it becomes selectable here.
             </li>
             <li>
               Allocations cover the openings on this week&apos;s timecard, each at one overall rate
               rather than a period-by-period breakdown.
             </li>
-            <li>Public holidays are computed locally, and only for Sweden.</li>
+            <li>
+              Public holidays aren&apos;t exposed over MCP at all, so the app computes Swedish red
+              days itself. They are fully determined by the calendar and Easter, so the result is
+              exact — but only Sweden is covered.
+            </li>
             <li>
               Entry status is per week rather than per entry, so a whole week reads as submitted
               once any of it is.
