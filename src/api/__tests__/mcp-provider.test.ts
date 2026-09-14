@@ -492,6 +492,38 @@ describe("projects and allocations", () => {
     expect(projects[0].color).toBeTruthy();
   });
 
+  it("derives every remaining page from total_count on the first reply", async () => {
+    const page = (n: number, offset: number) => ({
+      projects: Array.from({ length: n }, (_, i) => ({ projectId: `p${offset + i}` })),
+      total_count: 250,
+    });
+    expectHandshakeThen(
+      toolResult(page(100, 0)),
+      toolResult(page(100, 100)),
+      toolResult(page(50, 200))
+    );
+
+    const projects = await provider.getProjects();
+
+    expect(projects).toHaveLength(250);
+    // Pages 2 and 3 are derived from total_count rather than discovered one at
+    // a time, so they can go out together instead of serially.
+    const offsets = [bodyOf(3), bodyOf(4)].map(
+      (body) => (body.params as { arguments: { offset: number } }).arguments.offset
+    );
+    expect(offsets.sort((a, b) => a - b)).toEqual([100, 200]);
+  });
+
+  it("makes a single request when one page covers everything", async () => {
+    expectHandshakeThen(
+      toolResult({ projects: [{ projectId: "p1", name: "Only" }], total_count: 1 })
+    );
+
+    await provider.getProjects();
+
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+
   it("pages until total_count is covered", async () => {
     const page = (n: number, offset: number) => ({
       projects: Array.from({ length: n }, (_, i) => ({

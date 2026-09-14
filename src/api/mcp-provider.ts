@@ -418,26 +418,54 @@ export function createMcpProvider(
       };
     },
 
+    /**
+     * The whole active-project catalogue, ~5 pages of 100.
+     *
+     * The timesheet itself only needs allocated projects plus whatever the
+     * entries reference, but the picker's search filters across every active
+     * project, and entries on projects the user is no longer allocated to
+     * still need a name from somewhere. So the full list is fetched — the
+     * first page reveals `total_count`, and the rest go out together rather
+     * than one after another.
+     */
     async getProjects(): Promise<Project[]> {
       report("Loading projects...");
-      const collected: McpProjectSummary[] = [];
-      for (let page = 0; page < MAX_PROJECT_PAGES; page++) {
-        // The tool answers with an envelope — `{projects, total_count, limit,
-        // offset}` — not a bare array.
-        const batch = await call<McpProjectsPage>("search_projects", {
-          stage: "ONGOING",
-          limit: PROJECT_PAGE_SIZE,
-          offset: page * PROJECT_PAGE_SIZE,
-        });
-        const projects = batch?.projects;
-        if (!Array.isArray(projects) || projects.length === 0) break;
-        collected.push(...projects);
-        if (collected.length >= (batch.total_count ?? collected.length)) break;
-        if (projects.length < PROJECT_PAGE_SIZE) break;
-        report(`Loading projects — ${collected.length} so far...`);
+
+      // The tool answers with an envelope — `{projects, total_count, limit,
+      // offset}` — not a bare array.
+      const first = await call<McpProjectsPage>("search_projects", {
+        stage: "ONGOING",
+        limit: PROJECT_PAGE_SIZE,
+        offset: 0,
+      });
+      const firstPage = first?.projects;
+      if (!Array.isArray(firstPage) || firstPage.length === 0) {
+        report(null);
+        return [];
       }
+
+      const total = first.total_count ?? firstPage.length;
+      const remaining = Math.min(
+        Math.max(0, Math.ceil(total / PROJECT_PAGE_SIZE) - 1),
+        MAX_PROJECT_PAGES - 1
+      );
+      report(`Loading projects — ${total} total...`);
+
+      const laterPages = await mapLimit(
+        Array.from({ length: remaining }, (_, i) => (i + 1) * PROJECT_PAGE_SIZE),
+        MAX_CONCURRENT_CALLS,
+        async (offset) => {
+          const page = await call<McpProjectsPage>("search_projects", {
+            stage: "ONGOING",
+            limit: PROJECT_PAGE_SIZE,
+            offset,
+          });
+          return page?.projects ?? [];
+        }
+      );
       report(null);
 
+      const collected = [...firstPage, ...laterPages.flat()];
       return collected.map((p, i) => ({
         id: String(p.projectId ?? p.id),
         name: p.name ?? "",
