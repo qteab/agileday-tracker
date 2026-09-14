@@ -47,6 +47,9 @@ const TASK_INDEX_WEEKS = 8;
  */
 const MAX_CONCURRENT_CALLS = 4;
 
+/** Opening ids per `get_opening_details` call. */
+const OPENING_DETAIL_BATCH = 20;
+
 // Same palette as the REST provider so a backend switch doesn't recolour the UI.
 const PROJECT_COLORS = [
   "#7A59FC",
@@ -116,6 +119,24 @@ interface McpTimecard {
   }>;
 }
 
+interface McpOpening {
+  opening_id: string;
+  project_id: string;
+  project_name?: string;
+  project_type?: string;
+  start_date?: string;
+  end_date?: string;
+  /** Percentage in both allocation modes — the server converts hours mode. */
+  allocation?: number;
+  hours?: number;
+  allocation_mode?: string;
+}
+
+interface McpOpeningsResult {
+  openings?: McpOpening[];
+  count?: number;
+}
+
 /** `search_projects` answers with this envelope, not a bare array. */
 interface McpProjectsPage {
   projects?: McpProjectSummary[];
@@ -134,6 +155,13 @@ interface McpProjectSummary {
 }
 
 // --- helpers ------------------------------------------------------------
+
+/** Split into fixed-size batches, for tools that cap ids per call. */
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
 
 /** `2026-09-08T00:00:00Z` → `2026-09-08`. */
 function dateOnly(timestamp: string): string {
@@ -650,22 +678,57 @@ export function createMcpProvider(
       );
     },
 
+    /**
+     * Allocations for the openings the user is contracted to.
+     *
+     * `suggested_hours` alone can't answer this: it carries a percentage but
+     * no dates, and `AllocationView` returns 0 for any allocation without a
+     * start and end date. `get_employee_allocations` would be the natural
+     * tool but is not enabled for this OAuth client, so the opening ids come
+     * from the week's timecard and `get_opening_details` supplies the spans.
+     */
     async getAllocations(employeeIdArg: string): Promise<Allocation[]> {
-      // The current week's timecard carries the allocation view the tracker
-      // needs — one suggested_hours row per contracted opening, with the
-      // opening's percentage and hours already resolved.
       const card = await fetchWeek(employeeIdArg, fmtDate(getWeekStart(now())));
 
-      return (card.suggested_hours ?? []).map((suggestion) => ({
-        projectId: suggestion.project_id,
-        projectName: suggestion.project_name ?? "",
-        startDate: null,
-        endDate: null,
-        percentage: suggestion.allocation_percent ?? 0,
-        hours: suggestion.hours ?? 0,
-        allocationMode: "allocation",
-        periods: [],
-      }));
+      const openingIds = [
+        ...new Set(
+          [
+            ...(card.suggested_hours ?? []).map((suggestion) => suggestion.opening_id),
+            ...(card.rows ?? []).map((row) => row.opening_id),
+          ].filter((id): id is string => !!id)
+        ),
+      ];
+      if (openingIds.length === 0) return [];
+
+      report("Loading allocations...");
+      const batches = await mapLimit(
+        chunk(openingIds, OPENING_DETAIL_BATCH),
+        MAX_CONCURRENT_CALLS,
+        (ids) =>
+          call<McpOpeningsResult>("get_opening_details", { opening_ids: ids }).catch(() => null)
+      );
+      report(null);
+
+      return batches
+        .flatMap((batch) => batch?.openings ?? [])
+        .map((opening) => {
+          // `allocation` is already a percentage in both allocation modes —
+          // the server converts hours mode for us — so the single period is
+          // reported as a percentage and needs no further normalisation.
+          const percentage = Number.isFinite(opening.allocation) ? opening.allocation! : 0;
+          return {
+            projectId: opening.project_id,
+            projectName: opening.project_name ?? "",
+            startDate: opening.start_date ?? null,
+            endDate: opening.end_date ?? null,
+            percentage,
+            hours: Number.isFinite(opening.hours) ? opening.hours! : 0,
+            allocationMode: "allocation",
+            // The tool reports one overall allocation rather than a period
+            // breakdown, so the opening's whole span carries a single rate.
+            periods: opening.start_date ? [{ startDate: opening.start_date, percentage }] : [],
+          };
+        });
     },
 
     async getMyProjects(employeeIdArg: string): Promise<MyProjectInfo[]> {

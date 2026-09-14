@@ -914,8 +914,16 @@ function BetaSettings() {
           <div className="text-sm font-medium text-text">Known gaps on MCP</div>
           <ul className="text-xs text-text-muted mt-2 space-y-1.5 list-disc pl-4">
             <li>
+              Submitting a week isn&apos;t possible — the OAuth client doesn&apos;t enable that
+              tool. Submit from the AgileDay web app instead.
+            </li>
+            <li>
               Task names aren&apos;t available — tasks show as a short id, and only tasks you have
               logged against before can be picked.
+            </li>
+            <li>
+              Allocations cover the openings on this week&apos;s timecard, each at one overall rate
+              rather than a period-by-period breakdown.
             </li>
             <li>Public holidays are computed locally, and only for Sweden.</li>
             <li>

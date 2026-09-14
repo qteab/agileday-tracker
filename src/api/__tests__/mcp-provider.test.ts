@@ -541,17 +541,23 @@ describe("projects and allocations", () => {
     expect(second.offset).toBe(100);
   });
 
-  it("derives allocations from the current week's suggested hours", async () => {
+  it("resolves allocation date spans from the opening details", async () => {
     expectHandshakeThen(
       toolResult({
         week: "2026-09-14",
-        suggested_hours: [
+        suggested_hours: [{ project_id: "proj-1", opening_id: "open-1" }],
+      }),
+      toolResult({
+        openings: [
           {
+            opening_id: "open-1",
             project_id: "proj-1",
             project_name: "DHL Retainer",
-            opening_id: "open-1",
-            allocation_percent: 19.3,
-            hours: 7.7,
+            start_date: "2026-09-01",
+            end_date: "2027-08-01",
+            allocation: 48.3,
+            hours: 892.9,
+            allocation_mode: "hours",
           },
         ],
       })
@@ -559,18 +565,45 @@ describe("projects and allocations", () => {
 
     const allocations = await provider.getAllocations(EMP);
 
+    // AllocationView returns 0 for any allocation without both dates, so the
+    // span and a covering period are what make the view non-empty.
     expect(allocations).toEqual([
       {
         projectId: "proj-1",
         projectName: "DHL Retainer",
-        startDate: null,
-        endDate: null,
-        percentage: 19.3,
-        hours: 7.7,
+        startDate: "2026-09-01",
+        endDate: "2027-08-01",
+        percentage: 48.3,
+        hours: 892.9,
         allocationMode: "allocation",
-        periods: [],
+        periods: [{ startDate: "2026-09-01", percentage: 48.3 }],
       },
     ]);
+  });
+
+  it("asks for opening details once per opening, deduped across sources", async () => {
+    expectHandshakeThen(
+      toolResult({
+        week: "2026-09-14",
+        suggested_hours: [{ project_id: "proj-1", opening_id: "open-1" }],
+        // The same opening also appears on a timecard row.
+        rows: [{ id: "row-1", project_id: "proj-1", opening_id: "open-1", hours: [] }],
+      }),
+      toolResult({ openings: [] })
+    );
+
+    await provider.getAllocations(EMP);
+
+    const args = (bodyOf(3).params as { arguments: { opening_ids: string[] } }).arguments;
+    expect(args.opening_ids).toEqual(["open-1"]);
+  });
+
+  it("returns [] when the week has no openings at all", async () => {
+    expectHandshakeThen(toolResult({ week: "2026-09-14" }));
+
+    expect(await provider.getAllocations(EMP)).toEqual([]);
+    // No opening ids means no detail call to make.
+    expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 
   it("includes worked-but-unsuggested projects in getMyProjects", async () => {
