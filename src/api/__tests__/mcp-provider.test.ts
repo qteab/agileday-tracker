@@ -577,16 +577,85 @@ describe("writes", () => {
     expect(args.operations).toEqual([{ action: "update", hour_id: "hour-1", minutes: 15 }]);
   });
 
-  it("sends one delete operation per id", async () => {
-    expectHandshakeThen(toolResult({ employee_id: EMP }), toolResult({ week: "", rows: [] }));
+  it("pins the week on a delete using the date the entry was read at", async () => {
+    expectHandshakeThen(
+      // The read that surfaced the entries, which is what teaches the provider
+      // their dates — a delete carries only an hour id.
+      toolResult({
+        week: "2026-09-14",
+        status: "SAVED",
+        rows: [
+          {
+            id: "row-1",
+            project_id: "proj-1",
+            hours: [
+              { id: "hour-1", date: "2026-09-14T00:00:00Z", minutes: 60 },
+              { id: "hour-2", date: "2026-09-16T00:00:00Z", minutes: 30 },
+            ],
+          },
+        ],
+      }),
+      toolResult({ employee_id: EMP }),
+      toolResult({ week: "2026-09-14", rows: [] })
+    );
 
+    await provider.getTimeEntries(EMP, "2026-09-14", "2026-09-18");
     await provider.deleteTimeEntry(["hour-1", "hour-2"]);
 
-    const args = (bodyOf(3).params as { arguments: Record<string, unknown> }).arguments;
+    // Without a week the server answers "Which week should I use?" and the
+    // delete fails — both hours fall in the same week, so one pinned call.
+    const args = (bodyOf(4).params as { arguments: Record<string, unknown> }).arguments;
+    expect(args.week).toBe("2026-09-14");
     expect(args.operations).toEqual([
       { action: "delete", hour_id: "hour-1" },
       { action: "delete", hour_id: "hour-2" },
     ]);
+  });
+
+  it("splits a delete spanning two weeks into one call each", async () => {
+    expectHandshakeThen(
+      // The range spans two weeks, so the read is two calls, one per week.
+      toolResult({
+        week: "2026-09-14",
+        status: "SAVED",
+        rows: [
+          {
+            id: "row-1",
+            project_id: "proj-1",
+            hours: [{ id: "hour-1", date: "2026-09-16T00:00:00Z", minutes: 60 }],
+          },
+        ],
+      }),
+      toolResult({
+        week: "2026-09-21",
+        status: "SAVED",
+        rows: [
+          {
+            id: "row-2",
+            project_id: "proj-1",
+            hours: [{ id: "hour-2", date: "2026-09-23T00:00:00Z", minutes: 30 }],
+          },
+        ],
+      }),
+      toolResult({ employee_id: EMP }),
+      toolResult({ week: "2026-09-14", rows: [] }),
+      toolResult({ week: "2026-09-21", rows: [] })
+    );
+
+    await provider.getTimeEntries(EMP, "2026-09-14", "2026-09-25");
+    await provider.deleteTimeEntry(["hour-1", "hour-2"]);
+
+    const weeks = [bodyOf(5), bodyOf(6)].map(
+      (body) => (body.params as { arguments: { week: string } }).arguments.week
+    );
+    expect(weeks).toEqual(["2026-09-14", "2026-09-21"]);
+  });
+
+  it("refuses a delete for an entry it has never read", async () => {
+    // Guessing the week would surface the server's clarification prompt as a
+    // wall of JSON; say plainly that a sync is needed instead.
+    await expect(provider.deleteTimeEntry(["hour-unknown"])).rejects.toThrow(/Sync and try again/);
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("makes no call at all for an empty delete", async () => {

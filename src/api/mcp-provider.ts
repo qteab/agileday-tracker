@@ -282,19 +282,43 @@ export function createMcpProvider(
     return `${empId}:${week}`;
   }
 
+  /**
+   * hour id → the date it falls on.
+   *
+   * `update_timecard` derives the target week from an operation's date, and
+   * asks the host to pick one when it can't. Update and delete operations
+   * identify a row by `hour_id` alone and carry no date, so without this the
+   * server answers with a `requires_clarification` prompt no headless client
+   * can satisfy. Every hour the provider reads is recorded here so writes can
+   * always name their week.
+   *
+   * Not cleared with the week cache: ids stay valid across writes, and an id
+   * that has been deleted is simply never asked about again.
+   */
+  const hourDateById = new Map<string, string>();
+
+  function indexHourDates(card: McpTimecard): McpTimecard {
+    for (const row of card.rows ?? []) {
+      for (const hour of row.hours ?? []) {
+        hourDateById.set(hour.id, dateOnly(hour.date));
+      }
+    }
+    return card;
+  }
+
   function fetchWeek(empId: string, week: string): Promise<McpTimecard> {
     const key = cacheKey(empId, week);
     const cached = weekCache.get(key);
     if (cached) return cached;
 
-    const pending = call<McpTimecard>("show_timecard", { employee_id: empId, week }).catch(
-      (err) => {
+    const pending = call<McpTimecard>("show_timecard", { employee_id: empId, week })
+      .then(indexHourDates)
+      .catch((err) => {
         // Don't leave a rejected promise in the cache — a later read would
         // inherit the failure instead of retrying.
         weekCache.delete(key);
         throw err;
-      }
-    );
+      });
     weekCache.set(key, pending);
     return pending;
   }
@@ -439,9 +463,8 @@ export function createMcpProvider(
 
   /**
    * Apply timecard operations, one call per week so the target is never
-   * ambiguous. Operations whose week is unknown (a delete, which carries only
-   * an hour id) go in a final un-pinned call — the server resolves those from
-   * the id itself.
+   * ambiguous. Callers supply a date for every operation — update and delete
+   * take theirs from `hourDateById` — so nothing goes out un-pinned.
    */
   async function applyOperations(
     operations: WeekedOperation[],
@@ -657,7 +680,9 @@ export function createMcpProvider(
       const [card] = await applyOperations(
         [
           {
-            date: updates.date,
+            // Fall back to the date this hour was read at, so the server never
+            // has to ask which week an id belongs to.
+            date: updates.date ?? hourDateById.get(id),
             op: {
               action: "update",
               hour_id: id,
@@ -688,13 +713,23 @@ export function createMcpProvider(
 
     async deleteTimeEntry(ids: string[]): Promise<void> {
       if (ids.length === 0) return;
+
+      // A delete names only an hour id, so the week has to come from the read
+      // that produced the entry. Without it the server replies asking which
+      // week to use, which the app cannot answer.
+      const unknown = ids.filter((id) => !hourDateById.has(id));
+      if (unknown.length > 0) {
+        throw new Error(
+          `Can't tell which week these entries belong to (${unknown.join(", ")}). Sync and try again.`
+        );
+      }
+
       const empId = await employeeId();
-      // No date is available from an id alone, so these go un-pinned and the
-      // server resolves each row's week from its hour id.
       await applyOperations(
-        ids.map((id) => ({ op: { action: "delete", hour_id: id } })),
+        ids.map((id) => ({ date: hourDateById.get(id), op: { action: "delete", hour_id: id } })),
         empId
       );
+      for (const id of ids) hourDateById.delete(id);
     },
 
     async batchUpdateEntries(
@@ -705,7 +740,7 @@ export function createMcpProvider(
 
       const cards = await applyOperations(
         updates.map((update) => ({
-          date: update.date,
+          date: update.date ?? hourDateById.get(update.id),
           op: {
             action: "update",
             hour_id: update.id,
