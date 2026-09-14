@@ -2,6 +2,7 @@ import type { Allocation, Employee, Holiday, Project, Task, TimeEntry } from "..
 import type { FlexConfig } from "./flex-store";
 import type { VacationConfig } from "./vacation-store";
 import { DEFAULT_DISPLAY_PREFS, type DisplayPrefs } from "./display-store";
+import { DEFAULT_BETA_PREFS, type BetaPrefs } from "./beta-store";
 
 export interface TimerState {
   isRunning: boolean;
@@ -47,6 +48,7 @@ export interface AppState {
   flexEntries: TimeEntry[] | null;
   holidays: Holiday[];
   displayPrefs: DisplayPrefs;
+  betaPrefs: BetaPrefs;
   inactivity: InactivityState;
   loading: boolean;
   error: string | null;
@@ -75,6 +77,7 @@ export const initialState: AppState = {
   flexEntries: null,
   holidays: [],
   displayPrefs: DEFAULT_DISPLAY_PREFS,
+  betaPrefs: DEFAULT_BETA_PREFS,
   inactivity: { idleSeconds: 0, isAway: false, pendingReturn: null },
   loading: false,
   error: null,
@@ -102,6 +105,7 @@ export type AppAction =
   | { type: "SET_FLEX_ENTRIES"; payload: TimeEntry[] | null }
   | { type: "SET_HOLIDAYS"; payload: Holiday[] }
   | { type: "SET_DISPLAY_PREFS"; payload: DisplayPrefs }
+  | { type: "SET_BETA_PREFS"; payload: BetaPrefs }
   | { type: "SET_INACTIVITY"; payload: { idleSeconds: number; isAway: boolean } }
   | { type: "RESOLVE_RETURN" }
   | { type: "SET_LOADING"; payload: boolean }
@@ -172,6 +176,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, holidays: action.payload };
     case "SET_DISPLAY_PREFS":
       return { ...state, displayPrefs: action.payload };
+    case "SET_BETA_PREFS":
+      return { ...state, betaPrefs: action.payload };
     case "SET_INACTIVITY": {
       const prev = state.inactivity;
       // Returning from an away period (away→active) freezes the away duration

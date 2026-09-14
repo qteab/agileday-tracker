@@ -14,6 +14,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ApiProvider, MyProjectInfo } from "../api/provider";
 import { createAgileDayProvider, type AgileDayConfig } from "../api/agileday";
+import { createMcpProvider } from "../api/mcp-provider";
 import type { AuthState } from "../api/auth";
 import { isTokenExpired, refreshAuthState } from "../api/auth";
 import {
@@ -29,6 +30,7 @@ import { loadTimerState, saveTimerState, clearTimerState } from "./timer-store";
 import { loadFlexConfig } from "./flex-store";
 import { loadVacationConfig } from "./vacation-store";
 import { loadDisplayPrefs } from "./display-store";
+import { loadBetaPrefs } from "./beta-store";
 import { loadWindowLayout, saveWindowLayout, type WindowLayout } from "./window-store";
 import { applyTheme, watchSystemTheme } from "../utils/theme";
 import type { ThemeMode } from "./display-store";
@@ -58,26 +60,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   authStateRef.current = authState;
 
+  const apiBackend = state.betaPrefs.apiBackend;
+
   const api = useMemo<ApiProvider | null>(() => {
     if (!isConnected) return null;
-    return createAgileDayProvider(
-      {
-        apiBaseUrl: buildApiBaseUrl(DEFAULT_CONNECTION),
-        authConfig: buildAuthConfig(DEFAULT_CONNECTION),
-      } as AgileDayConfig,
-      () => authStateRef.current,
-      (newState: AuthState) => {
-        setAuthState(newState);
-        saveAuthState(newState).catch(() => {});
-      },
-      () => {
-        setAuthState(null);
-        setIsConnected(false);
-        dispatch({ type: "SET_ERROR", payload: "Session expired — please sign in again" });
-        clearAuth().catch(() => {});
-      }
-    );
-  }, [isConnected]);
+
+    const providerConfig = {
+      apiBaseUrl: buildApiBaseUrl(DEFAULT_CONNECTION),
+      authConfig: buildAuthConfig(DEFAULT_CONNECTION),
+    };
+    const readAuth = () => authStateRef.current;
+    const writeAuth = (newState: AuthState) => {
+      setAuthState(newState);
+      saveAuthState(newState).catch(() => {});
+    };
+    const dropAuth = () => {
+      setAuthState(null);
+      setIsConnected(false);
+      dispatch({ type: "SET_ERROR", payload: "Session expired — please sign in again" });
+      clearAuth().catch(() => {});
+    };
+
+    // Switching backends rebuilds the provider, which re-runs the data load —
+    // so the toggle takes effect without a restart.
+    return apiBackend === "mcp"
+      ? createMcpProvider(providerConfig, readAuth, writeAuth, dropAuth)
+      : createAgileDayProvider(providerConfig as AgileDayConfig, readAuth, writeAuth, dropAuth);
+  }, [isConnected, apiBackend]);
 
   function onLogin(auth: AuthState) {
     dispatch({ type: "SET_ERROR", payload: null });
@@ -99,6 +108,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useTrayMenuSyncTrigger(setSyncCounter);
   useVisibilityTokenRefresh(authStateRef, setAuthState);
   useDisplayPrefsBootstrap(dispatch);
+  useBetaPrefsBootstrap(dispatch);
   useThemeSync(state.displayPrefs.theme);
   useInactivitySync(dispatch);
   useWindowDockSnap();
@@ -261,6 +271,14 @@ function useVisibilityTokenRefresh(
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [authStateRef, setAuthState]);
+}
+
+function useBetaPrefsBootstrap(dispatch: React.Dispatch<AppAction>) {
+  useEffect(() => {
+    loadBetaPrefs()
+      .then((prefs) => dispatch({ type: "SET_BETA_PREFS", payload: prefs }))
+      .catch(() => {});
+  }, [dispatch]);
 }
 
 function useDisplayPrefsBootstrap(dispatch: React.Dispatch<AppAction>) {

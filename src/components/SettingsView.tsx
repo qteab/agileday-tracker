@@ -13,11 +13,19 @@ import {
   type ListStickyHeadings,
   type DisplayPrefs,
 } from "../store/display-store";
+import { saveBetaPrefs, type ApiBackend, type BetaPrefs } from "../store/beta-store";
 import { fmtDate } from "../utils/week";
 import { Dropdown } from "./Dropdown";
 import bearIcon from "../assets/bear.png";
 
-export type SettingsPage = "flex" | "vacation" | "menubar" | "appearance" | "timer" | "list";
+export type SettingsPage =
+  | "flex"
+  | "vacation"
+  | "menubar"
+  | "appearance"
+  | "timer"
+  | "list"
+  | "beta";
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -32,6 +40,7 @@ const PAGE_TITLES: Record<SettingsPage, string> = {
   appearance: "Appearance",
   timer: "Timer",
   list: "Entry list",
+  beta: "Beta",
 };
 
 export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) {
@@ -71,6 +80,7 @@ export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) 
         {page === "appearance" && <AppearanceSettings />}
         {page === "timer" && <TimerSettings />}
         {page === "list" && <ListSettings />}
+        {page === "beta" && <BetaSettings />}
       </div>
     </div>
   );
@@ -113,6 +123,12 @@ const MENU_ITEMS: { page: SettingsPage; label: string; hint: string; icon: strin
     label: "Timer",
     hint: "Change how the timer behaves",
     icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
+  },
+  {
+    page: "beta",
+    label: "Beta",
+    hint: "Try unfinished features that may not work yet",
+    icon: "M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z",
   },
 ];
 
@@ -837,6 +853,79 @@ function VacationSettings() {
       >
         {saved ? "Saved!" : saving ? "Saving..." : "Save"}
       </button>
+    </div>
+  );
+}
+
+const BACKEND_OPTIONS: { value: ApiBackend; label: string; hint: string }[] = [
+  {
+    value: "rest",
+    label: "REST",
+    hint: "The original client. Currently returns 401 on every request — AgileDay withdrew REST access from OAuth.",
+  },
+  {
+    value: "mcp",
+    label: "MCP (beta)",
+    hint: "Talks to AgileDay's MCP interface, the only surface today's sign-in can reach.",
+  },
+];
+
+function BetaSettings() {
+  const { state, dispatch, resync } = useApp();
+  const { betaPrefs } = state;
+
+  async function persist(next: BetaPrefs) {
+    dispatch({ type: "SET_BETA_PREFS", payload: next });
+    await saveBetaPrefs(next).catch(() => {});
+    // The provider is rebuilt from betaPrefs, but the data load is keyed on
+    // the sync counter too — bump it so the switch reloads immediately.
+    resync();
+  }
+
+  return (
+    <div className="px-4 py-4 space-y-4">
+      <div className="bg-bg-card rounded-xl p-4 border border-border">
+        <div className="text-sm font-medium text-text">AgileDay backend</div>
+        <p className="text-xs text-text-muted mt-1">
+          Which AgileDay API the app reads and writes through.
+        </p>
+        <div className="flex gap-1 mt-3 p-1 bg-bg rounded-lg">
+          {BACKEND_OPTIONS.map(({ value, label }) => (
+            <button
+              key={value}
+              onClick={() => persist({ ...betaPrefs, apiBackend: value })}
+              className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                betaPrefs.apiBackend === value
+                  ? "bg-primary text-white"
+                  : "text-text-muted hover:text-text"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-text-muted mt-2">
+          {BACKEND_OPTIONS.find((option) => option.value === betaPrefs.apiBackend)?.hint}
+        </p>
+      </div>
+
+      {betaPrefs.apiBackend === "mcp" && (
+        <div className="bg-bg-card rounded-xl p-4 border border-border">
+          <div className="text-sm font-medium text-text">Known gaps on MCP</div>
+          <ul className="text-xs text-text-muted mt-2 space-y-1.5 list-disc pl-4">
+            <li>
+              Task names aren&apos;t available — tasks show as a short id, and only tasks you have
+              logged against before can be picked.
+            </li>
+            <li>Public holidays are computed locally, and only for Sweden.</li>
+            <li>
+              Entry status is per week rather than per entry, so a whole week reads as submitted
+              once any of it is.
+            </li>
+            <li>Absence projects appear only where you are allocated to them.</li>
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
