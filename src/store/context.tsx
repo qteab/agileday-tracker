@@ -56,6 +56,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [syncCounter, setSyncCounter] = useState(0);
   const [timerLoaded, setTimerLoaded] = useState(false);
+  // Which backend to use is stored on disk, so it isn't known on the first
+  // render. Building a provider before it loads starts a data load against the
+  // default backend that is immediately thrown away when the real choice
+  // arrives — wasted requests, and a cancelled load to reason about.
+  const [betaLoaded, setBetaLoaded] = useState(false);
   const authStateRef = useRef<AuthState | null>(null);
 
   authStateRef.current = authState;
@@ -63,7 +68,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const apiBackend = state.betaPrefs.apiBackend;
 
   const api = useMemo<ApiProvider | null>(() => {
-    if (!isConnected) return null;
+    if (!isConnected || !betaLoaded) return null;
 
     const providerConfig = {
       apiBaseUrl: buildApiBaseUrl(DEFAULT_CONNECTION),
@@ -94,7 +99,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           dropAuth
         )
       : createAgileDayProvider(providerConfig as AgileDayConfig, readAuth, writeAuth, dropAuth);
-  }, [isConnected, apiBackend]);
+  }, [isConnected, betaLoaded, apiBackend]);
 
   function onLogin(auth: AuthState) {
     dispatch({ type: "SET_ERROR", payload: null });
@@ -116,7 +121,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useTrayMenuSyncTrigger(setSyncCounter);
   useVisibilityTokenRefresh(authStateRef, setAuthState);
   useDisplayPrefsBootstrap(dispatch);
-  useBetaPrefsBootstrap(dispatch);
+  useBetaPrefsBootstrap(dispatch, setBetaLoaded);
   useThemeSync(state.displayPrefs.theme);
   useInactivitySync(dispatch);
   useWindowDockSnap();
@@ -281,12 +286,18 @@ function useVisibilityTokenRefresh(
   }, [authStateRef, setAuthState]);
 }
 
-function useBetaPrefsBootstrap(dispatch: React.Dispatch<AppAction>) {
+function useBetaPrefsBootstrap(
+  dispatch: React.Dispatch<AppAction>,
+  setLoaded: (loaded: boolean) => void
+) {
   useEffect(() => {
     loadBetaPrefs()
       .then((prefs) => dispatch({ type: "SET_BETA_PREFS", payload: prefs }))
-      .catch(() => {});
-  }, [dispatch]);
+      // On failure the defaults stand — mark it loaded either way, or no
+      // provider is ever built and the app sits on "Loading..." forever.
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, [dispatch, setLoaded]);
 }
 
 function useDisplayPrefsBootstrap(dispatch: React.Dispatch<AppAction>) {
@@ -607,14 +618,18 @@ function useConnectedDataLoad(
         loadAndApplyBalanceConfigs(api, employee.id, pastStr, () => cancelled, dispatch);
         hydrateTaskMetadataForEntries(api, entries, () => cancelled, dispatch);
       } catch (err) {
+        // A cancelled run's error belongs to a provider that is no longer
+        // current, so it must not overwrite the live one's state.
         if (cancelled) return;
         const message = err instanceof Error ? err.message : "Failed to connect to AgileDay";
         dispatch({ type: "SET_ERROR", payload: message });
       } finally {
-        if (!cancelled) {
-          dispatch({ type: "SET_LOADING", payload: false });
-          dispatch({ type: "SET_LOADING_STATUS", payload: null });
-        }
+        // Always clear, even when cancelled. A cancelled run is not guaranteed
+        // a successor — switching backends rebuilds the provider mid-load —
+        // and skipping this leaves the app on "Loading..." forever. A later run
+        // sets it back to true, so clearing twice is harmless.
+        dispatch({ type: "SET_LOADING", payload: false });
+        dispatch({ type: "SET_LOADING_STATUS", payload: null });
       }
     }
 
