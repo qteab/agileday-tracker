@@ -34,11 +34,18 @@ const PROJECT_PAGE_SIZE = 100;
 const MAX_PROJECT_PAGES = 20;
 
 /**
- * How far back to mine timecards when building the task index. Deep enough to
- * cover projects worked earlier in the year, shallow enough to stay cheap —
- * `show_timecard` is one call per week.
+ * How far back to sweep for the task index when nothing is cached yet. Kept
+ * short because the normal path reuses weeks the entry read already fetched.
  */
-const TASK_INDEX_WEEKS = 26;
+const TASK_INDEX_WEEKS = 8;
+
+/**
+ * Ceiling on concurrent MCP calls.
+ *
+ * Reads are one request per week, so a long flex window would otherwise open
+ * dozens of sockets at once — the app stalls and the server sees a burst.
+ */
+const MAX_CONCURRENT_CALLS = 4;
 
 // Same palette as the REST provider so a backend switch doesn't recolour the UI.
 const PROJECT_COLORS = [
@@ -67,6 +74,15 @@ export interface McpProviderConfig {
   /** e.g. "https://qvik.agileday.io/api" */
   apiBaseUrl: string;
   authConfig: AuthConfig;
+  /**
+   * Called with a human-readable description of what the provider is doing,
+   * and with null when it goes idle.
+   *
+   * Reads here are one request per week, so a wide window takes visibly longer
+   * than the REST provider ever did. A bare "Loading..." leaves the user unable
+   * to tell slow from stuck.
+   */
+  onProgress?: (status: string | null) => void;
 }
 
 // --- MCP payload shapes -------------------------------------------------
@@ -98,6 +114,14 @@ interface McpTimecard {
     allocation_percent?: number;
     hours?: number;
   }>;
+}
+
+/** `search_projects` answers with this envelope, not a bare array. */
+interface McpProjectsPage {
+  projects?: McpProjectSummary[];
+  total_count?: number;
+  limit?: number;
+  offset?: number;
 }
 
 interface McpProjectSummary {
@@ -203,36 +227,109 @@ export function createMcpProvider(
     fetchOverride
   );
 
+  function report(status: string | null): void {
+    config.onProgress?.(status);
+  }
+
   function call<T>(tool: string, args: Record<string, unknown>): Promise<T> {
     // Every tool takes a `reason`; the server logs it against the call.
     return client.callTool<T>(tool, { reason: "QTE Time Tracker (beta MCP backend)", ...args });
   }
 
   /**
+   * Week timecards already fetched, keyed `employeeId:week`.
+   *
+   * Reads are per week, and a single app load wants overlapping weeks several
+   * times over: the entry window, the flex/vacation pre-window, the allocation
+   * view and the task index all ask for weeks the others already pulled.
+   * Caching the in-flight promise (not just the result) collapses that to one
+   * request per week and dedupes concurrent callers.
+   */
+  const weekCache = new Map<string, Promise<McpTimecard>>();
+
+  function cacheKey(empId: string, week: string): string {
+    return `${empId}:${week}`;
+  }
+
+  function fetchWeek(empId: string, week: string): Promise<McpTimecard> {
+    const key = cacheKey(empId, week);
+    const cached = weekCache.get(key);
+    if (cached) return cached;
+
+    const pending = call<McpTimecard>("show_timecard", { employee_id: empId, week }).catch(
+      (err) => {
+        // Don't leave a rejected promise in the cache — a later read would
+        // inherit the failure instead of retrying.
+        weekCache.delete(key);
+        throw err;
+      }
+    );
+    weekCache.set(key, pending);
+    return pending;
+  }
+
+  /** Drop cached weeks after a write so the next read sees the new state. */
+  function invalidateWeeks(): void {
+    weekCache.clear();
+  }
+
+  /**
+   * Resolve `tasks` with at most `limit` requests in flight.
+   *
+   * `show_timecard` is one call per week, so an unbounded `Promise.all` over a
+   * long flex window opens dozens of sockets at once and the whole app stalls
+   * behind them. A small pool keeps the load responsive.
+   */
+  async function mapLimit<T, R>(
+    items: T[],
+    limit: number,
+    task: (item: T) => Promise<R>
+  ): Promise<R[]> {
+    const results: R[] = new Array(items.length);
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+      for (;;) {
+        const index = cursor++;
+        if (index >= items.length) return;
+        results[index] = await task(items[index]);
+      }
+    });
+    await Promise.all(workers);
+    return results;
+  }
+
+  /**
    * project id → task ids seen in timecard history.
    *
-   * Memoised per provider instance and resolved at most once: mining it costs
-   * one `show_timecard` call per week. Failures resolve to an empty index so a
-   * task-less project degrades rather than breaking the picker.
+   * Built from whatever weeks the cache already holds, so in the normal flow —
+   * where the entry window has just been read — it costs nothing. Only a cold
+   * cache pays for a short sweep of recent weeks.
    */
   let taskIndex: Promise<Map<string, Set<string>>> | null = null;
 
   function loadTaskIndex(): Promise<Map<string, Set<string>>> {
     if (!taskIndex) {
       taskIndex = (async () => {
-        const index = new Map<string, Set<string>>();
-        const thisMonday = fmtDate(getWeekStart(now()));
-        const weeks: string[] = [];
-        const cursor = new Date(thisMonday);
-        for (let i = 0; i < TASK_INDEX_WEEKS; i++) {
-          weeks.push(fmtDate(cursor));
-          cursor.setDate(cursor.getDate() - 7);
+        // Only a cold cache needs the employee lookup and the sweep; the
+        // normal path reuses weeks the entry read already pulled.
+        if (weekCache.size === 0) {
+          report("Looking up tasks from recent timecards...");
+          const empId = await employeeId();
+          const weeks: string[] = [];
+          const cursor = new Date(fmtDate(getWeekStart(now())));
+          for (let i = 0; i < TASK_INDEX_WEEKS; i++) {
+            weeks.push(fmtDate(cursor));
+            cursor.setDate(cursor.getDate() - 7);
+          }
+          await mapLimit(weeks, MAX_CONCURRENT_CALLS, (week) =>
+            fetchWeek(empId, week).catch(() => null)
+          );
         }
 
+        const index = new Map<string, Set<string>>();
         const cards = await Promise.all(
-          weeks.map((week) => call<McpTimecard>("show_timecard", { week }).catch(() => null))
+          [...weekCache.values()].map((pending) => pending.catch(() => null))
         );
-
         for (const card of cards) {
           for (const row of card?.rows ?? []) {
             if (!row.task_id) continue;
@@ -299,6 +396,8 @@ export function createMcpProvider(
         })
       );
     }
+    // Cached weeks now describe pre-write state, so the next read must refetch.
+    invalidateWeeks();
     return results;
   }
 
@@ -320,17 +419,24 @@ export function createMcpProvider(
     },
 
     async getProjects(): Promise<Project[]> {
+      report("Loading projects...");
       const collected: McpProjectSummary[] = [];
       for (let page = 0; page < MAX_PROJECT_PAGES; page++) {
-        const batch = await call<McpProjectSummary[]>("search_projects", {
+        // The tool answers with an envelope — `{projects, total_count, limit,
+        // offset}` — not a bare array.
+        const batch = await call<McpProjectsPage>("search_projects", {
           stage: "ONGOING",
           limit: PROJECT_PAGE_SIZE,
           offset: page * PROJECT_PAGE_SIZE,
         });
-        if (!Array.isArray(batch) || batch.length === 0) break;
-        collected.push(...batch);
-        if (batch.length < PROJECT_PAGE_SIZE) break;
+        const projects = batch?.projects;
+        if (!Array.isArray(projects) || projects.length === 0) break;
+        collected.push(...projects);
+        if (collected.length >= (batch.total_count ?? collected.length)) break;
+        if (projects.length < PROJECT_PAGE_SIZE) break;
+        report(`Loading projects — ${collected.length} so far...`);
       }
+      report(null);
 
       return collected.map((p, i) => ({
         id: String(p.projectId ?? p.id),
@@ -371,15 +477,23 @@ export function createMcpProvider(
       endDate: string
     ): Promise<TimeEntry[]> {
       const weeks = weeksInRange(startDate, endDate);
-      const cards = await Promise.all(
-        weeks.map((week) =>
-          call<McpTimecard>("show_timecard", { employee_id: employeeIdArg, week }).catch(() => null)
-        )
-      );
+      let done = 0;
+      report(`Loading ${weeks.length} weeks of time entries...`);
+
+      // A missing week silently understates the flex balance rather than
+      // looking broken, so a week that fails twice fails the whole read.
+      const cards = await mapLimit(weeks, MAX_CONCURRENT_CALLS, async (week) => {
+        try {
+          return await fetchWeek(employeeIdArg, week).catch(() => fetchWeek(employeeIdArg, week));
+        } finally {
+          done++;
+          report(`Loading time entries — week ${done} of ${weeks.length}...`);
+        }
+      });
+      report(null);
 
       // The window rarely aligns to week boundaries, so trim the overhang.
       return cards
-        .filter((card): card is McpTimecard => card !== null)
         .flatMap(timecardToEntries)
         .filter((entry) => entry.date >= startDate && entry.date <= endDate);
     },
@@ -512,10 +626,7 @@ export function createMcpProvider(
       // The current week's timecard carries the allocation view the tracker
       // needs — one suggested_hours row per contracted opening, with the
       // opening's percentage and hours already resolved.
-      const card = await call<McpTimecard>("show_timecard", {
-        employee_id: employeeIdArg,
-        week: fmtDate(getWeekStart(now())),
-      });
+      const card = await fetchWeek(employeeIdArg, fmtDate(getWeekStart(now())));
 
       return (card.suggested_hours ?? []).map((suggestion) => ({
         projectId: suggestion.project_id,
@@ -530,10 +641,7 @@ export function createMcpProvider(
     },
 
     async getMyProjects(employeeIdArg: string): Promise<MyProjectInfo[]> {
-      const card = await call<McpTimecard>("show_timecard", {
-        employee_id: employeeIdArg,
-        week: fmtDate(getWeekStart(now())),
-      });
+      const card = await fetchWeek(employeeIdArg, fmtDate(getWeekStart(now())));
 
       const byId = new Map<string, MyProjectInfo>();
       for (const suggestion of card.suggested_hours ?? []) {

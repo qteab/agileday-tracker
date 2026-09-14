@@ -296,13 +296,42 @@ describe("getTimeEntries", () => {
     expect(weeks).toEqual(["2026-09-14", "2026-09-21"]);
   });
 
-  it("degrades to the weeks that did load when one fails", async () => {
-    expectHandshakeThen(toolResult(CARD), new Response("boom", { status: 500 }));
+  it("retries a week that fails once", async () => {
+    expectHandshakeThen(
+      toolResult(CARD),
+      new Response("boom", { status: 500 }),
+      toolResult({ week: "2026-09-21" })
+    );
 
     const entries = await provider.getTimeEntries(EMP, "2026-09-14", "2026-09-22");
 
-    // A single unreadable week must not blank the whole list.
     expect(entries).toHaveLength(2);
+  });
+
+  it("fails the whole read when a week fails twice", async () => {
+    expectHandshakeThen(
+      toolResult(CARD),
+      new Response("boom", { status: 500 }),
+      new Response("boom", { status: 500 })
+    );
+
+    // Silently dropping a week understates the flex balance — a visibly failed
+    // read is better than a quietly wrong number.
+    await expect(provider.getTimeEntries(EMP, "2026-09-14", "2026-09-22")).rejects.toThrow(/500/);
+  });
+
+  it("fetches each week once even when several callers want it", async () => {
+    expectHandshakeThen(toolResult(CARD));
+
+    const [first, second] = await Promise.all([
+      provider.getTimeEntries(EMP, "2026-09-14", "2026-09-18"),
+      provider.getTimeEntries(EMP, "2026-09-14", "2026-09-18"),
+    ]);
+
+    // Handshake (2) plus a single show_timecard — the second read is served
+    // from the in-flight promise rather than opening another request.
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(first).toEqual(second);
   });
 });
 
@@ -436,15 +465,46 @@ describe("writes", () => {
 });
 
 describe("projects and allocations", () => {
-  it("pages search_projects until a short page arrives", async () => {
-    const page = (n: number) =>
-      Array.from({ length: n }, (_, i) => ({ projectId: `p${i}`, name: `Project ${i}` }));
-    expectHandshakeThen(toolResult(page(100)), toolResult(page(3)));
+  it("reads projects out of the result envelope", async () => {
+    // The tool answers `{projects, total_count, limit, offset}`. Treating that
+    // as a bare array yields zero projects and every entry renders as
+    // "Unknown project".
+    expectHandshakeThen(
+      toolResult({
+        projects: [
+          { projectId: "p1", name: "DHL Retainer", customerName: "DHL", projectType: "EXTERNAL" },
+        ],
+        total_count: 1,
+        limit: 100,
+        offset: 0,
+      })
+    );
+
+    const projects = await provider.getProjects();
+
+    expect(projects).toHaveLength(1);
+    expect(projects[0]).toMatchObject({
+      id: "p1",
+      name: "DHL Retainer",
+      customerName: "DHL",
+      projectType: "EXTERNAL",
+    });
+    expect(projects[0].color).toBeTruthy();
+  });
+
+  it("pages until total_count is covered", async () => {
+    const page = (n: number, offset: number) => ({
+      projects: Array.from({ length: n }, (_, i) => ({
+        projectId: `p${offset + i}`,
+        name: `Project ${offset + i}`,
+      })),
+      total_count: 103,
+    });
+    expectHandshakeThen(toolResult(page(100, 0)), toolResult(page(3, 100)));
 
     const projects = await provider.getProjects();
 
     expect(projects).toHaveLength(103);
-    expect(projects[0].color).toBeTruthy();
     const second = (bodyOf(3).params as { arguments: { offset: number } }).arguments;
     expect(second.offset).toBe(100);
   });
@@ -502,20 +562,25 @@ describe("projects and allocations", () => {
 });
 
 describe("tasks", () => {
-  it("recovers task ids for a project from timecard history", async () => {
+  const TASK_CARD = {
+    week: "2026-09-14",
+    rows: [
+      { id: "row-1", project_id: "proj-1", task_id: "task-aaa11111", hours: [] },
+      { id: "row-2", project_id: "proj-1", task_id: "task-bbb22222", hours: [] },
+      { id: "row-3", project_id: "proj-2", task_id: "task-ccc33333", hours: [] },
+    ],
+  };
+
+  /** Handshake, then the employee lookup the index needs, then timecards. */
+  function expectTaskIndexFetch(card: unknown) {
     mockFetch.mockResolvedValueOnce(initResult());
     mockFetch.mockResolvedValueOnce(notificationAck());
-    // The index mines many weeks; answer them all with the same card.
-    mockFetch.mockResolvedValue(
-      toolResult({
-        week: "2026-09-14",
-        rows: [
-          { id: "row-1", project_id: "proj-1", task_id: "task-aaa11111", hours: [] },
-          { id: "row-2", project_id: "proj-1", task_id: "task-bbb22222", hours: [] },
-          { id: "row-3", project_id: "proj-2", task_id: "task-ccc33333", hours: [] },
-        ],
-      })
-    );
+    mockFetch.mockResolvedValueOnce(toolResult({ employee_id: EMP }));
+    mockFetch.mockResolvedValue(toolResult(card));
+  }
+
+  it("recovers task ids for a project from timecard history", async () => {
+    expectTaskIndexFetch(TASK_CARD);
 
     const tasks = await provider.getTasks("proj-1");
 
@@ -525,11 +590,22 @@ describe("tasks", () => {
   });
 
   it("returns [] for a project with no logged history", async () => {
-    mockFetch.mockResolvedValueOnce(initResult());
-    mockFetch.mockResolvedValueOnce(notificationAck());
-    mockFetch.mockResolvedValue(toolResult({ week: "2026-09-14", rows: [] }));
+    expectTaskIndexFetch({ week: "2026-09-14", rows: [] });
 
     expect(await provider.getTasks("proj-unknown")).toEqual([]);
+  });
+
+  it("reuses already-fetched weeks instead of sweeping again", async () => {
+    expectHandshakeThen(toolResult(TASK_CARD));
+
+    await provider.getTimeEntries(EMP, "2026-09-14", "2026-09-18");
+    const afterRead = mockFetch.mock.calls.length;
+    const tasks = await provider.getTasks("proj-1");
+
+    // The entry read already pulled this week, so the index costs nothing —
+    // the old code fired a separate 26-week sweep here.
+    expect(mockFetch.mock.calls.length).toBe(afterRead);
+    expect(tasks).toHaveLength(2);
   });
 });
 

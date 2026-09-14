@@ -84,7 +84,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Switching backends rebuilds the provider, which re-runs the data load —
     // so the toggle takes effect without a restart.
     return apiBackend === "mcp"
-      ? createMcpProvider(providerConfig, readAuth, writeAuth, dropAuth)
+      ? createMcpProvider(
+          {
+            ...providerConfig,
+            onProgress: (status) => dispatch({ type: "SET_LOADING_STATUS", payload: status }),
+          },
+          readAuth,
+          writeAuth,
+          dropAuth
+        )
       : createAgileDayProvider(providerConfig as AgileDayConfig, readAuth, writeAuth, dropAuth);
   }, [isConnected, apiBackend]);
 
@@ -560,6 +568,7 @@ function useConnectedDataLoad(
     async function init() {
       if (!api) return;
       dispatch({ type: "SET_LOADING", payload: true });
+      dispatch({ type: "SET_LOADING_STATUS", payload: null });
       dispatch({ type: "SET_ERROR", payload: null });
 
       try {
@@ -602,7 +611,10 @@ function useConnectedDataLoad(
         const message = err instanceof Error ? err.message : "Failed to connect to AgileDay";
         dispatch({ type: "SET_ERROR", payload: message });
       } finally {
-        if (!cancelled) dispatch({ type: "SET_LOADING", payload: false });
+        if (!cancelled) {
+          dispatch({ type: "SET_LOADING", payload: false });
+          dispatch({ type: "SET_LOADING_STATUS", payload: null });
+        }
       }
     }
 

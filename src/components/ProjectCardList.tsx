@@ -130,8 +130,11 @@ export function ProjectCardList() {
 
   if (state.loading) {
     return (
-      <div className="flex items-center justify-center py-12 text-text-muted text-sm">
-        Loading...
+      <div className="flex flex-col items-center justify-center gap-1 py-12 px-6 text-center">
+        <span className="text-text-muted text-sm">Loading...</span>
+        {state.loadingStatus && (
+          <span className="text-text-muted/70 text-xs">{state.loadingStatus}</span>
+        )}
       </div>
     );
   }

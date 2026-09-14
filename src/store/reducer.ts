@@ -51,6 +51,8 @@ export interface AppState {
   betaPrefs: BetaPrefs;
   inactivity: InactivityState;
   loading: boolean;
+  /** Human-readable detail about what the current load is doing, if known. */
+  loadingStatus: string | null;
   error: string | null;
 }
 
@@ -80,6 +82,7 @@ export const initialState: AppState = {
   betaPrefs: DEFAULT_BETA_PREFS,
   inactivity: { idleSeconds: 0, isAway: false, pendingReturn: null },
   loading: false,
+  loadingStatus: null,
   error: null,
 };
 
@@ -109,6 +112,7 @@ export type AppAction =
   | { type: "SET_INACTIVITY"; payload: { idleSeconds: number; isAway: boolean } }
   | { type: "RESOLVE_RETURN" }
   | { type: "SET_LOADING"; payload: boolean }
+  | { type: "SET_LOADING_STATUS"; payload: string | null }
   | { type: "SET_ERROR"; payload: string | null };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -200,6 +204,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     case "SET_LOADING":
       return { ...state, loading: action.payload };
+    case "SET_LOADING_STATUS":
+      return { ...state, loadingStatus: action.payload };
     case "SET_ERROR":
       return { ...state, error: action.payload };
     default:
