@@ -857,16 +857,20 @@ function VacationSettings() {
   );
 }
 
-const BACKEND_OPTIONS: { value: ApiBackend; label: string; hint: string }[] = [
+const BACKEND_OPTIONS: { value: ApiBackend; label: string; hint: string; icon: string }[] = [
   {
     value: "rest",
     label: "REST",
-    hint: "The original client. Currently returns 401 on every request — AgileDay withdrew REST access from OAuth.",
+    hint: "Talks to AgileDay's REST API — time entries, projects and openings as direct endpoints.",
+    // Stacked servers — plain HTTP endpoints.
+    icon: "M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01",
   },
   {
     value: "mcp",
     label: "MCP (beta)",
-    hint: "Talks to AgileDay's MCP interface, the only surface today's sign-in can reach.",
+    hint: "Talks to AgileDay's MCP interface — whole timecards a week at a time, through tool calls.",
+    // Sparkles — MCP is the model-facing interface, not another REST tier.
+    icon: "M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z",
   },
 ];
 
@@ -890,16 +894,25 @@ function BetaSettings() {
           Which AgileDay API the app reads and writes through.
         </p>
         <div className="flex gap-1 mt-3 p-1 bg-bg rounded-lg">
-          {BACKEND_OPTIONS.map(({ value, label }) => (
+          {BACKEND_OPTIONS.map(({ value, label, icon }) => (
             <button
               key={value}
               onClick={() => persist({ ...betaPrefs, apiBackend: value })}
-              className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`flex flex-1 items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
                 betaPrefs.apiBackend === value
                   ? "bg-primary text-white"
                   : "text-text-muted hover:text-text"
               }`}
             >
+              <svg
+                className="w-3.5 h-3.5 shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} />
+              </svg>
               {label}
             </button>
           ))}
