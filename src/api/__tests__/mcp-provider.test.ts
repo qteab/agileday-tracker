@@ -336,8 +336,12 @@ describe("getTimeEntries", () => {
 });
 
 describe("writes", () => {
+  /** The pre-write lookup, answered with a week holding `rows`. */
+  const lookup = (rows: unknown[] = []) =>
+    toolResult({ week: "2026-09-14", status: "SAVED", rows });
+
   it("sends an add operation carrying every field, so the server never elicits", async () => {
-    expectHandshakeThen(toolResult({ week: "2026-09-14", rows: [] }));
+    expectHandshakeThen(lookup(), toolResult({ week: "2026-09-14", rows: [] }));
 
     await provider.createTimeEntry(EMP, {
       description: "Review",
@@ -350,7 +354,7 @@ describe("writes", () => {
       status: "NEW",
     });
 
-    const args = (bodyOf(2).params as { arguments: Record<string, unknown> }).arguments;
+    const args = (bodyOf(3).params as { arguments: Record<string, unknown> }).arguments;
     expect(args.week).toBe("2026-09-14");
     expect(args.operations).toEqual([
       {
@@ -365,8 +369,135 @@ describe("writes", () => {
     ]);
   });
 
+  it("updates the existing entry instead of adding a second one", async () => {
+    // Same project, task and date as the save below. Adding here is what put
+    // three rows on one AgileDay day, one per timer stop.
+    expectHandshakeThen(
+      lookup([
+        {
+          id: "row-1",
+          project_id: "proj-1",
+          task_id: "task-1",
+          hours: [{ id: "hour-1", date: "2026-09-14T00:00:00Z", minutes: 1, description: "" }],
+        },
+      ]),
+      toolResult({ week: "2026-09-14", rows: [] })
+    );
+
+    await provider.createTimeEntry(EMP, {
+      description: "Review",
+      projectId: "proj-1",
+      taskId: "task-1",
+      date: "2026-09-14",
+      startTime: "",
+      minutes: 2,
+      status: "NEW",
+    });
+
+    const args = (bodyOf(3).params as { arguments: Record<string, unknown> }).arguments;
+    expect(args.operations).toEqual([
+      // The app is source of truth: minutes and description overwrite.
+      { action: "update", hour_id: "hour-1", minutes: 2, description: "Review" },
+    ]);
+  });
+
+  it("adds when the same day holds a different task", async () => {
+    expectHandshakeThen(
+      lookup([
+        {
+          id: "row-1",
+          project_id: "proj-1",
+          task_id: "task-OTHER",
+          hours: [{ id: "hour-1", date: "2026-09-14T00:00:00Z", minutes: 60 }],
+        },
+      ]),
+      toolResult({ week: "2026-09-14", rows: [] })
+    );
+
+    await provider.createTimeEntry(EMP, {
+      description: "",
+      projectId: "proj-1",
+      taskId: "task-1",
+      date: "2026-09-14",
+      startTime: "",
+      minutes: 30,
+      status: "NEW",
+    });
+
+    const args = (bodyOf(3).params as { arguments: { operations: { action: string }[] } })
+      .arguments;
+    expect(args.operations[0].action).toBe("add");
+  });
+
+  it("adds rather than editing a week that is already submitted", async () => {
+    expectHandshakeThen(
+      toolResult({
+        week: "2026-09-14",
+        status: "SUBMITTED",
+        rows: [
+          {
+            id: "row-1",
+            project_id: "proj-1",
+            task_id: "task-1",
+            hours: [{ id: "hour-1", date: "2026-09-14T00:00:00Z", minutes: 60 }],
+          },
+        ],
+      }),
+      toolResult({ week: "2026-09-14", rows: [] })
+    );
+
+    await provider.createTimeEntry(EMP, {
+      description: "",
+      projectId: "proj-1",
+      taskId: "task-1",
+      date: "2026-09-14",
+      startTime: "",
+      minutes: 30,
+      status: "NEW",
+    });
+
+    // A submitted week can't be edited, so overwriting its row would fail.
+    const args = (bodyOf(3).params as { arguments: { operations: { action: string }[] } })
+      .arguments;
+    expect(args.operations[0].action).toBe("add");
+  });
+
+  it("looks the day up fresh rather than trusting a cached week", async () => {
+    expectHandshakeThen(
+      // The app-start read: the day is empty.
+      toolResult({ week: "2026-09-14", status: "SAVED", rows: [] }),
+      // The pre-write lookup: an entry has appeared since, from the web app.
+      lookup([
+        {
+          id: "row-1",
+          project_id: "proj-1",
+          task_id: "task-1",
+          hours: [{ id: "hour-1", date: "2026-09-14T00:00:00Z", minutes: 60 }],
+        },
+      ]),
+      toolResult({ week: "2026-09-14", rows: [] })
+    );
+
+    await provider.getTimeEntries(EMP, "2026-09-14", "2026-09-18");
+    await provider.createTimeEntry(EMP, {
+      description: "",
+      projectId: "proj-1",
+      taskId: "task-1",
+      date: "2026-09-14",
+      startTime: "",
+      minutes: 30,
+      status: "NEW",
+    });
+
+    // Acting on the stale cached week would append a duplicate.
+    const args = (bodyOf(4).params as { arguments: { operations: { action: string }[] } })
+      .arguments;
+    expect(args.operations[0].action).toBe("update");
+  });
+
   it("returns the server-assigned id after a create", async () => {
     expectHandshakeThen(
+      lookup(),
       toolResult({
         week: "2026-09-14",
         status: "SAVED",
@@ -397,7 +528,7 @@ describe("writes", () => {
   });
 
   it("marks a create unsaved when the server doesn't echo the row back", async () => {
-    expectHandshakeThen(toolResult({ week: "2026-09-14", rows: [] }));
+    expectHandshakeThen(lookup(), toolResult({ week: "2026-09-14", rows: [] }));
 
     const created = await provider.createTimeEntry(EMP, {
       description: "Review",

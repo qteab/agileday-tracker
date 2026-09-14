@@ -47,6 +47,9 @@ const TASK_INDEX_WEEKS = 8;
  */
 const MAX_CONCURRENT_CALLS = 4;
 
+/** Statuses whose entries AgileDay still lets the app change. */
+const EDITABLE_STATUSES = new Set<TimeEntry["status"]>(["NEW", "SAVED", "CHANGE_REQUESTED"]);
+
 /** Opening ids per `get_opening_details` call. */
 const OPENING_DETAIL_BATCH = 20;
 
@@ -302,6 +305,18 @@ export function createMcpProvider(
   }
 
   /**
+   * Read a week bypassing the cache.
+   *
+   * The lookup before a write has to see the server's current state: acting on
+   * a week cached at app start would miss an entry added since — in the web app
+   * or by another device — and append a duplicate row instead of updating it.
+   */
+  function fetchWeekFresh(empId: string, week: string): Promise<McpTimecard> {
+    weekCache.delete(cacheKey(empId, week));
+    return fetchWeek(empId, week);
+  }
+
+  /**
    * Resolve `tasks` with at most `limit` requests in flight.
    *
    * `show_timecard` is one call per week, so an unbounded `Promise.all` over a
@@ -370,6 +385,32 @@ export function createMcpProvider(
       })().catch(() => new Map<string, Set<string>>());
     }
     return taskIndex;
+  }
+
+  /**
+   * The entry AgileDay already holds for this (project, task, date), if any.
+   *
+   * Matches the REST provider's rule: project and task identify the row, the
+   * description does not — saving overwrites it. Submitted and approved weeks
+   * are skipped because they can no longer be edited, so a new row is correct
+   * there.
+   */
+  async function findSameDayEntry(
+    empId: string,
+    entry: Omit<TimeEntry, "id" | "syncStatus">
+  ): Promise<TimeEntry | null> {
+    const card = await fetchWeekFresh(empId, mondayOf(entry.date)).catch(() => null);
+    if (!card || !EDITABLE_STATUSES.has(weekStatus(card.status))) return null;
+
+    const wanted = entry.taskId ?? "";
+    return (
+      timecardToEntries(card).find(
+        (candidate) =>
+          candidate.date === entry.date &&
+          candidate.projectId === entry.projectId &&
+          (candidate.taskId ?? "") === wanted
+      ) ?? null
+    );
   }
 
   async function employeeId(): Promise<string> {
@@ -558,37 +599,53 @@ export function createMcpProvider(
       employeeIdArg: string,
       entry: Omit<TimeEntry, "id" | "syncStatus">
     ): Promise<TimeEntry> {
+      // The app is the source of truth on save. If AgileDay already holds an
+      // entry for this (project, task, date), overwrite it — appending instead
+      // is what produced a fresh row on every timer stop.
+      const existing = await findSameDayEntry(employeeIdArg, entry);
+
       const [card] = await applyOperations(
         [
-          {
-            date: entry.date,
-            op: {
-              action: "add",
-              date: entry.date,
-              minutes: entry.minutes,
-              project_id: entry.projectId,
-              ...(entry.taskId ? { task_id: entry.taskId } : {}),
-              ...(entry.openingId ? { opening_id: entry.openingId } : {}),
-              ...(entry.description ? { description: entry.description } : {}),
-            },
-          },
+          existing
+            ? {
+                date: entry.date,
+                op: {
+                  action: "update",
+                  hour_id: existing.id,
+                  minutes: entry.minutes,
+                  description: entry.description ?? "",
+                },
+              }
+            : {
+                date: entry.date,
+                op: {
+                  action: "add",
+                  date: entry.date,
+                  minutes: entry.minutes,
+                  project_id: entry.projectId,
+                  ...(entry.taskId ? { task_id: entry.taskId } : {}),
+                  ...(entry.openingId ? { opening_id: entry.openingId } : {}),
+                  ...(entry.description ? { description: entry.description } : {}),
+                },
+              },
         ],
         employeeIdArg
       );
 
       // Recover the server-assigned hour id by finding the row we just wrote.
-      const written = timecardToEntries(card ?? { week: entry.date }).find(
-        (candidate) =>
-          candidate.date === entry.date &&
-          candidate.projectId === entry.projectId &&
-          candidate.description === entry.description
+      const written = timecardToEntries(card ?? { week: entry.date }).find((candidate) =>
+        existing
+          ? candidate.id === existing.id
+          : candidate.date === entry.date &&
+            candidate.projectId === entry.projectId &&
+            candidate.description === (entry.description ?? "")
       );
 
       return {
         ...entry,
-        id: written?.id ?? "",
+        id: written?.id ?? existing?.id ?? "",
         status: written?.status ?? "SAVED",
-        syncStatus: written ? "synced" : "unsaved",
+        syncStatus: written || existing ? "synced" : "unsaved",
       };
     },
 
