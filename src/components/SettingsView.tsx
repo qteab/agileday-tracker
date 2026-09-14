@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useApp } from "../store/context";
 import { saveFlexConfig, type FlexConfig } from "../store/flex-store";
+import { saveVacationConfig, type VacationConfig } from "../store/vacation-store";
 import {
   saveDisplayPrefs,
   clampInactivityMinutes,
@@ -13,9 +14,10 @@ import {
   type DisplayPrefs,
 } from "../store/display-store";
 import { fmtDate } from "../utils/week";
+import { Dropdown } from "./Dropdown";
 import bearIcon from "../assets/bear.png";
 
-export type SettingsPage = "flex" | "menubar" | "appearance" | "timer" | "list";
+export type SettingsPage = "flex" | "vacation" | "menubar" | "appearance" | "timer" | "list";
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -25,6 +27,7 @@ interface SettingsViewProps {
 
 const PAGE_TITLES: Record<SettingsPage, string> = {
   flex: "Flex",
+  vacation: "Vacation days",
   menubar: "Menu bar",
   appearance: "Appearance",
   timer: "Timer",
@@ -63,6 +66,7 @@ export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) 
       <div className="flex-1 min-h-0 overflow-y-auto">
         {page === null && <SettingsMenu onOpen={setPage} onSignedOut={onBack} />}
         {page === "flex" && <FlexSettings />}
+        {page === "vacation" && <VacationSettings />}
         {page === "menubar" && <MenuBarSettings />}
         {page === "appearance" && <AppearanceSettings />}
         {page === "timer" && <TimerSettings />}
@@ -85,6 +89,12 @@ const MENU_ITEMS: { page: SettingsPage; label: string; hint: string; icon: strin
     label: "Flex",
     hint: "Set up how your flex balance is tracked",
     icon: "M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3",
+  },
+  {
+    page: "vacation",
+    label: "Vacation days",
+    hint: "Set up how your vacation day balance is tracked",
+    icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
   },
   {
     page: "menubar",
@@ -584,26 +594,26 @@ function ListSettings() {
   );
 }
 
+// Derive month from a stored start date (which is the last day of a month)
+function dateToMonth(dateStr: string): string {
+  const d = new Date(dateStr + "T12:00:00");
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+function getDefaultMonth(): string {
+  const now = new Date();
+  // Default to previous month
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+}
+function monthToLastDay(monthStr: string): string {
+  const [year, month] = monthStr.split("-").map(Number);
+  const lastDay = new Date(year, month, 0); // day 0 of next month = last day of this month
+  return fmtDate(lastDay);
+}
+
 function FlexSettings() {
   const { state, dispatch, resync } = useApp();
   const { flexConfig } = state;
-
-  // Derive month from stored start date (which is last day of month)
-  function dateToMonth(dateStr: string): string {
-    const d = new Date(dateStr + "T12:00:00");
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  }
-  function getDefaultMonth(): string {
-    const now = new Date();
-    // Default to previous month
-    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
-  }
-  function monthToLastDay(monthStr: string): string {
-    const [year, month] = monthStr.split("-").map(Number);
-    const lastDay = new Date(year, month, 0); // day 0 of next month = last day of this month
-    return fmtDate(lastDay);
-  }
 
   const [paycheckMonth, setPaycheckMonth] = useState(
     flexConfig?.startDate ? dateToMonth(flexConfig.startDate) : getDefaultMonth()
@@ -726,6 +736,103 @@ function FlexSettings() {
       <button
         onClick={handleSave}
         disabled={saving || !paycheckMonth}
+        className="w-full py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+      >
+        {saved ? "Saved!" : saving ? "Saving..." : "Save"}
+      </button>
+    </div>
+  );
+}
+
+function VacationSettings() {
+  const { state, dispatch, resync } = useApp();
+  const { vacationConfig, projects } = state;
+
+  const [payslipMonth, setPayslipMonth] = useState(
+    vacationConfig?.startDate ? dateToMonth(vacationConfig.startDate) : getDefaultMonth()
+  );
+  const [initialDays, setInitialDays] = useState(vacationConfig?.initialDays?.toString() ?? "");
+  const [projectId, setProjectId] = useState(vacationConfig?.projectId ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const absenceProjects = projects
+    .filter((p) => p.projectType === "ABSENCE")
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  async function handleSave() {
+    const days = parseFloat(initialDays);
+    if (!payslipMonth || isNaN(days) || !projectId) return;
+
+    setSaving(true);
+    const config: VacationConfig = {
+      startDate: monthToLastDay(payslipMonth),
+      initialDays: days,
+      projectId,
+    };
+    try {
+      await saveVacationConfig(config);
+      dispatch({ type: "SET_VACATION_CONFIG", payload: config });
+      // Pre-window entries were fetched for the old start date — reload so an
+      // earlier start date gets its vacation entries
+      resync();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      dispatch({ type: "SET_ERROR", payload: "Failed to save vacation config" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="px-4 py-4 space-y-4">
+      <div className="bg-bg-card rounded-xl p-4 border border-border space-y-3">
+        <h3 className="text-sm font-semibold text-text">Vacation day balance</h3>
+        <div>
+          <label className="block text-xs text-text-muted mb-1">Latest payslip month</label>
+          <input
+            type="month"
+            value={payslipMonth}
+            onChange={(e) => setPayslipMonth(e.target.value)}
+            className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-text-muted mb-1">Vacation days remaining</label>
+          <p className="text-[10px] text-text-muted mb-1.5">
+            Check your latest Fortnox payslip for your remaining vacation days.
+          </p>
+          <input
+            type="number"
+            step="0.5"
+            value={initialDays}
+            onChange={(e) => setInitialDays(e.target.value)}
+            className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+      </div>
+
+      <div className="bg-bg-card rounded-xl p-4 border border-border space-y-3">
+        <h3 className="text-sm font-semibold text-text">Vacation project</h3>
+        <div>
+          <p className="text-[10px] text-text-muted mb-1.5">
+            Days logged on this AgileDay project after the payslip month count down your balance (8h
+            = 1 day).
+          </p>
+          <Dropdown
+            options={absenceProjects.map((p) => ({ id: p.id, label: p.name, color: p.color }))}
+            selectedId={projectId || null}
+            onSelect={setProjectId}
+            placeholder="Select a project…"
+            emptyLabel="No absence projects found"
+          />
+        </div>
+      </div>
+
+      <button
+        onClick={handleSave}
+        disabled={saving || !payslipMonth || !projectId || initialDays.trim() === ""}
         className="w-full py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
       >
         {saved ? "Saved!" : saving ? "Saving..." : "Save"}
