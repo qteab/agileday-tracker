@@ -320,6 +320,18 @@ describe("getTimeEntries", () => {
     await expect(provider.getTimeEntries(EMP, "2026-09-14", "2026-09-22")).rejects.toThrow(/500/);
   });
 
+  it("refetches after invalidateCache, so a manual sync reaches the server", async () => {
+    expectHandshakeThen(toolResult(CARD), toolResult(CARD));
+
+    await provider.getTimeEntries(EMP, "2026-09-14", "2026-09-18");
+    provider.invalidateCache?.();
+    await provider.getTimeEntries(EMP, "2026-09-14", "2026-09-18");
+
+    // Without this the provider serves the cached week and Sync does nothing,
+    // so an entry edited in AgileDay web never appears.
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+  });
+
   it("fetches each week once even when several callers want it", async () => {
     expectHandshakeThen(toolResult(CARD));
 

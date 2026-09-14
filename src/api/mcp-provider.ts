@@ -844,6 +844,10 @@ export function createMcpProvider(
       return [...byId.values()];
     },
 
+    invalidateCache(): void {
+      invalidateWeeks();
+    },
+
     async getHolidays(countryCode: string, startDate: string, endDate: string): Promise<Holiday[]> {
       return holidaysInRange(countryCode, startDate, endDate);
     },

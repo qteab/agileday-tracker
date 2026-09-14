@@ -578,6 +578,10 @@ function useConnectedDataLoad(
 
     async function init() {
       if (!api) return;
+      // A manual sync must reach the server. Within one load the provider's
+      // cache is what stops the entry window, the flex pre-window and the
+      // allocation view refetching the same weeks; across loads it has to go.
+      api.invalidateCache?.();
       dispatch({ type: "SET_LOADING", payload: true });
       dispatch({ type: "SET_LOADING_STATUS", payload: null });
       dispatch({ type: "SET_ERROR", payload: null });
