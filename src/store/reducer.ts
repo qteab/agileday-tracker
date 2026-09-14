@@ -4,6 +4,16 @@ import type { VacationConfig } from "./vacation-store";
 import { DEFAULT_DISPLAY_PREFS, type DisplayPrefs } from "./display-store";
 import { DEFAULT_BETA_PREFS, type BetaPrefs } from "./beta-store";
 
+/** What a long-running load is currently doing. */
+export interface LoadingProgress {
+  /** Human-readable description of the current step. */
+  message: string;
+  /** Steps finished so far. Omit when the total isn't known up front. */
+  current?: number;
+  /** Total steps. Omit for an indeterminate spinner. */
+  total?: number;
+}
+
 export interface TimerState {
   isRunning: boolean;
   projectId: string | null;
@@ -51,8 +61,8 @@ export interface AppState {
   betaPrefs: BetaPrefs;
   inactivity: InactivityState;
   loading: boolean;
-  /** Human-readable detail about what the current load is doing, if known. */
-  loadingStatus: string | null;
+  /** What the current load is doing, if it reports progress. */
+  loadingStatus: LoadingProgress | null;
   error: string | null;
 }
 
@@ -112,7 +122,7 @@ export type AppAction =
   | { type: "SET_INACTIVITY"; payload: { idleSeconds: number; isAway: boolean } }
   | { type: "RESOLVE_RETURN" }
   | { type: "SET_LOADING"; payload: boolean }
-  | { type: "SET_LOADING_STATUS"; payload: string | null }
+  | { type: "SET_LOADING_STATUS"; payload: LoadingProgress | null }
   | { type: "SET_ERROR"; payload: string | null };
 
 export function appReducer(state: AppState, action: AppAction): AppState {

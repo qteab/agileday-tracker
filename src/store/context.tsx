@@ -92,7 +92,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ? createMcpProvider(
           {
             ...providerConfig,
-            onProgress: (status) => dispatch({ type: "SET_LOADING_STATUS", payload: status }),
+            onProgress: (progress) => dispatch({ type: "SET_LOADING_STATUS", payload: progress }),
           },
           readAuth,
           writeAuth,

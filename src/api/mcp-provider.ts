@@ -24,6 +24,7 @@ import type { Allocation, Employee, Holiday, Project, ProjectType, Task, TimeEnt
 import type { AuthConfig, AuthState } from "./auth";
 import { createMcpClient, type McpClient } from "./mcp-client";
 import { createTokenProvider } from "./token";
+import type { LoadingProgress } from "../store/reducer";
 import { holidaysInRange } from "../utils/holidays-se";
 import { getWeekStart, fmtDate } from "../utils/week";
 
@@ -88,7 +89,7 @@ export interface McpProviderConfig {
    * than the REST provider ever did. A bare "Loading..." leaves the user unable
    * to tell slow from stuck.
    */
-  onProgress?: (status: string | null) => void;
+  onProgress?: (progress: LoadingProgress | null) => void;
 }
 
 // --- MCP payload shapes -------------------------------------------------
@@ -258,8 +259,8 @@ export function createMcpProvider(
     fetchOverride
   );
 
-  function report(status: string | null): void {
-    config.onProgress?.(status);
+  function report(progress: LoadingProgress | null): void {
+    config.onProgress?.(progress);
   }
 
   function call<T>(tool: string, args: Record<string, unknown>): Promise<T> {
@@ -380,7 +381,7 @@ export function createMcpProvider(
         // Only a cold cache needs the employee lookup and the sweep; the
         // normal path reuses weeks the entry read already pulled.
         if (weekCache.size === 0) {
-          report("Looking up tasks from recent timecards...");
+          report({ message: "Looking up your tasks" });
           const empId = await employeeId();
           const weeks: string[] = [];
           const cursor = new Date(fmtDate(getWeekStart(now())));
@@ -521,7 +522,7 @@ export function createMcpProvider(
      * than one after another.
      */
     async getProjects(): Promise<Project[]> {
-      report("Loading projects...");
+      report({ message: "Loading projects" });
 
       // The tool answers with an envelope — `{projects, total_count, limit,
       // offset}` — not a bare array.
@@ -541,7 +542,7 @@ export function createMcpProvider(
         Math.max(0, Math.ceil(total / PROJECT_PAGE_SIZE) - 1),
         MAX_PROJECT_PAGES - 1
       );
-      report(`Loading projects — ${total} total...`);
+      report({ message: "Loading projects", current: firstPage.length, total });
 
       const laterPages = await mapLimit(
         Array.from({ length: remaining }, (_, i) => (i + 1) * PROJECT_PAGE_SIZE),
@@ -598,7 +599,7 @@ export function createMcpProvider(
     ): Promise<TimeEntry[]> {
       const weeks = weeksInRange(startDate, endDate);
       let done = 0;
-      report(`Loading ${weeks.length} weeks of time entries...`);
+      report({ message: "Fetching your time entries", current: 0, total: weeks.length });
 
       // A missing week silently understates the flex balance rather than
       // looking broken, so a week that fails twice fails the whole read.
@@ -607,7 +608,7 @@ export function createMcpProvider(
           return await fetchWeek(employeeIdArg, week).catch(() => fetchWeek(employeeIdArg, week));
         } finally {
           done++;
-          report(`Loading time entries — week ${done} of ${weeks.length}...`);
+          report({ message: "Fetching your time entries", current: done, total: weeks.length });
         }
       });
       report(null);
@@ -792,7 +793,7 @@ export function createMcpProvider(
       ];
       if (openingIds.length === 0) return [];
 
-      report("Loading allocations...");
+      report({ message: "Loading your allocations" });
       const batches = await mapLimit(
         chunk(openingIds, OPENING_DETAIL_BATCH),
         MAX_CONCURRENT_CALLS,
