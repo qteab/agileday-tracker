@@ -2,6 +2,7 @@ import { useMemo, useEffect, useState } from "react";
 import { useApp } from "../store/context";
 import { ProjectCard } from "./ProjectCard";
 import { Collapsible } from "./Collapsible";
+import { LoadingState } from "./LoadingState";
 import { formatMinutes } from "../hooks/useTimer";
 import { shouldAutoCollapse, weekStartOf, formatWeekHeading } from "../utils/entry-list";
 import type { TimeEntry } from "../api/types";
@@ -129,11 +130,7 @@ export function ProjectCardList() {
   }, [timerOnToday]);
 
   if (state.loading) {
-    return (
-      <div className="flex items-center justify-center py-12 text-text-muted text-sm">
-        Loading...
-      </div>
-    );
+    return <LoadingState progress={state.loadingStatus} />;
   }
 
   // Minutes elapsed on the running timer — counted into today's total and,

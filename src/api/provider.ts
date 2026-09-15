@@ -29,4 +29,14 @@ export interface ApiProvider {
   getAllocations(employeeId: string): Promise<Allocation[]>;
   getMyProjects(employeeId: string): Promise<MyProjectInfo[]>;
   getHolidays(countryCode: string, startDate: string, endDate: string): Promise<Holiday[]>;
+  /**
+   * Drop anything the provider has cached, so the next read hits the server.
+   *
+   * Called at the start of every full load. A provider that caches across
+   * calls — the MCP one caches whole weeks, since a single load asks for the
+   * same week several times over — would otherwise serve a manual sync from
+   * the cache and appear to do nothing. Optional: a provider that holds no
+   * state between calls needs no implementation.
+   */
+  invalidateCache?(): void;
 }

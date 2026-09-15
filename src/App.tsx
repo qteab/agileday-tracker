@@ -5,6 +5,7 @@ import { TabSwitcher } from "./components/TabSwitcher";
 import { ProjectCardList } from "./components/ProjectCardList";
 import { AllocationView } from "./components/AllocationView";
 import { LoginScreen } from "./components/LoginScreen";
+import { LoadingState } from "./components/LoadingState";
 import { UpdateChecker } from "./components/UpdateChecker";
 import { SettingsView, type SettingsPage } from "./components/SettingsView";
 import { FinalizeView } from "./components/FinalizeView";
@@ -22,7 +23,7 @@ export function App() {
   if (isAuthLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-bg">
-        <span className="text-sm text-text-muted">Loading...</span>
+        <LoadingState progress={{ message: "Checking your sign-in" }} />
       </div>
     );
   }
