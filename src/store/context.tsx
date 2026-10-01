@@ -14,6 +14,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ApiProvider, MyProjectInfo } from "../api/provider";
 import { createAgileDayProvider, type AgileDayConfig } from "../api/agileday";
+import { createMcpProvider } from "../api/mcp-provider";
 import type { AuthState } from "../api/auth";
 import { isTokenExpired, refreshAuthState } from "../api/auth";
 import {
@@ -29,6 +30,7 @@ import { loadTimerState, saveTimerState, clearTimerState } from "./timer-store";
 import { loadFlexConfig } from "./flex-store";
 import { loadVacationConfig } from "./vacation-store";
 import { loadDisplayPrefs } from "./display-store";
+import { loadBetaPrefs } from "./beta-store";
 import { loadWindowLayout, saveWindowLayout, type WindowLayout } from "./window-store";
 import { applyTheme, watchSystemTheme } from "../utils/theme";
 import type { ThemeMode } from "./display-store";
@@ -54,30 +56,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [syncCounter, setSyncCounter] = useState(0);
   const [timerLoaded, setTimerLoaded] = useState(false);
+  // Which backend to use is stored on disk, so it isn't known on the first
+  // render. Building a provider before it loads starts a data load against the
+  // default backend that is immediately thrown away when the real choice
+  // arrives — wasted requests, and a cancelled load to reason about.
+  const [betaLoaded, setBetaLoaded] = useState(false);
   const authStateRef = useRef<AuthState | null>(null);
 
   authStateRef.current = authState;
 
+  const apiBackend = state.betaPrefs.apiBackend;
+
   const api = useMemo<ApiProvider | null>(() => {
-    if (!isConnected) return null;
-    return createAgileDayProvider(
-      {
-        apiBaseUrl: buildApiBaseUrl(DEFAULT_CONNECTION),
-        authConfig: buildAuthConfig(DEFAULT_CONNECTION),
-      } as AgileDayConfig,
-      () => authStateRef.current,
-      (newState: AuthState) => {
-        setAuthState(newState);
-        saveAuthState(newState).catch(() => {});
-      },
-      () => {
-        setAuthState(null);
-        setIsConnected(false);
-        dispatch({ type: "SET_ERROR", payload: "Session expired — please sign in again" });
-        clearAuth().catch(() => {});
-      }
-    );
-  }, [isConnected]);
+    if (!isConnected || !betaLoaded) return null;
+
+    const providerConfig = {
+      apiBaseUrl: buildApiBaseUrl(DEFAULT_CONNECTION),
+      authConfig: buildAuthConfig(DEFAULT_CONNECTION),
+    };
+    const readAuth = () => authStateRef.current;
+    const writeAuth = (newState: AuthState) => {
+      setAuthState(newState);
+      saveAuthState(newState).catch(() => {});
+    };
+    const dropAuth = () => {
+      setAuthState(null);
+      setIsConnected(false);
+      dispatch({ type: "SET_ERROR", payload: "Session expired — please sign in again" });
+      clearAuth().catch(() => {});
+    };
+
+    // Switching backends rebuilds the provider, which re-runs the data load —
+    // so the toggle takes effect without a restart.
+    return apiBackend === "mcp"
+      ? createMcpProvider(
+          {
+            ...providerConfig,
+            onProgress: (progress) => dispatch({ type: "SET_LOADING_STATUS", payload: progress }),
+          },
+          readAuth,
+          writeAuth,
+          dropAuth
+        )
+      : createAgileDayProvider(providerConfig as AgileDayConfig, readAuth, writeAuth, dropAuth);
+  }, [isConnected, betaLoaded, apiBackend]);
 
   function onLogin(auth: AuthState) {
     dispatch({ type: "SET_ERROR", payload: null });
@@ -99,6 +121,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useTrayMenuSyncTrigger(setSyncCounter);
   useVisibilityTokenRefresh(authStateRef, setAuthState);
   useDisplayPrefsBootstrap(dispatch);
+  useBetaPrefsBootstrap(dispatch, setBetaLoaded);
   useThemeSync(state.displayPrefs.theme);
   useInactivitySync(dispatch);
   useWindowDockSnap();
@@ -261,6 +284,20 @@ function useVisibilityTokenRefresh(
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [authStateRef, setAuthState]);
+}
+
+function useBetaPrefsBootstrap(
+  dispatch: React.Dispatch<AppAction>,
+  setLoaded: (loaded: boolean) => void
+) {
+  useEffect(() => {
+    loadBetaPrefs()
+      .then((prefs) => dispatch({ type: "SET_BETA_PREFS", payload: prefs }))
+      // On failure the defaults stand — mark it loaded either way, or no
+      // provider is ever built and the app sits on "Loading..." forever.
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, [dispatch, setLoaded]);
 }
 
 function useDisplayPrefsBootstrap(dispatch: React.Dispatch<AppAction>) {
@@ -541,7 +578,12 @@ function useConnectedDataLoad(
 
     async function init() {
       if (!api) return;
+      // A manual sync must reach the server. Within one load the provider's
+      // cache is what stops the entry window, the flex pre-window and the
+      // allocation view refetching the same weeks; across loads it has to go.
+      api.invalidateCache?.();
       dispatch({ type: "SET_LOADING", payload: true });
+      dispatch({ type: "SET_LOADING_STATUS", payload: null });
       dispatch({ type: "SET_ERROR", payload: null });
 
       try {
@@ -580,11 +622,18 @@ function useConnectedDataLoad(
         loadAndApplyBalanceConfigs(api, employee.id, pastStr, () => cancelled, dispatch);
         hydrateTaskMetadataForEntries(api, entries, () => cancelled, dispatch);
       } catch (err) {
+        // A cancelled run's error belongs to a provider that is no longer
+        // current, so it must not overwrite the live one's state.
         if (cancelled) return;
         const message = err instanceof Error ? err.message : "Failed to connect to AgileDay";
         dispatch({ type: "SET_ERROR", payload: message });
       } finally {
-        if (!cancelled) dispatch({ type: "SET_LOADING", payload: false });
+        // Always clear, even when cancelled. A cancelled run is not guaranteed
+        // a successor — switching backends rebuilds the provider mid-load —
+        // and skipping this leaves the app on "Loading..." forever. A later run
+        // sets it back to true, so clearing twice is harmless.
+        dispatch({ type: "SET_LOADING", payload: false });
+        dispatch({ type: "SET_LOADING_STATUS", payload: null });
       }
     }
 

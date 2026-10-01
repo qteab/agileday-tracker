@@ -2,6 +2,17 @@ import type { Allocation, Employee, Holiday, Project, Task, TimeEntry } from "..
 import type { FlexConfig } from "./flex-store";
 import type { VacationConfig } from "./vacation-store";
 import { DEFAULT_DISPLAY_PREFS, type DisplayPrefs } from "./display-store";
+import { DEFAULT_BETA_PREFS, type BetaPrefs } from "./beta-store";
+
+/** What a long-running load is currently doing. */
+export interface LoadingProgress {
+  /** Human-readable description of the current step. */
+  message: string;
+  /** Steps finished so far. Omit when the total isn't known up front. */
+  current?: number;
+  /** Total steps. Omit for an indeterminate spinner. */
+  total?: number;
+}
 
 export interface TimerState {
   isRunning: boolean;
@@ -47,8 +58,11 @@ export interface AppState {
   flexEntries: TimeEntry[] | null;
   holidays: Holiday[];
   displayPrefs: DisplayPrefs;
+  betaPrefs: BetaPrefs;
   inactivity: InactivityState;
   loading: boolean;
+  /** What the current load is doing, if it reports progress. */
+  loadingStatus: LoadingProgress | null;
   error: string | null;
 }
 
@@ -75,8 +89,10 @@ export const initialState: AppState = {
   flexEntries: null,
   holidays: [],
   displayPrefs: DEFAULT_DISPLAY_PREFS,
+  betaPrefs: DEFAULT_BETA_PREFS,
   inactivity: { idleSeconds: 0, isAway: false, pendingReturn: null },
   loading: false,
+  loadingStatus: null,
   error: null,
 };
 
@@ -102,9 +118,11 @@ export type AppAction =
   | { type: "SET_FLEX_ENTRIES"; payload: TimeEntry[] | null }
   | { type: "SET_HOLIDAYS"; payload: Holiday[] }
   | { type: "SET_DISPLAY_PREFS"; payload: DisplayPrefs }
+  | { type: "SET_BETA_PREFS"; payload: BetaPrefs }
   | { type: "SET_INACTIVITY"; payload: { idleSeconds: number; isAway: boolean } }
   | { type: "RESOLVE_RETURN" }
   | { type: "SET_LOADING"; payload: boolean }
+  | { type: "SET_LOADING_STATUS"; payload: LoadingProgress | null }
   | { type: "SET_ERROR"; payload: string | null };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -172,6 +190,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, holidays: action.payload };
     case "SET_DISPLAY_PREFS":
       return { ...state, displayPrefs: action.payload };
+    case "SET_BETA_PREFS":
+      return { ...state, betaPrefs: action.payload };
     case "SET_INACTIVITY": {
       const prev = state.inactivity;
       // Returning from an away period (away→active) freezes the away duration
@@ -194,6 +214,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     case "SET_LOADING":
       return { ...state, loading: action.payload };
+    case "SET_LOADING_STATUS":
+      return { ...state, loadingStatus: action.payload };
     case "SET_ERROR":
       return { ...state, error: action.payload };
     default:
