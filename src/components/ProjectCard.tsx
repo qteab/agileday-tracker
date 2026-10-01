@@ -123,8 +123,7 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
     }
   }, [editMode]);
 
-  // The stop button only exists on the expanded card, so a running card forces
-  // itself open. Otherwise a changed preference drops any manual override and
+  // A running card forces itself open so its descriptions stay in view. Otherwise a changed preference drops any manual override and
   // the card falls back to the new baseline.
   useEffect(() => {
     setCollapseOverride(isThisRunning ? false : null);
@@ -440,6 +439,10 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
   })();
   const showTimerButton = isToday && !isSubmitted;
+  // Submitted cards keep their expand chevron in the header button slot (the
+  // bottom-right corner holds the lock label); editable cards put it bottom-right
+  // so it never shares a spot with the timer button.
+  const expandInHeader = collapsed && isSubmitted;
   const canQuickOpen = !isToday && !!entry.taskId;
   const alreadyTrackedToday = entry.taskId
     ? usedTaskIds(state.entries, "", entry.projectId, todayStr).has(entry.taskId)
@@ -505,7 +508,7 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
           folded away when collapsed, so mirror it in the bottom-right corner. */}
       {isSubmitted && (
         <span
-          className={`absolute bottom-[8px] right-3 flex items-center gap-0.5 text-[10px] text-text-muted/50 ${motion} ${
+          className={`absolute bottom-[8px] right-3 flex items-center pointer-events-none gap-0.5 text-[10px] text-text-muted/50 ${motion} ${
             collapsed ? "opacity-100" : "opacity-0"
           }`}
           aria-hidden={!collapsed}
@@ -521,10 +524,42 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
           Submitted in AgileDay
         </span>
       )}
-      {/* Header — gains a bottom strip when collapsed on a submitted entry, so
-          the corner label below has room of its own. */}
+      {/* Editable cards: "Expand" sits exactly where the footer's "Collapse"
+          does, so the toggle never moves and stays clear of the timer button. */}
+      {!isSubmitted && (
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          tabIndex={collapsed ? undefined : -1}
+          aria-hidden={!collapsed}
+          aria-label="Expand entry"
+          aria-expanded={false}
+          className={`absolute bottom-3 right-4 inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-primary cursor-pointer ${motion} ${
+            collapsed ? "opacity-100" : "opacity-0 pointer-events-none"
+          }`}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="shrink-0"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+          <span>Expand</span>
+        </button>
+      )}
+      {/* Header — gains a bottom strip when collapsed, so the corner label /
+          Expand link above has room of its own. */}
       <div
-        className={`px-4 pt-[14px] ${motion} ${collapsed && isSubmitted ? "pb-[26px]" : "pb-3"}`}
+        className={`px-4 pt-[14px] ${motion} ${
+          collapsed ? (isSubmitted ? "pb-[26px]" : "pb-[33px]") : "pb-3"
+        }`}
       >
         {/* Row 1: project name, time, play/stop */}
         <div className="flex items-center gap-3">
@@ -603,12 +638,12 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
               )}
             </span>
 
-            {/* Button slot: the timer (or quick-open) button when expanded
-                cross-fades with the expand chevron when collapsed. Fixed size
-                so the header text never shifts as they swap. */}
+            {/* Button slot: on submitted cards the quick-open button cross-fades
+                with the expand chevron when collapsed. Fixed size so the header
+                text never shifts as they swap. */}
             <div
               className={`relative h-[36px] shrink-0 overflow-hidden ${motion} ${
-                collapsed || showTimerButton || canQuickOpen ? "w-[36px]" : "w-0"
+                expandInHeader || showTimerButton || canQuickOpen ? "w-[36px]" : "w-0"
               }`}
             >
               {showTimerButton && (
@@ -621,13 +656,11 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
                     }
                   }}
                   disabled={!entry.taskId && !isThisRunning}
-                  tabIndex={collapsed ? -1 : undefined}
-                  aria-hidden={collapsed}
                   className={`absolute inset-0 rounded-full flex items-center justify-center text-white transition-all duration-200 active:scale-[0.94] disabled:opacity-40 disabled:cursor-not-allowed ${
                     isThisRunning
                       ? "bg-danger hover:bg-[#d8363c]"
                       : "bg-primary hover:bg-primary-dark"
-                  } ${collapsed ? "opacity-0 scale-90 pointer-events-none" : "opacity-100"}`}
+                  }`}
                   aria-label={isThisRunning ? "Stop timer" : "Start timer"}
                 >
                   {isThisRunning ? (
@@ -645,11 +678,13 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
                 <button
                   onClick={handleQuickOpen}
                   disabled={alreadyTrackedToday}
-                  tabIndex={collapsed ? -1 : undefined}
-                  aria-hidden={collapsed}
+                  tabIndex={expandInHeader ? -1 : undefined}
+                  aria-hidden={expandInHeader}
                   title={alreadyTrackedToday ? "Already tracked today" : "Start today"}
-                  className={`absolute inset-0 rounded-full flex items-center justify-center transition-all duration-200 active:scale-[0.94] border-2 border-primary text-primary hover:bg-primary hover:text-white disabled:opacity-40 disabled:border-border disabled:text-text-subtle disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-text-subtle ${
-                    collapsed ? "opacity-0 scale-90 pointer-events-none" : "opacity-100"
+                  className={`absolute inset-0 rounded-full flex items-center justify-center transition-all duration-200 active:scale-[0.94] border-2 border-primary text-primary hover:bg-primary hover:text-white disabled:border-border disabled:text-text-subtle disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-text-subtle ${
+                    expandInHeader
+                      ? "opacity-0 scale-90 pointer-events-none"
+                      : "opacity-100 disabled:opacity-40"
                   }`}
                   aria-label="Start today"
                 >
@@ -661,13 +696,13 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
               <button
                 type="button"
                 onClick={() => setCollapsed(false)}
-                tabIndex={collapsed ? undefined : -1}
-                aria-hidden={!collapsed}
+                tabIndex={expandInHeader ? undefined : -1}
+                aria-hidden={!expandInHeader}
                 aria-label="Expand entry"
                 aria-expanded={false}
                 title="Expand"
                 className={`absolute inset-0 rounded-full flex items-center justify-center text-text-subtle hover:text-primary hover:bg-bg-edit transition-all duration-200 cursor-pointer ${
-                  collapsed ? "opacity-100" : "opacity-0 scale-90 pointer-events-none"
+                  expandInHeader ? "opacity-100" : "opacity-0 scale-90 pointer-events-none"
                 }`}
               >
                 <svg
@@ -860,7 +895,8 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
         </div>
 
         {/* Footer: delete (left), collapse (right), lock indicator when submitted */}
-        <div className="flex items-center gap-3 px-4 pb-3 -mt-1">
+        {/* Locked cards have no "add description" row, so the footer needs its own gap. */}
+        <div className={`flex items-center gap-3 px-4 pb-3 ${isSubmitted ? "mt-0.5" : "-mt-1"}`}>
           {isEditable && (
             <button
               onClick={() => {
