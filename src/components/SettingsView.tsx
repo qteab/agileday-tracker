@@ -857,6 +857,11 @@ function VacationSettings() {
   );
 }
 
+async function openClickUpTokenPage() {
+  const { open } = await import("@tauri-apps/plugin-shell");
+  await open("https://app.clickup.com/settings/apps");
+}
+
 function ClickUpSettings() {
   const { state, dispatch } = useApp();
   const connected = state.clickup?.config;
@@ -922,9 +927,24 @@ function ClickUpSettings() {
           <>
             <div>
               <label className="block text-xs text-text-muted mb-1">Personal API token</label>
-              <p className="text-[10px] text-text-muted mb-1.5">
-                In ClickUp: avatar → Settings → Apps → API Token. Starts with pk_.
-              </p>
+              <ol className="text-[11px] text-text-muted mb-2 space-y-0.5 list-decimal pl-4">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => void openClickUpTokenPage()}
+                    className="font-semibold text-primary hover:underline cursor-pointer"
+                  >
+                    Open ClickUp → Settings → Apps
+                  </button>
+                </li>
+                <li>
+                  Under <b className="text-text">API Token</b>, click Generate (or Copy if you
+                  already have one).
+                </li>
+                <li>
+                  Paste it below — it starts with <code>pk_</code>.
+                </li>
+              </ol>
               <input
                 type="password"
                 value={token}
