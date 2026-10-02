@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev              # Start Vite dev server (port 1420)
 npm run tauri dev        # Start full Tauri app in dev mode (Rust + Vite)
 npm run check            # Run all checks: typecheck → lint → format:check → test
-npm run test             # Vitest (314 tests, single run)
+npm run test             # Vitest (single run)
 npm run test:watch       # Vitest watch mode
 npm run lint             # ESLint (src/ only)
 npm run typecheck        # tsc --noEmit
@@ -50,6 +50,10 @@ macOS menu bar time tracker that syncs to AgileDay. Tauri v2 (Rust) shell + Reac
 ### State shape
 
 `src/store/reducer.ts` — `AppState` holds: employee, projects, myProjectIds (allocated projects), tasks, entries (last 30 days), timer (running state + timestamps), loading, error. The timer uses timestamp-based elapsed calculation (no drift).
+
+### ClickUp (optional)
+
+`src/api/clickup.ts` + `src/components/ClickUp.tsx`. Users connect with a personal API token (Settings → ClickUp); no OAuth since there is no backend to hold a client secret. Tracking a ClickUp task still writes to the day's single AgileDay entry for the chosen project+task — the task appears as one `- CU-<id> <name>` comment line and its minutes are added to the total. Each session is also logged as a ClickUp time entry (start + duration). The list renders each `CU-` line as its own card, with minutes taken from ClickUp time entries; the project card shows the remainder. Which ClickUp entries are already counted in AgileDay is kept locally in `clickup.json` (`sync.synced`, plus `sync.since` = start of the connect day). Unsynced ClickUp time on a task already linked that day is added automatically; other unsynced time and timers running in ClickUp are offered in `ClickUpBanner`.
 
 ## API endpoints used
 

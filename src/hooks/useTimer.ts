@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useApp, useApi } from "../store/context";
+import type { TimerState } from "../store/reducer";
+import { sessionMinutes, withClickupLine, type ClickUpTask } from "../api/clickup";
 
 export function useTimer() {
   const { state, dispatch } = useApp();
-  const api = useApi();
+  const addTime = useAddTime();
+  const logClickUp = useLogClickUp();
   const { timer, employee } = state;
   const [elapsed, setElapsed] = useState(0); // seconds
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -33,113 +36,28 @@ export function useTimer() {
     // before the timer can be stopped.
     if (state.inactivity.pendingReturn) return;
 
-    const { projectId, taskId, startTime } = timer;
+    const { projectId, taskId, startTime, clickupTask } = timer;
     const endTime = new Date().toISOString();
     const startMs = new Date(startTime).getTime();
-    const endMs = new Date(endTime).getTime();
-    const minutes = Math.max(1, Math.round((endMs - startMs) / 60000));
+    const minutes = sessionMinutes(new Date(endTime).getTime() - startMs);
     const startLocal = new Date(startMs);
     const date = `${startLocal.getFullYear()}-${String(startLocal.getMonth() + 1).padStart(2, "0")}-${String(startLocal.getDate()).padStart(2, "0")}`;
-    const project = state.projects.find((p) => p.id === projectId);
-    const openingId = projectId ? state.projectOpeningMap[projectId] : undefined;
 
     // Reset timer immediately so user can start a new one
     dispatch({ type: "RESET_TIMER" });
 
-    // Find the existing entry for this card — it should exist since we only
-    // show play buttons on cards that already have an entry.
-    const existing = state.entries.find(
-      (e) => e.projectId === projectId && (e.taskId ?? null) === (taskId ?? null) && e.date === date
-    );
-
-    let workingId: string;
-    const description = existing?.description ?? "";
-    // Total minutes = existing entry + this session (app is source of truth)
-    const totalMinutes = (existing?.minutes ?? 0) + minutes;
-
-    if (existing) {
-      workingId = existing.id;
-      dispatch({
-        type: "UPDATE_ENTRY",
-        payload: {
-          id: existing.id,
-          updates: {
-            minutes: totalMinutes,
-            endTime,
-            syncStatus: "pending",
-          },
-        },
-      });
-    } else {
-      // Edge case: entry was deleted while timer was running
-      workingId = `local-${crypto.randomUUID()}`;
-      dispatch({
-        type: "ADD_ENTRY",
-        payload: {
-          id: workingId,
-          description,
-          projectId: projectId!,
-          projectName: project?.name,
-          openingId,
-          taskId: taskId ?? undefined,
-          date,
-          startTime,
-          endTime,
-          minutes: totalMinutes,
-          status: "SAVED",
-          syncStatus: "pending",
-        },
-      });
-    }
-
-    try {
-      // Send full state to API: total minutes + current description
-      const created = await api.createTimeEntry(employee.id, {
-        description,
-        projectId: projectId!,
-        projectName: project?.name,
-        openingId,
-        taskId: taskId ?? undefined,
-        date,
-        startTime,
-        endTime,
-        minutes: totalMinutes,
-        status: "SAVED",
-      });
-      dispatch({
-        type: "UPDATE_ENTRY",
-        payload: {
-          id: workingId,
-          updates: {
-            id: created.id,
-            description: created.description,
-            minutes: created.minutes,
-            status: created.status,
-            syncStatus: "synced",
-          },
-        },
-      });
-    } catch (err) {
-      dispatch({
-        type: "UPDATE_ENTRY",
-        payload: { id: workingId, updates: { syncStatus: "unsaved" } },
-      });
-      const reason = err instanceof Error ? err.message : "Unknown error";
-      dispatch({
-        type: "SET_ERROR",
-        payload: `Failed to save time entry: ${reason}. Entry saved locally — use retry to sync.`,
-      });
-    }
-  }, [
-    timer,
-    employee,
-    state.projects,
-    state.projectOpeningMap,
-    state.entries,
-    state.inactivity.pendingReturn,
-    dispatch,
-    api,
-  ]);
+    const clickupLogged = clickupTask ? logClickUp(clickupTask, startMs, minutes) : null;
+    await addTime({
+      projectId: projectId!,
+      taskId,
+      date,
+      minutes,
+      startTime,
+      endTime,
+      clickupTasks: clickupTask ? [clickupTask] : [],
+    });
+    await clickupLogged;
+  }, [timer, employee, state.inactivity.pendingReturn, dispatch, addTime, logClickUp]);
 
   // Use a ref so startForCard always invokes the latest stop closure
   const stopRef = useRef(stop);
@@ -147,17 +65,17 @@ export function useTimer() {
 
   /** Start the timer for a specific card (projectId + taskId). Stops any running timer first. */
   const startForCard = useCallback(
-    async (projectId: string, taskId: string) => {
+    async (
+      projectId: string,
+      taskId: string,
+      clickupTask: NonNullable<TimerState["clickupTask"]> | null = null,
+      startTime = new Date().toISOString()
+    ) => {
       // Stop any currently running timer before starting a new one
       await stopRef.current();
       dispatch({
         type: "SET_TIMER",
-        payload: {
-          projectId,
-          taskId,
-          isRunning: true,
-          startTime: new Date().toISOString(),
-        },
+        payload: { projectId, taskId, clickupTask, isRunning: true, startTime },
       });
     },
     [dispatch]
@@ -175,6 +93,7 @@ export function useTimer() {
       payload: {
         projectId: latest.projectId,
         taskId: latest.taskId,
+        clickupTask: null,
         isRunning: true,
         startTime: new Date().toISOString(),
       },
@@ -203,6 +122,7 @@ export function useTimer() {
     isRunning: timer.isRunning,
     projectId: timer.projectId,
     taskId: timer.taskId,
+    clickupTask: timer.clickupTask ?? null,
     elapsed,
     startForCard,
     stop,
@@ -220,4 +140,173 @@ export function formatMinutes(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return `${h}:${String(m).padStart(2, "0")}:00`;
+}
+
+interface AddTimeParams {
+  projectId: string;
+  taskId: string | null;
+  date: string;
+  minutes: number;
+  startTime: string;
+  endTime?: string;
+  /** ClickUp tasks whose `CU-` line must be on the entry. */
+  clickupTasks?: ClickUpTask[];
+}
+
+/**
+ * Add minutes to the day's (project, task) entry — creating it if needed — and
+ * save the full total to AgileDay (the app is the source of truth).
+ */
+export function useAddTime() {
+  const { state, dispatch } = useApp();
+  const api = useApi();
+  const { employee } = state;
+
+  return useCallback(
+    async ({
+      projectId,
+      taskId,
+      date,
+      minutes,
+      startTime,
+      endTime,
+      clickupTasks = [],
+    }: AddTimeParams) => {
+      if (!employee) return;
+      const project = state.projects.find((p) => p.id === projectId);
+      const openingId = state.projectOpeningMap[projectId];
+
+      // Find the existing entry for this card — it should exist since we only
+      // show play buttons on cards that already have an entry.
+      const existing = state.entries.find(
+        (e) =>
+          e.projectId === projectId && (e.taskId ?? null) === (taskId ?? null) && e.date === date
+      );
+
+      let workingId: string;
+      const description = clickupTasks.reduce(withClickupLine, existing?.description ?? "");
+      // Total minutes = existing entry + this session (app is source of truth)
+      const totalMinutes = (existing?.minutes ?? 0) + minutes;
+
+      if (existing) {
+        workingId = existing.id;
+        dispatch({
+          type: "UPDATE_ENTRY",
+          payload: {
+            id: existing.id,
+            updates: {
+              minutes: totalMinutes,
+              description,
+              ...(endTime ? { endTime } : {}),
+              syncStatus: "pending",
+            },
+          },
+        });
+      } else {
+        // Edge case: entry was deleted while timer was running
+        workingId = `local-${crypto.randomUUID()}`;
+        dispatch({
+          type: "ADD_ENTRY",
+          payload: {
+            id: workingId,
+            description,
+            projectId,
+            projectName: project?.name,
+            openingId,
+            taskId: taskId ?? undefined,
+            date,
+            startTime,
+            endTime,
+            minutes: totalMinutes,
+            status: "SAVED",
+            syncStatus: "pending",
+          },
+        });
+      }
+
+      try {
+        // Send full state to API: total minutes + current description
+        const created = await api.createTimeEntry(employee.id, {
+          description,
+          projectId,
+          projectName: project?.name,
+          openingId,
+          taskId: taskId ?? undefined,
+          date,
+          startTime,
+          endTime,
+          minutes: totalMinutes,
+          status: "SAVED",
+        });
+        dispatch({
+          type: "UPDATE_ENTRY",
+          payload: {
+            id: workingId,
+            updates: {
+              id: created.id,
+              description: created.description,
+              minutes: created.minutes,
+              status: created.status,
+              syncStatus: "synced",
+            },
+          },
+        });
+      } catch (err) {
+        dispatch({
+          type: "UPDATE_ENTRY",
+          payload: { id: workingId, updates: { syncStatus: "unsaved" } },
+        });
+        const reason = err instanceof Error ? err.message : "Unknown error";
+        dispatch({
+          type: "SET_ERROR",
+          payload: `Failed to save time entry: ${reason}. Entry saved locally — use retry to sync.`,
+        });
+      }
+    },
+    [employee, state.projects, state.projectOpeningMap, state.entries, dispatch, api]
+  );
+}
+
+/**
+ * Record a finished session on the ClickUp task: stop + correct an adopted
+ * ClickUp timer, or create a new time entry. The entry is marked as already
+ * counted in AgileDay so sync never adds it twice.
+ */
+export function useLogClickUp() {
+  const { dispatch, clickupClient } = useApp();
+
+  return useCallback(
+    async (task: NonNullable<TimerState["clickupTask"]>, start: number, minutes: number) => {
+      if (!clickupClient) return;
+      // Duration is the whole minutes AgileDay got, so both sides add up exactly.
+      const duration = minutes * 60000;
+      const localId = `local-${crypto.randomUUID()}`;
+      const shown = { taskId: task.id, taskName: task.name, start, duration };
+      dispatch({ type: "ADD_CLICKUP_ENTRY", payload: { id: localId, ...shown } });
+      try {
+        let id = task.timerId;
+        if (id) {
+          // Only stop ClickUp's timer if it is still this one — it may have been
+          // stopped (or another started) in ClickUp meanwhile.
+          const running = await clickupClient.getRunning();
+          if (running?.id === id) await clickupClient.stopRunning();
+          await clickupClient.updateTimeEntry(id, start, duration);
+          dispatch({ type: "SET_CLICKUP_RUNNING", payload: null });
+        } else {
+          id = (await clickupClient.createTimeEntry(task.id, start, duration)).id;
+        }
+        dispatch({ type: "MARK_CLICKUP_SYNCED", payload: [{ id, start }] });
+        dispatch({ type: "REMOVE_CLICKUP_ENTRIES", payload: [localId] });
+        dispatch({ type: "ADD_CLICKUP_ENTRY", payload: { id, ...shown } });
+      } catch (err) {
+        dispatch({ type: "REMOVE_CLICKUP_ENTRIES", payload: [localId] });
+        const reason = err instanceof Error ? err.message : "Unknown error";
+        dispatch({
+          type: "SET_ERROR",
+          payload: `Saved to AgileDay, but logging time in ClickUp failed: ${reason}`,
+        });
+      }
+    },
+    [dispatch, clickupClient]
+  );
 }

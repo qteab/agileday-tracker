@@ -2,12 +2,21 @@ import type { Allocation, Employee, Holiday, Project, Task, TimeEntry } from "..
 import type { FlexConfig } from "./flex-store";
 import type { VacationConfig } from "./vacation-store";
 import { DEFAULT_DISPLAY_PREFS, type DisplayPrefs } from "./display-store";
+import {
+  markSynced,
+  type ClickUpStored,
+  type ClickUpTask,
+  type ClickUpTimeEntry,
+} from "../api/clickup";
 
 export interface TimerState {
   isRunning: boolean;
   projectId: string | null;
   taskId: string | null;
   startTime: string | null; // ISO timestamp
+  /** Set when tracking a ClickUp task on the project+task card. `timerId` is
+   * the ClickUp timer when it was started in ClickUp and adopted here. */
+  clickupTask?: (ClickUpTask & { timerId?: string }) | null;
 }
 
 export interface InactivityState {
@@ -48,6 +57,12 @@ export interface AppState {
   holidays: Holiday[];
   displayPrefs: DisplayPrefs;
   inactivity: InactivityState;
+  /** ClickUp connection + sync bookkeeping (persisted); null = not connected. */
+  clickup: ClickUpStored | null;
+  /** The user's ClickUp time entries for the list window; null until loaded. */
+  clickupEntries: ClickUpTimeEntry[] | null;
+  /** Timer running in ClickUp itself, if any. */
+  clickupRunning: ClickUpTimeEntry | null;
   loading: boolean;
   error: string | null;
 }
@@ -69,6 +84,7 @@ export const initialState: AppState = {
     projectId: null,
     taskId: null,
     startTime: null,
+    clickupTask: null,
   },
   flexConfig: null,
   vacationConfig: null,
@@ -76,6 +92,9 @@ export const initialState: AppState = {
   holidays: [],
   displayPrefs: DEFAULT_DISPLAY_PREFS,
   inactivity: { idleSeconds: 0, isAway: false, pendingReturn: null },
+  clickup: null,
+  clickupEntries: null,
+  clickupRunning: null,
   loading: false,
   error: null,
 };
@@ -104,6 +123,12 @@ export type AppAction =
   | { type: "SET_DISPLAY_PREFS"; payload: DisplayPrefs }
   | { type: "SET_INACTIVITY"; payload: { idleSeconds: number; isAway: boolean } }
   | { type: "RESOLVE_RETURN" }
+  | { type: "SET_CLICKUP"; payload: ClickUpStored | null }
+  | { type: "MARK_CLICKUP_SYNCED"; payload: Pick<ClickUpTimeEntry, "id" | "start">[] }
+  | { type: "SET_CLICKUP_ENTRIES"; payload: ClickUpTimeEntry[] | null }
+  | { type: "ADD_CLICKUP_ENTRY"; payload: ClickUpTimeEntry }
+  | { type: "REMOVE_CLICKUP_ENTRIES"; payload: string[] }
+  | { type: "SET_CLICKUP_RUNNING"; payload: ClickUpTimeEntry | null }
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "SET_ERROR"; payload: string | null };
 
@@ -192,6 +217,32 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         inactivity: { ...state.inactivity, pendingReturn: null },
       };
+    case "SET_CLICKUP":
+      return { ...state, clickup: action.payload };
+    case "MARK_CLICKUP_SYNCED":
+      if (!state.clickup) return state;
+      return {
+        ...state,
+        clickup: { ...state.clickup, sync: markSynced(state.clickup.sync, action.payload) },
+      };
+    case "SET_CLICKUP_ENTRIES":
+      return { ...state, clickupEntries: action.payload };
+    case "ADD_CLICKUP_ENTRY":
+      // Replace by id: a refetch may already hold the entry just created.
+      return {
+        ...state,
+        clickupEntries: [
+          ...(state.clickupEntries ?? []).filter((e) => e.id !== action.payload.id),
+          action.payload,
+        ],
+      };
+    case "REMOVE_CLICKUP_ENTRIES":
+      return {
+        ...state,
+        clickupEntries: state.clickupEntries?.filter((e) => !action.payload.includes(e.id)) ?? null,
+      };
+    case "SET_CLICKUP_RUNNING":
+      return { ...state, clickupRunning: action.payload };
     case "SET_LOADING":
       return { ...state, loading: action.payload };
     case "SET_ERROR":
