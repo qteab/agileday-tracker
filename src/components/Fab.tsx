@@ -5,11 +5,16 @@ import { TaskPicker } from "./TaskPicker";
 import { Modal } from "./Modal";
 import { usedTaskIds } from "./entry-edit";
 import { useTimer } from "../hooks/useTimer";
+import { ClickUpDialog, ClickUpLogo, useEnsureClickUpLine } from "./ClickUp";
 
 export function Fab() {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, clickupClient } = useApp();
   const { startForCard } = useTimer();
+  const ensureClickUpLine = useEnsureClickUpLine();
   const [showDialog, setShowDialog] = useState(false);
+  // With ClickUp connected, + opens a small menu: plain project entry or ClickUp task.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showClickUp, setShowClickUp] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
 
@@ -73,6 +78,22 @@ export function Fab() {
     setTaskId(null);
   };
 
+  if (showClickUp) {
+    return (
+      <ClickUpDialog
+        title="Track a ClickUp task"
+        actionLabel="Start tracking"
+        usageDate={today}
+        onClose={() => setShowClickUp(false)}
+        onConfirm={(pid, tid, task) => {
+          setShowClickUp(false);
+          ensureClickUpLine(pid, tid, today, task);
+          void startForCard(pid, tid, task);
+        }}
+      />
+    );
+  }
+
   if (showDialog) {
     return (
       <Modal
@@ -106,13 +127,63 @@ export function Fab() {
     );
   }
 
+  const menuButton =
+    "flex items-center gap-2 h-[38px] pl-3 pr-4 rounded-full bg-bg-card border border-border text-sm font-semibold text-text shadow-[0_4px_14px_rgba(11,4,21,0.12)] hover:text-primary transition-colors";
+
+  return (
+    <>
+      {menuOpen && (
+        <div className="absolute right-4 bottom-[80px] flex flex-col items-end gap-2 z-30">
+          <button
+            className={menuButton}
+            onClick={() => {
+              setMenuOpen(false);
+              setShowClickUp(true);
+            }}
+          >
+            <ClickUpLogo size={18} />
+            ClickUp task
+          </button>
+          <button
+            className={menuButton}
+            onClick={() => {
+              setMenuOpen(false);
+              setShowDialog(true);
+            }}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <path d="M4 6h16M4 12h16M4 18h7" />
+            </svg>
+            Project
+          </button>
+        </div>
+      )}
+      <FabButton
+        open={menuOpen}
+        onClick={() => (clickupClient ? setMenuOpen((o) => !o) : setShowDialog(true))}
+      />
+    </>
+  );
+}
+
+function FabButton({ open, onClick }: { open: boolean; onClick: () => void }) {
   return (
     <button
-      onClick={() => setShowDialog(true)}
+      onClick={onClick}
+      aria-expanded={open}
       className="absolute right-4 bottom-4 w-[52px] h-[52px] rounded-full bg-primary text-white flex items-center justify-center shadow-[0_8px_22px_rgba(85,25,213,0.42)] hover:bg-primary-dark active:scale-[0.95] transition-all z-30"
       aria-label="New project"
     >
       <svg
+        className={`transition-transform duration-200 ${open ? "rotate-45" : ""}`}
         width="24"
         height="24"
         viewBox="0 0 24 24"

@@ -13,23 +13,55 @@ import {
   usedTaskIds,
 } from "./entry-edit";
 import type { TimeEntry } from "../api/types";
+import { splitDescriptions, joinDescriptions } from "../utils/descriptions";
+import { nonClickupLines, parseClickupLine } from "../api/clickup";
 
-/** Split an AgileDay description string into individual lines. */
-export function splitDescriptions(description: string): string[] {
-  if (!description.trim()) return [];
-  return description
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((l) => (l.startsWith("- ") ? l.slice(2) : l));
-}
+export { splitDescriptions, joinDescriptions };
 
-/** Join description lines back into AgileDay's bullet format. */
-export function joinDescriptions(lines: string[]): string {
-  const nonEmpty = lines.filter((l) => l.trim());
-  if (nonEmpty.length === 0) return "";
-  if (nonEmpty.length === 1) return `- ${nonEmpty[0]}`;
-  return nonEmpty.map((l) => `- ${l}`).join("\n");
+/** POST-or-PATCH the entry with overridden fields (description and/or minutes). */
+export function usePersistEntry(entry: TimeEntry) {
+  const { state, dispatch } = useApp();
+  const api = useApi();
+  return useCallback(
+    async (overrides: { description?: string; minutes?: number }) => {
+      dispatch({
+        type: "UPDATE_ENTRY",
+        payload: { id: entry.id, updates: { ...overrides, syncStatus: "pending" } },
+      });
+
+      try {
+        const saved = await api.createTimeEntry(state.employee!.id, {
+          description: overrides.description ?? entry.description,
+          projectId: entry.projectId,
+          projectName: entry.projectName,
+          openingId: entry.openingId,
+          taskId: entry.taskId,
+          date: entry.date,
+          startTime: entry.startTime,
+          minutes: overrides.minutes ?? entry.minutes,
+          status: entry.status,
+        });
+        dispatch({
+          type: "UPDATE_ENTRY",
+          payload: {
+            id: entry.id,
+            updates: {
+              id: saved.id,
+              description: saved.description,
+              minutes: saved.minutes,
+              syncStatus: "synced",
+            },
+          },
+        });
+      } catch {
+        dispatch({
+          type: "UPDATE_ENTRY",
+          payload: { id: entry.id, updates: { syncStatus: "unsaved" } },
+        });
+      }
+    },
+    [api, dispatch, entry, state.employee]
+  );
 }
 
 interface ProjectCardProps {
@@ -37,17 +69,26 @@ interface ProjectCardProps {
   isToday: boolean;
   /** Start collapsed, per the list's auto-collapse preference. */
   autoCollapsed?: boolean;
+  /** Set when the entry's ClickUp lines render as their own cards: the minutes
+   * those cards hold. This card then shows and edits only the rest. */
+  clickupMinutes?: number;
 }
 
 type EditMode = "none" | "time" | "project" | "task" | "delete";
 
-export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCardProps) {
+export function ProjectCard({
+  entry,
+  isToday,
+  autoCollapsed = false,
+  clickupMinutes,
+}: ProjectCardProps) {
   const { state, dispatch } = useApp();
   const api = useApi();
   const {
     isRunning,
     projectId: timerProjectId,
     taskId: timerTaskId,
+    clickupTask: timerClickupTask,
     elapsed,
     startForCard,
     stop,
@@ -62,7 +103,21 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
     isRunning &&
     timerProjectId === entry.projectId &&
     (timerTaskId ?? null) === (entry.taskId ?? null) &&
+    !timerClickupTask &&
     isToday;
+
+  // With split-out ClickUp cards, this card owns the non-ClickUp lines and the
+  // minutes left over; the ClickUp lines and minutes ride along on every save.
+  const split = clickupMinutes !== undefined;
+  const ownLines = useCallback(
+    (desc: string) => (split ? nonClickupLines(desc) : splitDescriptions(desc)),
+    [split]
+  );
+  const clickupLines = split
+    ? splitDescriptions(entry.description).filter((l) => parseClickupLine(l))
+    : [];
+  const cuMinutes = clickupMinutes ?? 0;
+  const ownMinutes = Math.max(0, entry.minutes - cuMinutes);
 
   // Project/task are editable on any non-submitted card. When the card's timer
   // is running, the timer state is re-pointed to the new project/task so it
@@ -70,7 +125,7 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
   const canEditMeta = isEditable;
 
   // Descriptions state for inline editing
-  const [descriptions, setDescriptions] = useState(() => splitDescriptions(entry.description));
+  const [descriptions, setDescriptions] = useState(() => ownLines(entry.description));
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const editRef = useRef<HTMLSpanElement>(null);
 
@@ -104,9 +159,9 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
   // Sync descriptions when entry changes from server
   useEffect(() => {
     if (editingIndex === null) {
-      setDescriptions(splitDescriptions(entry.description));
+      setDescriptions(ownLines(entry.description));
     }
-  }, [entry.description, editingIndex]);
+  }, [entry.description, editingIndex, ownLines]);
 
   // Focus newly added description line
   useEffect(() => {
@@ -154,55 +209,14 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
     return () => clearInterval(id);
   }, [isThisRunning]);
 
-  /** POST-or-PATCH the entry with overridden fields (description and/or minutes). */
-  const persistViaCreate = useCallback(
-    async (overrides: { description?: string; minutes?: number }) => {
-      dispatch({
-        type: "UPDATE_ENTRY",
-        payload: { id: entry.id, updates: { ...overrides, syncStatus: "pending" } },
-      });
-
-      try {
-        const saved = await api.createTimeEntry(state.employee!.id, {
-          description: overrides.description ?? entry.description,
-          projectId: entry.projectId,
-          projectName: entry.projectName,
-          openingId: entry.openingId,
-          taskId: entry.taskId,
-          date: entry.date,
-          startTime: entry.startTime,
-          minutes: overrides.minutes ?? entry.minutes,
-          status: entry.status,
-        });
-        dispatch({
-          type: "UPDATE_ENTRY",
-          payload: {
-            id: entry.id,
-            updates: {
-              id: saved.id,
-              description: saved.description,
-              minutes: saved.minutes,
-              syncStatus: "synced",
-            },
-          },
-        });
-      } catch {
-        dispatch({
-          type: "UPDATE_ENTRY",
-          payload: { id: entry.id, updates: { syncStatus: "unsaved" } },
-        });
-      }
-    },
-    [api, dispatch, entry, state.employee]
-  );
+  const persistViaCreate = usePersistEntry(entry);
 
   const saveDescriptions = useCallback(
     async (newLines: string[]) => {
-      const newDesc = joinDescriptions(newLines);
-      if (newDesc === entry.description) return;
-      await persistViaCreate({ description: newDesc });
+      if (joinDescriptions(newLines) === joinDescriptions(ownLines(entry.description))) return;
+      await persistViaCreate({ description: joinDescriptions([...newLines, ...clickupLines]) });
     },
-    [entry.description, persistViaCreate]
+    [entry.description, persistViaCreate, ownLines, clickupLines]
   );
 
   const handleBlur = useCallback(
@@ -230,8 +244,8 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
   }, [descriptions, isEditable]);
 
   // Show accumulated total: entry.minutes + current session elapsed
-  const totalSeconds = isThisRunning ? entry.minutes * 60 + elapsed : entry.minutes * 60;
-  const displayTime = isThisRunning ? formatTime(totalSeconds) : formatMinutes(entry.minutes);
+  const totalSeconds = isThisRunning ? ownMinutes * 60 + elapsed : ownMinutes * 60;
+  const displayTime = isThisRunning ? formatTime(totalSeconds) : formatMinutes(ownMinutes);
 
   /** Open the inline time editor seeded with the current total. */
   const openTimeEdit = useCallback(() => {
@@ -253,11 +267,12 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
       const { bankedMinutes } = computeRunningTimeEdit(mins);
       // Reset the timer start so the clock continues from the entered total.
       dispatch({ type: "SET_TIMER", payload: { startTime: new Date().toISOString() } });
-      if (bankedMinutes !== entry.minutes) void persistViaCreate({ minutes: bankedMinutes });
+      if (bankedMinutes !== ownMinutes)
+        void persistViaCreate({ minutes: bankedMinutes + cuMinutes });
     } else {
-      if (mins !== entry.minutes) void persistViaCreate({ minutes: mins });
+      if (mins !== ownMinutes) void persistViaCreate({ minutes: mins + cuMinutes });
     }
-  }, [timeInput, isThisRunning, entry.minutes, dispatch, persistViaCreate]);
+  }, [timeInput, isThisRunning, ownMinutes, cuMinutes, dispatch, persistViaCreate]);
 
   // Task ids already used for this (project, date) — hidden from the inline picker
   // so changing the task can't create a duplicate entry.
@@ -418,6 +433,15 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
     // Discard any running session for this card — we're removing it.
     if (isThisRunning) dispatch({ type: "RESET_TIMER" });
 
+    // ClickUp cards still live on this entry — remove only this card's share.
+    if (clickupLines.length > 0) {
+      const keep = { description: joinDescriptions(clickupLines), minutes: cuMinutes };
+      if (isLocalOnlyEntry(entry))
+        dispatch({ type: "UPDATE_ENTRY", payload: { id: entry.id, updates: keep } });
+      else await persistViaCreate(keep);
+      return;
+    }
+
     // Local-only entries were never persisted — remove without an API call.
     if (isLocalOnlyEntry(entry)) {
       dispatch({ type: "DELETE_ENTRY", payload: entry.id });
@@ -430,7 +454,7 @@ export function ProjectCard({ entry, isToday, autoCollapsed = false }: ProjectCa
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Failed to delete entry");
     }
-  }, [api, dispatch, entry, isThisRunning]);
+  }, [api, dispatch, entry, isThisRunning, clickupLines, cuMinutes, persistViaCreate]);
 
   // Quick-open: from a past-day card, start a new entry today with the same
   // project + task. Blocked if that project+task is already tracked today.

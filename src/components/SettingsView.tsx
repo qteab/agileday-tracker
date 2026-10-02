@@ -16,8 +16,16 @@ import {
 import { fmtDate } from "../utils/week";
 import { Dropdown } from "./Dropdown";
 import bearIcon from "../assets/bear.png";
+import { createClickUpClient } from "../api/clickup";
 
-export type SettingsPage = "flex" | "vacation" | "menubar" | "appearance" | "timer" | "list";
+export type SettingsPage =
+  | "flex"
+  | "vacation"
+  | "menubar"
+  | "appearance"
+  | "timer"
+  | "list"
+  | "clickup";
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -32,6 +40,7 @@ const PAGE_TITLES: Record<SettingsPage, string> = {
   appearance: "Appearance",
   timer: "Timer",
   list: "Entry list",
+  clickup: "ClickUp",
 };
 
 export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) {
@@ -71,6 +80,7 @@ export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) 
         {page === "appearance" && <AppearanceSettings />}
         {page === "timer" && <TimerSettings />}
         {page === "list" && <ListSettings />}
+        {page === "clickup" && <ClickUpSettings />}
       </div>
     </div>
   );
@@ -95,6 +105,12 @@ const MENU_ITEMS: { page: SettingsPage; label: string; hint: string; icon: strin
     label: "Vacation days",
     hint: "Set up how your vacation day balance is tracked",
     icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+  },
+  {
+    page: "clickup",
+    label: "ClickUp",
+    hint: "Connect ClickUp to track time on its tasks",
+    icon: "M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1",
   },
   {
     page: "menubar",
@@ -837,6 +853,115 @@ function VacationSettings() {
       >
         {saved ? "Saved!" : saving ? "Saving..." : "Save"}
       </button>
+    </div>
+  );
+}
+
+function ClickUpSettings() {
+  const { state, dispatch } = useApp();
+  const connected = state.clickup?.config;
+  const [token, setToken] = useState("");
+  const [teams, setTeams] = useState<{ id: string; name: string }[] | null>(null);
+  const [teamId, setTeamId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function checkToken() {
+    setBusy(true);
+    setError(null);
+    try {
+      const found = await createClickUpClient(token.trim(), "").getTeams();
+      if (found.length === 0) throw new Error("No workspaces on this account");
+      setTeams(found);
+      setTeamId(found[0].id);
+    } catch (err) {
+      setTeams(null);
+      setError(err instanceof Error ? err.message : "Couldn't reach ClickUp");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function connect() {
+    const team = teams?.find((t) => t.id === teamId);
+    if (!team) return;
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    dispatch({
+      type: "SET_CLICKUP",
+      payload: {
+        config: { token: token.trim(), teamId: team.id, teamName: team.name },
+        // ClickUp time from today on is offered for AgileDay; older time is
+        // assumed to be logged already.
+        sync: { since: startOfToday.getTime(), synced: {} },
+      },
+    });
+    setToken("");
+    setTeams(null);
+  }
+
+  return (
+    <div className="px-4 py-4 space-y-4">
+      <div className="bg-bg-card rounded-xl p-4 border border-border space-y-3">
+        <h3 className="text-sm font-semibold text-text">ClickUp</h3>
+        {connected ? (
+          <>
+            <p className="text-xs text-text-muted">
+              Connected to <b className="text-text">{connected.teamName}</b>. Use + → ClickUp task
+              to track a task; its time is logged in ClickUp and added to the AgileDay entry for the
+              project you pick.
+            </p>
+            <button
+              onClick={() => dispatch({ type: "SET_CLICKUP", payload: null })}
+              className="px-3 py-1.5 text-xs font-medium text-danger bg-danger/10 rounded-lg hover:bg-danger/20 transition-colors"
+            >
+              Disconnect
+            </button>
+          </>
+        ) : (
+          <>
+            <div>
+              <label className="block text-xs text-text-muted mb-1">Personal API token</label>
+              <p className="text-[10px] text-text-muted mb-1.5">
+                In ClickUp: avatar → Settings → Apps → API Token. Starts with pk_.
+              </p>
+              <input
+                type="password"
+                value={token}
+                onChange={(e) => {
+                  setToken(e.target.value);
+                  setTeams(null);
+                }}
+                placeholder="pk_…"
+                className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            {teams && teams.length > 1 && (
+              <div>
+                <label className="block text-xs text-text-muted mb-1">Workspace</label>
+                <Dropdown
+                  options={teams.map((t) => ({ id: t.id, label: t.name }))}
+                  selectedId={teamId}
+                  onSelect={setTeamId}
+                  placeholder="Select a workspace…"
+                />
+              </div>
+            )}
+            {error && <p className="text-xs text-danger">{error}</p>}
+            <button
+              onClick={() => (teams ? connect() : void checkToken())}
+              disabled={busy || !token.trim() || (teams !== null && !teamId)}
+              className="w-full py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            >
+              {busy
+                ? "Checking…"
+                : teams
+                  ? `Connect ${teams.length === 1 ? teams[0].name : ""}`
+                  : "Continue"}
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -5,6 +5,8 @@ import { Collapsible } from "./Collapsible";
 import { formatMinutes } from "../hooks/useTimer";
 import { shouldAutoCollapse, weekStartOf, formatWeekHeading } from "../utils/entry-list";
 import type { TimeEntry } from "../api/types";
+import { ClickUpCard } from "./ClickUp";
+import { accountedMinutes, clickupTasksIn, nonClickupLines } from "../api/clickup";
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00");
@@ -172,14 +174,66 @@ export function ProjectCardList() {
 
           const cards = (
             <div className="flex flex-col gap-3">
-              {sorted.map((entry) => (
-                <ProjectCard
-                  key={entry.id}
-                  entry={entry}
-                  isToday={isToday}
-                  autoCollapsed={shouldAutoCollapse(listAutoCollapse, date, today)}
-                />
-              ))}
+              {sorted.flatMap((entry) => {
+                const autoCollapsed = shouldAutoCollapse(listAutoCollapse, date, today);
+                // ClickUp lines get their own cards once ClickUp time is loaded;
+                // otherwise they show as plain description lines.
+                const cuTasks =
+                  state.clickup && state.clickupEntries ? clickupTasksIn(entry.description) : [];
+                if (cuTasks.length === 0) {
+                  return [
+                    <ProjectCard
+                      key={entry.id}
+                      entry={entry}
+                      isToday={isToday}
+                      autoCollapsed={autoCollapsed}
+                    />,
+                  ];
+                }
+                const splits = cuTasks.map((task) => ({
+                  task,
+                  minutes: accountedMinutes(
+                    state.clickupEntries!,
+                    state.clickup!.sync,
+                    task.id,
+                    entry.date
+                  ),
+                }));
+                const cuMinutes = splits.reduce((sum, sp) => sum + sp.minutes, 0);
+                const ownRunning =
+                  isToday &&
+                  timer.isRunning &&
+                  !timer.clickupTask &&
+                  timer.projectId === entry.projectId &&
+                  (timer.taskId ?? null) === (entry.taskId ?? null);
+                // Hide the project card when the ClickUp cards hold everything.
+                const showOwn =
+                  ownRunning ||
+                  entry.minutes > cuMinutes ||
+                  nonClickupLines(entry.description).length > 0;
+                return [
+                  ...(showOwn
+                    ? [
+                        <ProjectCard
+                          key={entry.id}
+                          entry={entry}
+                          isToday={isToday}
+                          autoCollapsed={autoCollapsed}
+                          clickupMinutes={cuMinutes}
+                        />,
+                      ]
+                    : []),
+                  ...splits.map(({ task, minutes }) => (
+                    <ClickUpCard
+                      key={`${entry.id}:${task.id}`}
+                      entry={entry}
+                      task={task}
+                      minutes={minutes}
+                      isToday={isToday}
+                    />
+                  )),
+                ];
+              })}
             </div>
           );
 

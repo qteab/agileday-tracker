@@ -29,6 +29,13 @@ import { loadTimerState, saveTimerState, clearTimerState } from "./timer-store";
 import { loadFlexConfig } from "./flex-store";
 import { loadVacationConfig } from "./vacation-store";
 import { loadDisplayPrefs } from "./display-store";
+import {
+  createClickUpClient,
+  loadClickUp,
+  saveClickUp,
+  type ClickUpClient,
+  type ClickUpStored,
+} from "../api/clickup";
 import { loadWindowLayout, saveWindowLayout, type WindowLayout } from "./window-store";
 import { applyTheme, watchSystemTheme } from "../utils/theme";
 import type { ThemeMode } from "./display-store";
@@ -43,6 +50,8 @@ interface AppContextValue {
   onLogin: (auth: AuthState) => void;
   /** Re-run the full data load (entries, flex entries, holidays). */
   resync: () => void;
+  /** ClickUp API client; null when ClickUp isn't connected. */
+  clickupClient: ClickUpClient | null;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -109,6 +118,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useBackgroundTokenRefresh(isConnected, authState?.refreshToken, authStateRef, setAuthState);
   useConnectedDataLoad(api, isConnected, syncCounter, dispatch);
 
+  const clickupToken = state.clickup?.config.token;
+  const clickupTeamId = state.clickup?.config.teamId;
+  const clickupClient = useMemo(
+    () => (clickupToken && clickupTeamId ? createClickUpClient(clickupToken, clickupTeamId) : null),
+    [clickupToken, clickupTeamId]
+  );
+  useClickUpPersistence(state.clickup, dispatch);
+  useClickUpDataLoad(clickupClient, isConnected, syncCounter, dispatch);
+
   return (
     <AppContext.Provider
       value={{
@@ -120,6 +138,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         logout,
         onLogin,
         resync: () => setSyncCounter((n) => n + 1),
+        clickupClient,
       }}
     >
       {children}
@@ -338,6 +357,55 @@ function useWindowDockSnap() {
   }, []);
 }
 
+// Load the ClickUp connection once, then write every change back. Writing
+// waits for the load so the initial null never wipes the stored token.
+function useClickUpPersistence(clickup: ClickUpStored | null, dispatch: React.Dispatch<AppAction>) {
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    loadClickUp()
+      .then((stored) => dispatch({ type: "SET_CLICKUP", payload: stored }))
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, [dispatch]);
+  useEffect(() => {
+    if (loaded) saveClickUp(clickup).catch(() => {});
+  }, [loaded, clickup]);
+}
+
+// The user's ClickUp time for the same 30-day window as the entry list, plus
+// any timer running in ClickUp. Failure leaves entries null, which shows
+// ClickUp lines as plain descriptions instead of split cards.
+function useClickUpDataLoad(
+  client: ClickUpClient | null,
+  isConnected: boolean,
+  syncCounter: number,
+  dispatch: React.Dispatch<AppAction>
+) {
+  useEffect(() => {
+    if (!client || !isConnected) {
+      dispatch({ type: "SET_CLICKUP_ENTRIES", payload: null });
+      dispatch({ type: "SET_CLICKUP_RUNNING", payload: null });
+      return;
+    }
+    let cancelled = false;
+    const now = Date.now();
+    Promise.all([client.getTimeEntries(now - 31 * 86_400_000, now), client.getRunning()])
+      .then(([entries, running]) => {
+        if (cancelled) return;
+        dispatch({ type: "SET_CLICKUP_ENTRIES", payload: entries });
+        dispatch({ type: "SET_CLICKUP_RUNNING", payload: running });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const reason = err instanceof Error ? err.message : "Unknown error";
+        dispatch({ type: "SET_ERROR", payload: `Couldn't load ClickUp time: ${reason}` });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, isConnected, syncCounter, dispatch]);
+}
+
 // Restore a running timer that survived a quit/crash. Elapsed is derived
 // from startTime + now(), so time the app was closed is naturally counted.
 function useTimerRestore(
@@ -397,7 +465,7 @@ function useTrayDisplayPush(state: AppState) {
       )
     : null;
   const displayDescription = state.timer.isRunning
-    ? (runningEntry?.description ?? null)
+    ? (state.timer.clickupTask?.name ?? runningEntry?.description ?? null)
     : (lastEntryToday?.description ?? null);
 
   const displayProjectName =
