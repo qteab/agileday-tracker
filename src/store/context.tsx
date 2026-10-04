@@ -29,6 +29,15 @@ import { loadTimerState, saveTimerState, clearTimerState } from "./timer-store";
 import { loadFlexConfig } from "./flex-store";
 import { loadVacationConfig } from "./vacation-store";
 import { loadDisplayPrefs } from "./display-store";
+import {
+  ClickUpRateLimitError,
+  createClickUpClient,
+  loadClickUp,
+  saveClickUp,
+  type ClickUpAccount,
+  type ClickUpClient,
+  type ClickUpStored,
+} from "../api/clickup";
 import { loadWindowLayout, saveWindowLayout, type WindowLayout } from "./window-store";
 import { applyTheme, watchSystemTheme } from "../utils/theme";
 import type { ThemeMode } from "./display-store";
@@ -43,6 +52,8 @@ interface AppContextValue {
   onLogin: (auth: AuthState) => void;
   /** Re-run the full data load (entries, flex entries, holidays). */
   resync: () => void;
+  /** ClickUp API client; null when ClickUp isn't connected. */
+  clickupClient: ClickUpClient | null;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -109,6 +120,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useBackgroundTokenRefresh(isConnected, authState?.refreshToken, authStateRef, setAuthState);
   useConnectedDataLoad(api, isConnected, syncCounter, dispatch);
 
+  const clickupAccounts = state.clickup?.config.accounts;
+  const clickupClient = useMemo(
+    () => (clickupAccounts?.length ? createClickUpClient(clickupAccounts) : null),
+    [clickupAccounts]
+  );
+  useClickUpPersistence(state.clickup, dispatch);
+  useClickUpDataLoad(clickupAccounts, isConnected, syncCounter, dispatch);
+
   return (
     <AppContext.Provider
       value={{
@@ -120,6 +139,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         logout,
         onLogin,
         resync: () => setSyncCounter((n) => n + 1),
+        clickupClient,
       }}
     >
       {children}
@@ -338,6 +358,109 @@ function useWindowDockSnap() {
   }, []);
 }
 
+// Load the ClickUp connection once, then write every change back. Writing
+// waits for the load so the initial null never wipes the stored token.
+function useClickUpPersistence(clickup: ClickUpStored | null, dispatch: React.Dispatch<AppAction>) {
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    loadClickUp()
+      .then((stored) => dispatch({ type: "SET_CLICKUP", payload: stored }))
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, [dispatch]);
+  useEffect(() => {
+    if (loaded) saveClickUp(clickup).catch(() => {});
+  }, [loaded, clickup]);
+}
+
+// The user's ClickUp time in every workspace of every connected account, for
+// the same 30-day window as the entry list, plus any timer running in ClickUp.
+// Each account's workspaces are re-read every sync so newly joined ones show
+// up. If nothing loads, entries stay null and ClickUp lines show as plain
+// descriptions.
+function useClickUpDataLoad(
+  accounts: ClickUpAccount[] | undefined,
+  isConnected: boolean,
+  syncCounter: number,
+  dispatch: React.Dispatch<AppAction>
+) {
+  // Bumped to reload once a rate limit has passed.
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (!accounts?.length || !isConnected) {
+      dispatch({ type: "SET_CLICKUP_ENTRIES", payload: null });
+      dispatch({ type: "SET_CLICKUP_RUNNING", payload: null });
+      return;
+    }
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    const now = Date.now();
+    const reasonOf = (err: unknown) => (err instanceof Error ? err.message : "Unknown error");
+    (async () => {
+      // Refresh each account's workspaces; keep the stored list if that fails.
+      const refreshed = await Promise.allSettled(
+        accounts.map((a) => createClickUpClient([]).getAccount(a.token))
+      );
+      if (cancelled) return;
+      const fresh = accounts.map((a, i) => {
+        const r = refreshed[i];
+        return r.status === "fulfilled" ? r.value : a;
+      });
+      for (const r of refreshed)
+        if (r.status === "fulfilled") dispatch({ type: "SET_CLICKUP_ACCOUNT", payload: r.value });
+      const client = createClickUpClient(fresh);
+      const teams = fresh.flatMap((a) => a.teams);
+      const results = await Promise.allSettled(
+        teams.map((t) =>
+          Promise.all([
+            client.getTimeEntries(t.id, now - 31 * 86_400_000, now),
+            client.getRunning(t.id),
+          ])
+        )
+      );
+      if (cancelled) return;
+      const loaded = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+      if (loaded.length > 0) {
+        dispatch({ type: "SET_CLICKUP_ENTRIES", payload: loaded.flatMap(([entries]) => entries) });
+        dispatch({
+          type: "SET_CLICKUP_RUNNING",
+          payload: loaded.find(([, running]) => running)?.[1] ?? null,
+        });
+      }
+
+      const errors = [...refreshed, ...results].flatMap((r) =>
+        r.status === "rejected" ? [r.reason as unknown] : []
+      );
+      if (errors.length === 0) return;
+      const limited = errors.filter(
+        (e): e is ClickUpRateLimitError => e instanceof ClickUpRateLimitError
+      );
+      if (limited.length > 0) {
+        const at = Math.max(...limited.map((e) => e.retryAt));
+        retryTimer = setTimeout(() => setRetry((n) => n + 1), at - Date.now());
+        dispatch({
+          type: "SET_ERROR",
+          payload: `ClickUp is rate limiting requests — reloading ClickUp time in ${Math.ceil((at - Date.now()) / 1000)}s.`,
+        });
+        return;
+      }
+      const failed = teams.filter((_, i) => results[i].status === "rejected");
+      dispatch({
+        type: "SET_ERROR",
+        payload: `Couldn't load ClickUp time${failed.length ? ` from ${failed.map((t) => t.name).join(", ")}` : ""}: ${reasonOf(errors[0])}`,
+      });
+    })().catch((err) => {
+      if (!cancelled)
+        dispatch({ type: "SET_ERROR", payload: `Couldn't load ClickUp time: ${reasonOf(err)}` });
+    });
+    return () => {
+      cancelled = true;
+      clearTimeout(retryTimer);
+    };
+    // Keyed on tokens only, so a refreshed workspace list doesn't trigger another load.
+  }, [accounts?.map((a) => a.token).join(","), isConnected, syncCounter, retry, dispatch]);
+}
+
 // Restore a running timer that survived a quit/crash. Elapsed is derived
 // from startTime + now(), so time the app was closed is naturally counted.
 function useTimerRestore(
@@ -397,7 +520,7 @@ function useTrayDisplayPush(state: AppState) {
       )
     : null;
   const displayDescription = state.timer.isRunning
-    ? (runningEntry?.description ?? null)
+    ? (state.timer.clickupTask?.name ?? runningEntry?.description ?? null)
     : (lastEntryToday?.description ?? null);
 
   const displayProjectName =

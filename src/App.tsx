@@ -14,6 +14,7 @@ import { FlexView } from "./components/FlexView";
 import { FlexSetupAlert } from "./components/FlexSetupAlert";
 import { Fab } from "./components/Fab";
 import { InactivityBanner } from "./components/InactivityBanner";
+import { ClickUpBanner } from "./components/ClickUp";
 import { useApp } from "./store/context";
 import { useTrayTimerListeners } from "./hooks/useTimer";
 
@@ -216,6 +217,7 @@ function AuthenticatedApp() {
           {activeTab === "list" ? (
             <>
               <InactivityBanner />
+              <ClickUpBanner />
               <ProjectCardList />
             </>
           ) : (
