@@ -4,8 +4,10 @@ import type { VacationConfig } from "./vacation-store";
 import { DEFAULT_DISPLAY_PREFS, type DisplayPrefs } from "./display-store";
 import {
   markSynced,
+  upsertAccount,
   type ClickUpStored,
   type ClickUpTask,
+  type ClickUpAccount,
   type ClickUpTimeEntry,
 } from "../api/clickup";
 
@@ -124,6 +126,8 @@ export type AppAction =
   | { type: "SET_INACTIVITY"; payload: { idleSeconds: number; isAway: boolean } }
   | { type: "RESOLVE_RETURN" }
   | { type: "SET_CLICKUP"; payload: ClickUpStored | null }
+  | { type: "SET_CLICKUP_ACCOUNT"; payload: ClickUpAccount }
+  | { type: "REMOVE_CLICKUP_ACCOUNT"; payload: { token: string } }
   | { type: "MARK_CLICKUP_SYNCED"; payload: Pick<ClickUpTimeEntry, "id" | "start">[] }
   | { type: "SET_CLICKUP_ENTRIES"; payload: ClickUpTimeEntry[] | null }
   | { type: "ADD_CLICKUP_ENTRY"; payload: ClickUpTimeEntry }
@@ -219,6 +223,24 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     case "SET_CLICKUP":
       return { ...state, clickup: action.payload };
+    case "SET_CLICKUP_ACCOUNT": {
+      const clickup = upsertAccount(state.clickup, action.payload);
+      // Unchanged on most syncs — keep the same object so nothing re-renders,
+      // re-persists, or rebuilds the client.
+      return JSON.stringify(clickup) === JSON.stringify(state.clickup)
+        ? state
+        : { ...state, clickup };
+    }
+    case "REMOVE_CLICKUP_ACCOUNT": {
+      const accounts = (state.clickup?.config.accounts ?? []).filter(
+        (a) => a.token !== action.payload.token
+      );
+      return {
+        ...state,
+        clickup:
+          accounts.length > 0 && state.clickup ? { ...state.clickup, config: { accounts } } : null,
+      };
+    }
     case "MARK_CLICKUP_SYNCED":
       if (!state.clickup) return state;
       return {

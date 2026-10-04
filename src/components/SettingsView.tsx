@@ -17,6 +17,7 @@ import { fmtDate } from "../utils/week";
 import { Dropdown } from "./Dropdown";
 import bearIcon from "../assets/bear.png";
 import { createClickUpClient } from "../api/clickup";
+import { ClickUpLogo } from "./ClickUp";
 
 export type SettingsPage =
   | "flex"
@@ -87,7 +88,8 @@ export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) 
 }
 
 /** Keep hints general — they describe the page, not the settings on it. */
-const MENU_ITEMS: { page: SettingsPage; label: string; hint: string; icon: string }[] = [
+/** `icon` is an outline path; items without one show their brand logo. */
+const MENU_ITEMS: { page: SettingsPage; label: string; hint: string; icon?: string }[] = [
   {
     page: "list",
     label: "Entry list",
@@ -110,7 +112,6 @@ const MENU_ITEMS: { page: SettingsPage; label: string; hint: string; icon: strin
     page: "clickup",
     label: "ClickUp",
     hint: "Connect ClickUp to track time on its tasks",
-    icon: "M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1",
   },
   {
     page: "menubar",
@@ -153,14 +154,20 @@ function SettingsMenu({
               i > 0 ? "border-t border-border" : ""
             }`}
           >
-            <svg
-              className="w-5 h-5 shrink-0 text-text-muted"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-            </svg>
+            {item.icon ? (
+              <svg
+                className="w-5 h-5 shrink-0 text-text-muted"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
+              </svg>
+            ) : (
+              <span className="shrink-0 flex">
+                <ClickUpLogo size={20} />
+              </span>
+            )}
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium text-text">{item.label}</div>
               <div className="text-xs text-text-muted mt-0.5">{item.hint}</div>
@@ -864,124 +871,138 @@ async function openClickUpTokenPage() {
 
 function ClickUpSettings() {
   const { state, dispatch } = useApp();
-  const connected = state.clickup?.config;
+  const accounts = state.clickup?.config.accounts ?? [];
+  // The add form starts open when nothing is connected yet.
+  const [adding, setAdding] = useState(false);
   const [token, setToken] = useState("");
-  const [teams, setTeams] = useState<{ id: string; name: string }[] | null>(null);
-  const [teamId, setTeamId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const showForm = adding || accounts.length === 0;
 
-  async function checkToken() {
-    setBusy(true);
+  async function addAccount() {
+    const value = token.trim();
     setError(null);
+    if (accounts.some((a) => a.token === value)) {
+      setError("That account is already connected");
+      return;
+    }
+    setBusy(true);
     try {
-      const found = await createClickUpClient(token.trim(), "").getTeams();
-      if (found.length === 0) throw new Error("No workspaces on this account");
-      setTeams(found);
-      setTeamId(found[0].id);
+      const account = await createClickUpClient([]).getAccount(value);
+      if (account.teams.length === 0) throw new Error("No workspaces on this account");
+      // ClickUp time from today on is offered for AgileDay; older time is
+      // assumed to be logged already.
+      dispatch({ type: "SET_CLICKUP_ACCOUNT", payload: account });
+      setToken("");
+      setAdding(false);
     } catch (err) {
-      setTeams(null);
       setError(err instanceof Error ? err.message : "Couldn't reach ClickUp");
     } finally {
       setBusy(false);
     }
   }
 
-  function connect() {
-    const team = teams?.find((t) => t.id === teamId);
-    if (!team) return;
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    dispatch({
-      type: "SET_CLICKUP",
-      payload: {
-        config: { token: token.trim(), teamId: team.id, teamName: team.name },
-        // ClickUp time from today on is offered for AgileDay; older time is
-        // assumed to be logged already.
-        sync: { since: startOfToday.getTime(), synced: {} },
-      },
-    });
-    setToken("");
-    setTeams(null);
-  }
-
   return (
     <div className="px-4 py-4 space-y-4">
-      <div className="bg-bg-card rounded-xl p-4 border border-border space-y-3">
-        <h3 className="text-sm font-semibold text-text">ClickUp</h3>
-        {connected ? (
-          <>
-            <p className="text-xs text-text-muted">
-              Connected to <b className="text-text">{connected.teamName}</b>. Use + → ClickUp task
-              to track a task; its time is logged in ClickUp and added to the AgileDay entry for the
-              project you pick.
-            </p>
-            <button
-              onClick={() => dispatch({ type: "SET_CLICKUP", payload: null })}
-              className="px-3 py-1.5 text-xs font-medium text-danger bg-danger/10 rounded-lg hover:bg-danger/20 transition-colors"
+      {accounts.length > 0 && (
+        <div className="bg-bg-card rounded-xl border border-border overflow-hidden">
+          {accounts.map((a, i) => (
+            <div
+              key={a.token}
+              className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? "border-t border-border" : ""}`}
             >
-              Disconnect
-            </button>
-          </>
-        ) : (
-          <>
-            <div>
-              <label className="block text-xs text-text-muted mb-1">Personal API token</label>
-              <ol className="text-[11px] text-text-muted mb-2 space-y-0.5 list-decimal pl-4">
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => void openClickUpTokenPage()}
-                    className="font-semibold text-primary hover:underline cursor-pointer"
-                  >
-                    Open ClickUp → Settings → Apps
-                  </button>
-                </li>
-                <li>
-                  Under <b className="text-text">API Token</b>, click Generate (or Copy if you
-                  already have one).
-                </li>
-                <li>
-                  Paste it below — it starts with <code>pk_</code>.
-                </li>
-              </ol>
-              <input
-                type="password"
-                value={token}
-                onChange={(e) => {
-                  setToken(e.target.value);
-                  setTeams(null);
-                }}
-                placeholder="pk_…"
-                className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-            {teams && teams.length > 1 && (
-              <div>
-                <label className="block text-xs text-text-muted mb-1">Workspace</label>
-                <Dropdown
-                  options={teams.map((t) => ({ id: t.id, label: t.name }))}
-                  selectedId={teamId}
-                  onSelect={setTeamId}
-                  placeholder="Select a workspace…"
-                />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-text truncate">
+                  {a.email || "ClickUp account"}
+                </div>
+                <div className="text-xs text-text-muted mt-0.5 truncate">
+                  {a.teams.map((t) => t.name).join(", ")}
+                </div>
               </div>
+              <button
+                onClick={() =>
+                  dispatch({ type: "REMOVE_CLICKUP_ACCOUNT", payload: { token: a.token } })
+                }
+                className="px-3 py-1.5 text-xs font-medium text-danger bg-danger/10 rounded-lg hover:bg-danger/20 transition-colors"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showForm ? (
+        <div className="bg-bg-card rounded-xl p-4 border border-border space-y-3">
+          <h3 className="text-sm font-semibold text-text">
+            {accounts.length > 0 ? "Add another ClickUp account" : "Connect ClickUp"}
+          </h3>
+          <div>
+            <label className="block text-xs text-text-muted mb-1">Personal API token</label>
+            <ol className="text-[11px] text-text-muted mb-2 space-y-0.5 list-decimal pl-4">
+              <li>
+                <button
+                  type="button"
+                  onClick={() => void openClickUpTokenPage()}
+                  className="font-semibold text-primary hover:underline cursor-pointer"
+                >
+                  Open ClickUp → Settings → Apps
+                </button>
+                {accounts.length > 0 && " while signed in to the other account"}
+              </li>
+              <li>
+                Under <b className="text-text">API Token</b>, click Generate (or Copy if you already
+                have one).
+              </li>
+              <li>
+                Paste it below — it starts with <code>pk_</code>.
+              </li>
+            </ol>
+            <input
+              type="password"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && token.trim() && !busy && void addAccount()}
+              placeholder="pk_…"
+              className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+          {error && <p className="text-xs text-danger">{error}</p>}
+          <div className="flex gap-2">
+            {accounts.length > 0 && (
+              <button
+                onClick={() => {
+                  setAdding(false);
+                  setToken("");
+                  setError(null);
+                }}
+                className="px-4 py-2 text-sm font-medium text-text-muted bg-bg rounded-lg hover:text-text transition-colors"
+              >
+                Cancel
+              </button>
             )}
-            {error && <p className="text-xs text-danger">{error}</p>}
             <button
-              onClick={() => (teams ? connect() : void checkToken())}
-              disabled={busy || !token.trim() || (teams !== null && !teamId)}
-              className="w-full py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              onClick={() => void addAccount()}
+              disabled={busy || !token.trim()}
+              className="flex-1 py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
-              {busy
-                ? "Checking…"
-                : teams
-                  ? `Connect ${teams.length === 1 ? teams[0].name : ""}`
-                  : "Continue"}
+              {busy ? "Checking…" : "Connect"}
             </button>
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setAdding(true)}
+          className="w-full py-2 text-sm font-medium text-primary bg-bg-card border border-border rounded-lg hover:bg-bg transition-colors"
+        >
+          + Add another ClickUp account
+        </button>
+      )}
+
+      <p className="px-1 text-[11px] text-text-muted">
+        Use + → ClickUp task to track a task from any connected account. Its time is logged in
+        ClickUp and added to the AgileDay entry for the project you pick.
+      </p>
     </div>
   );
 }

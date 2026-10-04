@@ -9,20 +9,36 @@ import { splitDescriptions, joinDescriptions } from "../utils/descriptions";
 
 const API = "https://api.clickup.com/api/v2";
 
-export interface ClickUpConfig {
+export interface ClickUpTeam {
+  id: string;
+  name: string;
+}
+
+/** One ClickUp login. A personal token covers every workspace that login
+ * belongs to; a separate login (e.g. a customer's ClickUp) needs its own. */
+export interface ClickUpAccount {
   /** Personal API token (pk_…), from ClickUp → Settings → Apps. */
   token: string;
-  teamId: string;
-  teamName: string;
+  /** Shown in settings to tell accounts apart. */
+  email: string;
+  /** Workspaces this login can see; refreshed on every sync. */
+  teams: ClickUpTeam[];
+}
+
+export interface ClickUpConfig {
+  accounts: ClickUpAccount[];
 }
 
 export interface ClickUpTask {
   id: string;
   name: string;
+  /** Workspace the task lives in. Unknown for tasks parsed from a `CU-` line. */
+  teamId?: string;
 }
 
 export interface ClickUpTimeEntry {
   id: string;
+  teamId: string;
   taskId: string;
   taskName: string;
   /** Unix ms */
@@ -99,19 +115,46 @@ export function entryDate(e: ClickUpTimeEntry): string {
 // ---------- sync bookkeeping ----------
 
 /**
- * Which ClickUp entries are already counted in AgileDay. Entries started before
- * `since` (start of the day ClickUp was connected) count as already handled.
+ * Which ClickUp entries are already counted in AgileDay. Per workspace, entries
+ * started before `since` (start of the day it was connected) count as already
+ * handled, as do entries in workspaces without a `since`.
  * ponytail: per-Mac record — on a second Mac, ClickUp time tracked earlier that
  * same day on a task already linked in AgileDay gets added a second time.
  */
 export interface ClickUpSyncState {
-  since: number;
+  /** workspace id → start of the day it was connected (ms) */
+  since: Record<string, number>;
   /** entry id → start ms (start kept so old ids can be pruned) */
   synced: Record<string, number>;
 }
 
 export function isAccounted(e: ClickUpTimeEntry, sync: ClickUpSyncState): boolean {
-  return e.id.startsWith("local-") || e.start < sync.since || e.id in sync.synced;
+  return (
+    e.id.startsWith("local-") || e.start < (sync.since[e.teamId] ?? Infinity) || e.id in sync.synced
+  );
+}
+
+export function startOfToday(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/** Add or refresh an account; workspaces seen for the first time start syncing today. */
+export function upsertAccount(
+  stored: ClickUpStored | null,
+  account: ClickUpAccount
+): ClickUpStored {
+  const accounts = stored?.config.accounts ?? [];
+  const since = { ...stored?.sync.since };
+  for (const t of account.teams) since[t.id] ??= startOfToday();
+  const i = accounts.findIndex((a) => a.token === account.token);
+  return {
+    config: {
+      accounts: i < 0 ? [...accounts, account] : accounts.map((a, j) => (j === i ? account : a)),
+    },
+    sync: { synced: stored?.sync.synced ?? {}, since },
+  };
 }
 
 /** Minutes per ClickUp task already in AgileDay for one date. */
@@ -142,7 +185,7 @@ export function unsyncedGroups(
     const key = `${date}|${e.taskId}`;
     const g = groups.get(key) ?? {
       date,
-      task: { id: e.taskId, name: e.taskName },
+      task: { id: e.taskId, name: e.taskName, teamId: e.teamId },
       entries: [],
       minutes: 0,
     };
@@ -176,7 +219,28 @@ const KEY = "clickup";
 
 export async function loadClickUp(): Promise<ClickUpStored | null> {
   const store = await load(STORE_FILE, { autoSave: true, defaults: {} });
-  return (await store.get<ClickUpStored>(KEY)) ?? null;
+  return migrateStored((await store.get<ClickUpStored>(KEY)) ?? null);
+}
+
+/** The first version stored one token + one workspace and a single `since`. */
+export function migrateStored(stored: ClickUpStored | null): ClickUpStored | null {
+  if (!stored || Array.isArray(stored.config.accounts)) return stored;
+  const old = stored as unknown as {
+    config: { token: string; teamId: string; teamName: string };
+    sync: { since: number; synced: Record<string, number> };
+  };
+  return {
+    config: {
+      accounts: [
+        {
+          token: old.config.token,
+          email: "",
+          teams: [{ id: old.config.teamId, name: old.config.teamName }],
+        },
+      ],
+    },
+    sync: { since: { [old.config.teamId]: old.sync.since }, synced: old.sync.synced },
+  };
 }
 
 export async function saveClickUp(value: ClickUpStored | null): Promise<void> {
@@ -207,10 +271,11 @@ type RawEntry = {
   duration: string | number;
 };
 
-function toEntry(r: RawEntry): ClickUpTimeEntry | null {
+function toEntry(r: RawEntry, teamId: string): ClickUpTimeEntry | null {
   if (!r.task?.id) return null;
   return {
     id: String(r.id),
+    teamId,
     taskId: r.task.id,
     taskName: r.task.name,
     start: Number(r.start),
@@ -218,12 +283,15 @@ function toEntry(r: RawEntry): ClickUpTimeEntry | null {
   };
 }
 
+/**
+ * Workspace-scoped calls take the workspace id and use the token of the account
+ * that workspace belongs to.
+ */
 export function createClickUpClient(
-  token: string,
-  teamId: string,
+  accounts: Pick<ClickUpAccount, "token" | "teams">[],
   fetchOverride?: typeof globalThis.fetch
 ) {
-  async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
+  async function request<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
     const doFetch = fetchOverride ?? (await tauriFetch());
     const res = await doFetch(`${API}${path}`, {
       ...init,
@@ -237,52 +305,95 @@ export function createClickUpClient(
     return (text ? JSON.parse(text) : {}) as T;
   }
 
-  const team = `/team/${teamId}`;
+  function call<T>(teamId: string, path: string, init?: RequestInit): Promise<T> {
+    const account = accounts.find((a) => a.teams.some((t) => t.id === teamId));
+    if (!account) throw new Error(`No connected ClickUp account for workspace ${teamId}`);
+    return request<T>(account.token, `/team/${teamId}${path}`, init);
+  }
+
+  type RawTask = { id: string; name: string; team_id: string };
+  const task = (t: RawTask): ClickUpTask => ({ id: t.id, name: t.name, teamId: String(t.team_id) });
 
   return {
-    async getTeams(): Promise<{ id: string; name: string }[]> {
-      const res = await call<{ teams: { id: string; name: string }[] }>("/team");
-      return res.teams.map((t) => ({ id: String(t.id), name: t.name }));
+    /** Who a token belongs to and which workspaces it can see. */
+    async getAccount(token: string): Promise<ClickUpAccount> {
+      const [{ user }, { teams }] = await Promise.all([
+        request<{ user: { email: string } }>(token, "/user"),
+        request<{ teams: { id: string; name: string }[] }>(token, "/team"),
+      ]);
+      return {
+        token,
+        email: user.email,
+        teams: teams.map((t) => ({ id: String(t.id), name: t.name })),
+      };
     },
 
+    /** Look up a task in whichever account can see it. Custom ids are only
+     * unique per workspace, so each workspace is tried in turn. */
     async getTask(ref: { id: string; custom: boolean }): Promise<ClickUpTask> {
-      const q = ref.custom ? `?custom_task_ids=true&team_id=${teamId}` : "";
-      const t = await call<{ id: string; name: string }>(`/task/${encodeURIComponent(ref.id)}${q}`);
-      return { id: t.id, name: t.name };
+      const path = `/task/${encodeURIComponent(ref.id)}`;
+      const attempts = accounts.flatMap((a) =>
+        ref.custom
+          ? a.teams.map(
+              (t) => () => request<RawTask>(a.token, `${path}?custom_task_ids=true&team_id=${t.id}`)
+            )
+          : [() => request<RawTask>(a.token, path)]
+      );
+      for (const attempt of attempts) {
+        try {
+          return task(await attempt());
+        } catch {
+          // not visible to this account / workspace — try the next
+        }
+      }
+      throw new Error(`ClickUp task ${ref.id} not found`);
     },
 
     /** The authenticated user's time entries in [startMs, endMs]. */
-    async getTimeEntries(startMs: number, endMs: number): Promise<ClickUpTimeEntry[]> {
+    async getTimeEntries(
+      teamId: string,
+      startMs: number,
+      endMs: number
+    ): Promise<ClickUpTimeEntry[]> {
       const res = await call<{ data: RawEntry[] }>(
-        `${team}/time_entries?start_date=${startMs}&end_date=${endMs}`
+        teamId,
+        `/time_entries?start_date=${startMs}&end_date=${endMs}`
       );
-      return res.data.map(toEntry).filter((e): e is ClickUpTimeEntry => e !== null);
+      return res.data
+        .map((r) => toEntry(r, teamId))
+        .filter((e): e is ClickUpTimeEntry => e !== null);
     },
 
-    async getRunning(): Promise<ClickUpTimeEntry | null> {
-      const res = await call<{ data: RawEntry | null }>(`${team}/time_entries/current`);
-      return res.data ? toEntry(res.data) : null;
+    async getRunning(teamId: string): Promise<ClickUpTimeEntry | null> {
+      const res = await call<{ data: RawEntry | null }>(teamId, "/time_entries/current");
+      return res.data ? toEntry(res.data, teamId) : null;
     },
 
     async createTimeEntry(
+      teamId: string,
       taskId: string,
       start: number,
       duration: number
     ): Promise<ClickUpTimeEntry> {
-      const res = await call<{ data?: RawEntry } & Partial<RawEntry>>(`${team}/time_entries`, {
+      const res = await call<{ data?: RawEntry } & Partial<RawEntry>>(teamId, "/time_entries", {
         method: "POST",
         body: JSON.stringify({ tid: taskId, start, duration }),
       });
       const raw = res.data ?? (res as RawEntry);
-      return { id: String(raw.id), taskId, taskName: "", start, duration };
+      return { id: String(raw.id), teamId, taskId, taskName: "", start, duration };
     },
 
-    async stopRunning(): Promise<void> {
-      await call(`${team}/time_entries/stop`, { method: "POST" });
+    async stopRunning(teamId: string): Promise<void> {
+      await call(teamId, "/time_entries/stop", { method: "POST" });
     },
 
-    async updateTimeEntry(id: string, start: number, duration: number): Promise<void> {
-      await call(`${team}/time_entries/${id}`, {
+    async updateTimeEntry(
+      teamId: string,
+      id: string,
+      start: number,
+      duration: number
+    ): Promise<void> {
+      await call(teamId, `/time_entries/${id}`, {
         method: "PUT",
         // `tags` is required by the API; adding none leaves the entry's tags alone.
         body: JSON.stringify({
@@ -295,8 +406,8 @@ export function createClickUpClient(
       });
     },
 
-    async deleteTimeEntry(id: string): Promise<void> {
-      await call(`${team}/time_entries/${id}`, { method: "DELETE" });
+    async deleteTimeEntry(teamId: string, id: string): Promise<void> {
+      await call(teamId, `/time_entries/${id}`, { method: "DELETE" });
     },
   };
 }

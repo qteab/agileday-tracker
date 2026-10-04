@@ -282,22 +282,28 @@ export function useLogClickUp() {
       const duration = minutes * 60000;
       const localId = `local-${crypto.randomUUID()}`;
       const shown = { taskId: task.id, taskName: task.name, start, duration };
-      dispatch({ type: "ADD_CLICKUP_ENTRY", payload: { id: localId, ...shown } });
+      dispatch({
+        type: "ADD_CLICKUP_ENTRY",
+        payload: { id: localId, teamId: task.teamId ?? "", ...shown },
+      });
       try {
+        // Tasks started from a `CU-` line don't know their workspace yet.
+        const teamId =
+          task.teamId ?? (await clickupClient.getTask({ id: task.id, custom: false })).teamId!;
         let id = task.timerId;
         if (id) {
           // Only stop ClickUp's timer if it is still this one — it may have been
           // stopped (or another started) in ClickUp meanwhile.
-          const running = await clickupClient.getRunning();
-          if (running?.id === id) await clickupClient.stopRunning();
-          await clickupClient.updateTimeEntry(id, start, duration);
+          const running = await clickupClient.getRunning(teamId);
+          if (running?.id === id) await clickupClient.stopRunning(teamId);
+          await clickupClient.updateTimeEntry(teamId, id, start, duration);
           dispatch({ type: "SET_CLICKUP_RUNNING", payload: null });
         } else {
-          id = (await clickupClient.createTimeEntry(task.id, start, duration)).id;
+          id = (await clickupClient.createTimeEntry(teamId, task.id, start, duration)).id;
         }
         dispatch({ type: "MARK_CLICKUP_SYNCED", payload: [{ id, start }] });
         dispatch({ type: "REMOVE_CLICKUP_ENTRIES", payload: [localId] });
-        dispatch({ type: "ADD_CLICKUP_ENTRY", payload: { id, ...shown } });
+        dispatch({ type: "ADD_CLICKUP_ENTRY", payload: { id, teamId, ...shown } });
       } catch (err) {
         dispatch({ type: "REMOVE_CLICKUP_ENTRIES", payload: [localId] });
         const reason = err instanceof Error ? err.message : "Unknown error";

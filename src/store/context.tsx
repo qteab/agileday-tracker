@@ -33,6 +33,7 @@ import {
   createClickUpClient,
   loadClickUp,
   saveClickUp,
+  type ClickUpAccount,
   type ClickUpClient,
   type ClickUpStored,
 } from "../api/clickup";
@@ -118,14 +119,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useBackgroundTokenRefresh(isConnected, authState?.refreshToken, authStateRef, setAuthState);
   useConnectedDataLoad(api, isConnected, syncCounter, dispatch);
 
-  const clickupToken = state.clickup?.config.token;
-  const clickupTeamId = state.clickup?.config.teamId;
+  const clickupAccounts = state.clickup?.config.accounts;
   const clickupClient = useMemo(
-    () => (clickupToken && clickupTeamId ? createClickUpClient(clickupToken, clickupTeamId) : null),
-    [clickupToken, clickupTeamId]
+    () => (clickupAccounts?.length ? createClickUpClient(clickupAccounts) : null),
+    [clickupAccounts]
   );
   useClickUpPersistence(state.clickup, dispatch);
-  useClickUpDataLoad(clickupClient, isConnected, syncCounter, dispatch);
+  useClickUpDataLoad(clickupAccounts, isConnected, syncCounter, dispatch);
 
   return (
     <AppContext.Provider
@@ -372,38 +372,68 @@ function useClickUpPersistence(clickup: ClickUpStored | null, dispatch: React.Di
   }, [loaded, clickup]);
 }
 
-// The user's ClickUp time for the same 30-day window as the entry list, plus
-// any timer running in ClickUp. Failure leaves entries null, which shows
-// ClickUp lines as plain descriptions instead of split cards.
+// The user's ClickUp time in every workspace of every connected account, for
+// the same 30-day window as the entry list, plus any timer running in ClickUp.
+// Each account's workspaces are re-read every sync so newly joined ones show
+// up. If nothing loads, entries stay null and ClickUp lines show as plain
+// descriptions.
 function useClickUpDataLoad(
-  client: ClickUpClient | null,
+  accounts: ClickUpAccount[] | undefined,
   isConnected: boolean,
   syncCounter: number,
   dispatch: React.Dispatch<AppAction>
 ) {
   useEffect(() => {
-    if (!client || !isConnected) {
+    if (!accounts?.length || !isConnected) {
       dispatch({ type: "SET_CLICKUP_ENTRIES", payload: null });
       dispatch({ type: "SET_CLICKUP_RUNNING", payload: null });
       return;
     }
     let cancelled = false;
     const now = Date.now();
-    Promise.all([client.getTimeEntries(now - 31 * 86_400_000, now), client.getRunning()])
-      .then(([entries, running]) => {
-        if (cancelled) return;
-        dispatch({ type: "SET_CLICKUP_ENTRIES", payload: entries });
-        dispatch({ type: "SET_CLICKUP_RUNNING", payload: running });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        const reason = err instanceof Error ? err.message : "Unknown error";
-        dispatch({ type: "SET_ERROR", payload: `Couldn't load ClickUp time: ${reason}` });
-      });
+    const reasonOf = (err: unknown) => (err instanceof Error ? err.message : "Unknown error");
+    (async () => {
+      const fresh = await Promise.all(
+        accounts.map((a) => createClickUpClient([]).getAccount(a.token))
+      );
+      if (cancelled) return;
+      for (const account of fresh) dispatch({ type: "SET_CLICKUP_ACCOUNT", payload: account });
+      const client = createClickUpClient(fresh);
+      const teams = fresh.flatMap((a) => a.teams);
+      const results = await Promise.allSettled(
+        teams.map((t) =>
+          Promise.all([
+            client.getTimeEntries(t.id, now - 31 * 86_400_000, now),
+            client.getRunning(t.id),
+          ])
+        )
+      );
+      if (cancelled) return;
+      const loaded = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+      const failed = teams.filter((_, i) => results[i].status === "rejected");
+      if (loaded.length > 0) {
+        dispatch({ type: "SET_CLICKUP_ENTRIES", payload: loaded.flatMap(([entries]) => entries) });
+        dispatch({
+          type: "SET_CLICKUP_RUNNING",
+          payload: loaded.find(([, running]) => running)?.[1] ?? null,
+        });
+      }
+      if (failed.length > 0) {
+        const first = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
+        dispatch({
+          type: "SET_ERROR",
+          payload: `Couldn't load ClickUp time from ${failed.map((t) => t.name).join(", ")}: ${reasonOf(first.reason)}`,
+        });
+      }
+    })().catch((err) => {
+      if (!cancelled)
+        dispatch({ type: "SET_ERROR", payload: `Couldn't load ClickUp time: ${reasonOf(err)}` });
+    });
     return () => {
       cancelled = true;
     };
-  }, [client, isConnected, syncCounter, dispatch]);
+    // Keyed on tokens only, so a refreshed workspace list doesn't trigger another load.
+  }, [accounts?.map((a) => a.token).join(","), isConnected, syncCounter, dispatch]);
 }
 
 // Restore a running timer that survived a quit/crash. Elapsed is derived

@@ -142,7 +142,7 @@ export function ClickUpDialog({
       setTask(await clickupClient.getTask(parsed));
       setLookup({ busy: false, error: null });
     } catch {
-      setLookup({ busy: false, error: "Task not found in your ClickUp workspace" });
+      setLookup({ busy: false, error: "Task not found in your connected ClickUp accounts" });
     }
   };
 
@@ -250,10 +250,10 @@ export function ClickUpCard({ entry, task, minutes, isToday }: ClickUpCardProps)
       const ids = (state.clickupEntries ?? [])
         .filter((e) => e.taskId === task.id && entryDate(e) === entry.date)
         .filter((e) => state.clickup && isAccounted(e, state.clickup.sync))
-        .filter((e) => !e.id.startsWith("local-"))
-        .map((e) => e.id);
-      if (clickupClient) await Promise.all(ids.map((id) => clickupClient.deleteTimeEntry(id)));
-      dispatch({ type: "REMOVE_CLICKUP_ENTRIES", payload: ids });
+        .filter((e) => !e.id.startsWith("local-"));
+      if (clickupClient)
+        await Promise.all(ids.map((e) => clickupClient.deleteTimeEntry(e.teamId, e.id)));
+      dispatch({ type: "REMOVE_CLICKUP_ENTRIES", payload: ids.map((e) => e.id) });
 
       const description = withoutClickupLine(entry.description, task.id);
       const rest = entry.minutes - minutes;
@@ -414,7 +414,7 @@ export function ClickUpBanner() {
   if (!showRunning && !pending) return null;
 
   const runningTask = clickupRunning
-    ? { id: clickupRunning.taskId, name: clickupRunning.taskName }
+    ? { id: clickupRunning.taskId, name: clickupRunning.taskName, teamId: clickupRunning.teamId }
     : null;
 
   return (
