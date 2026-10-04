@@ -6,6 +6,7 @@ import { Modal } from "./Modal";
 import { usedTaskIds } from "./entry-edit";
 import { useTimer } from "../hooks/useTimer";
 import { ClickUpDialog, ClickUpLogo, useEnsureClickUpLine } from "./ClickUp";
+import { isClickupOnly } from "../api/clickup";
 
 export function Fab() {
   const { state, dispatch, clickupClient } = useApp();
@@ -24,7 +25,17 @@ export function Fab() {
   // Tasks already tracked today for the selected project — hidden so the FAB
   // can't create a duplicate (project, task, date) entry.
   const usedTasks = useMemo(
-    () => (projectId ? usedTaskIds(state.entries, "", projectId, today) : new Set<string>()),
+    () =>
+      projectId
+        ? usedTaskIds(
+            // A ClickUp-only entry may have no visible card — picking its task
+            // starts plain tracking on it (handleCreate reuses the entry).
+            state.entries.filter((e) => !isClickupOnly(e)),
+            "",
+            projectId,
+            today
+          )
+        : new Set<string>(),
     [projectId, state.entries, today]
   );
 

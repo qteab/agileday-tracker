@@ -200,11 +200,17 @@ export function ProjectCardList() {
                   ),
                 }));
                 const cuMinutes = splits.reduce((sum, sp) => sum + sp.minutes, 0);
-                // Hide the project card on past days when the ClickUp cards hold
-                // everything. Today it stays, so plain time can still be tracked
-                // on this project + task (+ won't offer a task already used today).
+                const ownRunning =
+                  isToday &&
+                  timer.isRunning &&
+                  !timer.clickupTask &&
+                  timer.projectId === entry.projectId &&
+                  (timer.taskId ?? null) === (entry.taskId ?? null);
+                // Hide the project card when the ClickUp cards hold everything.
+                // Plain tracking can still start on it from + or "Start today"
+                // (see isClickupOnly), and the card shows again while it runs.
                 const showOwn =
-                  isToday ||
+                  ownRunning ||
                   entry.minutes > cuMinutes ||
                   nonClickupLines(entry.description).length > 0;
                 return [

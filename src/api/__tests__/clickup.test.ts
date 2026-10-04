@@ -3,6 +3,7 @@ import {
   accountedMinutes,
   clickupTasksIn,
   createClickUpClient,
+  isClickupOnly,
   markSynced,
   migrateStored,
   nonClickupLines,
@@ -43,6 +44,12 @@ describe("description lines", () => {
     expect(withClickupLine(once, task)).toBe(once);
     expect(clickupTasksIn(once)).toEqual([task]);
     expect(nonClickupLines(once)).toEqual(["standup"]);
+  });
+
+  it("detects entries holding only ClickUp lines", () => {
+    expect(isClickupOnly({ description: withClickupLine("", task) })).toBe(true);
+    expect(isClickupOnly({ description: withClickupLine("- standup", task) })).toBe(false);
+    expect(isClickupOnly({ description: "" })).toBe(false);
   });
 
   it("removes a task's line", () => {

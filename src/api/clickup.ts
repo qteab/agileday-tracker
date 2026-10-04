@@ -77,6 +77,17 @@ export function nonClickupLines(description: string): string[] {
   return splitDescriptions(description).filter((l) => !parseClickupLine(l));
 }
 
+/**
+ * True when an entry holds only ClickUp lines. Its project card is hidden when
+ * the ClickUp cards cover all its time, so pickers and "Start today" must still
+ * let plain tracking start on it.
+ */
+export function isClickupOnly(entry: { description: string }): boolean {
+  return (
+    clickupTasksIn(entry.description).length > 0 && nonClickupLines(entry.description).length === 0
+  );
+}
+
 export function withClickupLine(description: string, task: ClickUpTask): string {
   if (clickupTasksIn(description).some((t) => t.id === task.id)) return description;
   return joinDescriptions([...splitDescriptions(description), clickupLine(task)]);

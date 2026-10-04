@@ -14,7 +14,7 @@ import {
 } from "./entry-edit";
 import type { ProjectType, TimeEntry } from "../api/types";
 import { splitDescriptions, joinDescriptions } from "../utils/descriptions";
-import { nonClickupLines, parseClickupLine } from "../api/clickup";
+import { isClickupOnly, nonClickupLines, parseClickupLine } from "../api/clickup";
 
 export { splitDescriptions, joinDescriptions };
 
@@ -495,36 +495,44 @@ export function ProjectCard({
   // so it never shares a spot with the timer button.
   const expandInHeader = collapsed && isSubmitted;
   const canQuickOpen = !isToday && !!entry.taskId;
-  const alreadyTrackedToday = entry.taskId
-    ? usedTaskIds(state.entries, "", entry.projectId, todayStr).has(entry.taskId)
-    : false;
+  const todayEntry = entry.taskId
+    ? state.entries.find(
+        (e) => e.projectId === entry.projectId && e.taskId === entry.taskId && e.date === todayStr
+      )
+    : undefined;
+  // A ClickUp-only entry today may have no visible card to press play on, so
+  // "Start today" resumes it instead of being blocked.
+  const alreadyTrackedToday = !!todayEntry && !isClickupOnly(todayEntry);
 
   const handleQuickOpen = useCallback(() => {
     if (!entry.taskId || alreadyTrackedToday || !state.employee) return;
     const proj = state.projects.find((p) => p.id === entry.projectId);
     const openingId = state.projectOpeningMap[entry.projectId];
-    dispatch({
-      type: "ADD_ENTRY",
-      payload: {
-        id: `local-${crypto.randomUUID()}`,
-        description: "",
-        projectId: entry.projectId,
-        projectName: proj?.name ?? entry.projectName,
-        openingId,
-        taskId: entry.taskId,
-        date: todayStr,
-        startTime: new Date().toISOString(),
-        minutes: 0,
-        status: "SAVED",
-        syncStatus: "synced",
-      },
-    });
+    if (!todayEntry) {
+      dispatch({
+        type: "ADD_ENTRY",
+        payload: {
+          id: `local-${crypto.randomUUID()}`,
+          description: "",
+          projectId: entry.projectId,
+          projectName: proj?.name ?? entry.projectName,
+          openingId,
+          taskId: entry.taskId,
+          date: todayStr,
+          startTime: new Date().toISOString(),
+          minutes: 0,
+          status: "SAVED",
+          syncStatus: "synced",
+        },
+      });
+    }
     void startForCard(entry.projectId, entry.taskId);
   }, [
     entry.taskId,
     entry.projectId,
     entry.projectName,
     alreadyTrackedToday,
+    todayEntry,
     state.employee,
     state.projects,
     state.projectOpeningMap,
