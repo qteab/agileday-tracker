@@ -133,6 +133,12 @@ export function Fab() {
   return (
     <>
       {menuOpen && (
+        <div
+          className="fixed inset-0 z-20 bg-black/20 backdrop-blur-[2px]"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
+      {menuOpen && (
         <div className="absolute right-4 bottom-[80px] flex flex-col items-end gap-2 z-30">
           <button
             className={menuButton}
