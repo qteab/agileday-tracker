@@ -49,7 +49,7 @@ export function useTimer() {
     const date = `${startLocal.getFullYear()}-${String(startLocal.getMonth() + 1).padStart(2, "0")}-${String(startLocal.getDate()).padStart(2, "0")}`;
 
     // Reset timer immediately so user can start a new one
-    dispatch({ type: "RESET_TIMER" });
+    dispatch({ type: "RESET_TIMER", stopped: true });
 
     // ClickUp logging runs in the background: starting the next timer waits on
     // stop(), and must never hang on a slow or rate-limited ClickUp.
@@ -89,6 +89,14 @@ export function useTimer() {
 
   const continueLastTask = useCallback(() => {
     if (timer.isRunning) return;
+    if (state.lastTimer?.projectId && state.lastTimer.taskId) {
+      dispatch({
+        type: "SET_TIMER",
+        payload: { ...state.lastTimer, isRunning: true, startTime: new Date().toISOString() },
+      });
+      return;
+    }
+    // Nothing stopped this session (e.g. right after launch): resume the newest entry.
     const latest = state.entries.reduce<(typeof state.entries)[number] | null>(
       (best, e) => (best === null || e.startTime > best.startTime ? e : best),
       null
@@ -104,7 +112,7 @@ export function useTimer() {
         startTime: new Date().toISOString(),
       },
     });
-  }, [dispatch, state.entries, timer.isRunning]);
+  }, [dispatch, state.entries, state.lastTimer, timer.isRunning]);
 
   return {
     isRunning: timer.isRunning,
