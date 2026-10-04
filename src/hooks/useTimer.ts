@@ -106,8 +106,27 @@ export function useTimer() {
     });
   }, [dispatch, state.entries, timer.isRunning]);
 
-  // Tray menu Continue/Stop buttons emit these events; keep refs so we register
-  // the listeners only once but always invoke the latest closure.
+  return {
+    isRunning: timer.isRunning,
+    projectId: timer.projectId,
+    taskId: timer.taskId,
+    clickupTask: timer.clickupTask ?? null,
+    elapsed,
+    startForCard,
+    stop,
+    continueLastTask,
+  };
+}
+
+/**
+ * Wire the tray Stop/Continue events to the timer. Call ONCE (AuthenticatedApp):
+ * every useTimer() caller that registered these got its own listener, so one
+ * tray click ran stop() once per mounted ProjectCard and created N entries.
+ */
+export function useTrayTimerListeners() {
+  const { stop, continueLastTask } = useTimer();
+  const stopRef = useRef(stop);
+  stopRef.current = stop;
   const continueLastRef = useRef(continueLastTask);
   continueLastRef.current = continueLastTask;
 
@@ -123,16 +142,6 @@ export function useTimer() {
       unlistenContinue.then((fn) => fn()).catch(() => {});
     };
   }, []);
-
-  return {
-    isRunning: timer.isRunning,
-    projectId: timer.projectId,
-    taskId: timer.taskId,
-    clickupTask: timer.clickupTask ?? null,
-    elapsed,
-    startForCard,
-    stop,
-  };
 }
 
 export function formatTime(totalSeconds: number): string {

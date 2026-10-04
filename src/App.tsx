@@ -16,6 +16,7 @@ import { Fab } from "./components/Fab";
 import { InactivityBanner } from "./components/InactivityBanner";
 import { ClickUpBanner } from "./components/ClickUp";
 import { useApp } from "./store/context";
+import { useTrayTimerListeners } from "./hooks/useTimer";
 
 export function App() {
   const { isConnected, isAuthLoading, onLogin } = useApp();
@@ -37,6 +38,7 @@ export function App() {
 
 function AuthenticatedApp() {
   const { state, dispatch } = useApp();
+  useTrayTimerListeners();
   const [activeTab, setActiveTab] = useState<"list" | "allocation">("list");
   const [showSettings, setShowSettings] = useState(false);
   const [settingsPage, setSettingsPage] = useState<SettingsPage | null>(null);
