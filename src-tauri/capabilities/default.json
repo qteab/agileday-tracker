@@ -19,7 +19,8 @@
     {
       "identifier": "http:default",
       "allow": [
-        { "url": "https://*.agileday.io/**" }
+        { "url": "https://*.agileday.io/**" },
+        { "url": "https://api.clickup.com/**" }
       ]
     }
   ]
