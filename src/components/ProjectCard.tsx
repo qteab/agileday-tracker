@@ -101,7 +101,7 @@ interface ProjectCardProps {
   clickupMinutes?: number;
 }
 
-type EditMode = "none" | "time" | "project" | "task" | "delete";
+type EditMode = "none" | "time" | "project" | "task" | "delete" | "discard";
 
 export function ProjectCard({
   entry,
@@ -109,7 +109,7 @@ export function ProjectCard({
   autoCollapsed = false,
   clickupMinutes,
 }: ProjectCardProps) {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, resync } = useApp();
   const api = useApi();
   const {
     isRunning,
@@ -451,6 +451,55 @@ export function ProjectCard({
   }, [dispatch, entry.id]);
 
   const closeDeleteModal = useCallback(() => setEditMode("none"), []);
+
+  /** Re-send a failed save. PATCH by id when AgileDay has the entry, so a
+   *  failed project/task change can't turn into a second entry. */
+  const retrySave = useCallback(async () => {
+    setActionError(null);
+    if (isLocalOnlyEntry(entry)) {
+      await persistViaCreate({});
+      return;
+    }
+    dispatch({
+      type: "UPDATE_ENTRY",
+      payload: { id: entry.id, updates: { syncStatus: "pending" } },
+    });
+    try {
+      const saved = await api.updateTimeEntry(state.employee!.id, entry.id, {
+        projectId: entry.projectId,
+        openingId: entry.openingId,
+        taskId: entry.taskId,
+        minutes: entry.minutes,
+        description: entry.description,
+      });
+      dispatch({
+        type: "UPDATE_ENTRY",
+        payload: {
+          id: entry.id,
+          updates: {
+            description: saved.description,
+            minutes: saved.minutes,
+            status: saved.status,
+            syncStatus: "synced",
+          },
+        },
+      });
+    } catch (err) {
+      dispatch({
+        type: "UPDATE_ENTRY",
+        payload: { id: entry.id, updates: { syncStatus: "unsaved" } },
+      });
+      setActionError(err instanceof Error ? err.message : "Failed to save entry");
+    }
+  }, [api, dispatch, entry, persistViaCreate, state.employee]);
+
+  /** Drop the unsaved local version; the next sync shows what AgileDay has. */
+  const confirmDiscard = useCallback(() => {
+    setEditMode("none");
+    setActionError(null);
+    dispatch({ type: "DELETE_ENTRY", payload: entry.id });
+    if (!isLocalOnlyEntry(entry)) resync();
+  }, [dispatch, entry, resync]);
 
   /** Delete the entry (after the confirmation modal). */
   const confirmDelete = useCallback(async () => {
@@ -858,8 +907,17 @@ export function ProjectCard({
 
         {/* Sync status indicators */}
         {entry.syncStatus === "unsaved" && (
-          <div className="px-4 pb-2">
-            <span className="text-xs text-danger font-medium">Unsaved</span>
+          <div className="flex items-center gap-3 px-4 pb-2 text-xs font-medium">
+            <span className="text-danger">Unsaved</span>
+            <button onClick={() => void retrySave()} className="text-primary hover:underline">
+              Retry
+            </button>
+            <button
+              onClick={() => setEditMode("discard")}
+              className="text-text-muted hover:underline"
+            >
+              Discard
+            </button>
           </div>
         )}
         {entry.syncStatus === "pending" && (
@@ -1019,6 +1077,21 @@ export function ProjectCard({
               autoFocus: true,
               onClick: () => void confirmDelete(),
             },
+          ]}
+        />
+      )}
+      {editMode === "discard" && (
+        <Modal
+          onClose={closeDeleteModal}
+          title="Discard unsaved changes?"
+          subtitle={`${entry.projectName ?? "This entry"} · ${displayTime} was not saved to AgileDay. ${
+            isLocalOnlyEntry(entry)
+              ? "Discarding removes it."
+              : "Discarding brings back the version AgileDay has."
+          }`}
+          actions={[
+            { label: "Cancel", variant: "secondary", onClick: closeDeleteModal },
+            { label: "Discard", variant: "danger", autoFocus: true, onClick: confirmDiscard },
           ]}
         />
       )}
