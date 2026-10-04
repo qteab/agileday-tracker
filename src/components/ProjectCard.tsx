@@ -12,11 +12,38 @@ import {
   isLocalOnlyEntry,
   usedTaskIds,
 } from "./entry-edit";
-import type { TimeEntry } from "../api/types";
+import type { ProjectType, TimeEntry } from "../api/types";
 import { splitDescriptions, joinDescriptions } from "../utils/descriptions";
 import { nonClickupLines, parseClickupLine } from "../api/clickup";
 
 export { splitDescriptions, joinDescriptions };
+
+/** Status dot: green for active/external, purple for internal, intense for absence/idle. */
+export function projectDotColor(projectType: ProjectType | undefined): string {
+  if (projectType === "ABSENCE" || projectType === "IDLE") return "bg-primary-light";
+  if (projectType === "INTERNAL") return "bg-primary";
+  return "bg-[#18a058]";
+}
+
+/** Tag icon shown before a task name. */
+export function TaskIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-text-subtle shrink-0"
+    >
+      <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
+      <circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
 
 /** POST-or-PATCH the entry with overridden fields (description and/or minutes). */
 export function usePersistEntry(entry: TimeEntry) {
@@ -516,13 +543,7 @@ export function ProjectCard({
         ? "pending"
         : null;
 
-  // Dot color: green for active/external, purple for internal, intense for absence/idle
-  const dotColor = (() => {
-    const pt = entry.projectType ?? project?.projectType;
-    if (pt === "ABSENCE" || pt === "IDLE") return "bg-primary-light";
-    if (pt === "INTERNAL") return "bg-primary";
-    return "bg-[#18a058]"; // green for external/active
-  })();
+  const dotColor = projectDotColor(entry.projectType ?? project?.projectType);
 
   return (
     <div
@@ -769,20 +790,7 @@ export function ProjectCard({
                   : "cursor-default"
               }`}
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="text-text-subtle shrink-0"
-              >
-                <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
-                <circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none" />
-              </svg>
+              <TaskIcon />
               <span className="truncate">{taskName ?? "Select task"}</span>
             </button>
           )}

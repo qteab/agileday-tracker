@@ -226,7 +226,6 @@ export function ProjectCardList() {
                       task={task}
                       minutes={minutes}
                       isToday={isToday}
-                      autoCollapsed={autoCollapsed}
                     />
                   )),
                 ];
