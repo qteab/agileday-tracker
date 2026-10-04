@@ -2,7 +2,12 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useApp, useApi } from "../store/context";
 import type { TimerState } from "../store/reducer";
-import { sessionMinutes, withClickupLine, type ClickUpTask } from "../api/clickup";
+import {
+  ClickUpRateLimitError,
+  sessionMinutes,
+  withClickupLine,
+  type ClickUpTask,
+} from "../api/clickup";
 
 export function useTimer() {
   const { state, dispatch } = useApp();
@@ -46,7 +51,9 @@ export function useTimer() {
     // Reset timer immediately so user can start a new one
     dispatch({ type: "RESET_TIMER" });
 
-    const clickupLogged = clickupTask ? logClickUp(clickupTask, startMs, minutes) : null;
+    // ClickUp logging runs in the background: starting the next timer waits on
+    // stop(), and must never hang on a slow or rate-limited ClickUp.
+    if (clickupTask) void logClickUp(clickupTask, startMs, minutes);
     await addTime({
       projectId: projectId!,
       taskId,
@@ -56,7 +63,6 @@ export function useTimer() {
       endTime,
       clickupTasks: clickupTask ? [clickupTask] : [],
     });
-    await clickupLogged;
   }, [timer, employee, state.inactivity.pendingReturn, dispatch, addTime, logClickUp]);
 
   // Use a ref so startForCard always invokes the latest stop closure
@@ -286,32 +292,47 @@ export function useLogClickUp() {
         type: "ADD_CLICKUP_ENTRY",
         payload: { id: localId, teamId: task.teamId ?? "", ...shown },
       });
-      try {
-        // Tasks started from a `CU-` line don't know their workspace yet.
-        const teamId =
-          task.teamId ?? (await clickupClient.getTask({ id: task.id, custom: false })).teamId!;
-        let id = task.timerId;
-        if (id) {
-          // Only stop ClickUp's timer if it is still this one — it may have been
-          // stopped (or another started) in ClickUp meanwhile.
-          const running = await clickupClient.getRunning(teamId);
-          if (running?.id === id) await clickupClient.stopRunning(teamId);
-          await clickupClient.updateTimeEntry(teamId, id, start, duration);
-          dispatch({ type: "SET_CLICKUP_RUNNING", payload: null });
-        } else {
-          id = (await clickupClient.createTimeEntry(teamId, task.id, start, duration)).id;
+      const attempt = async (): Promise<void> => {
+        try {
+          // Tasks started from a `CU-` line don't know their workspace yet.
+          const teamId =
+            task.teamId ?? (await clickupClient.getTask({ id: task.id, custom: false })).teamId!;
+          let id = task.timerId;
+          if (id) {
+            // Only stop ClickUp's timer if it is still this one — it may have been
+            // stopped (or another started) in ClickUp meanwhile. Safe to retry.
+            const running = await clickupClient.getRunning(teamId);
+            if (running?.id === id) await clickupClient.stopRunning(teamId);
+            await clickupClient.updateTimeEntry(teamId, id, start, duration);
+            dispatch({ type: "SET_CLICKUP_RUNNING", payload: null });
+          } else {
+            id = (await clickupClient.createTimeEntry(teamId, task.id, start, duration)).id;
+          }
+          dispatch({ type: "MARK_CLICKUP_SYNCED", payload: [{ id, start }] });
+          dispatch({ type: "REMOVE_CLICKUP_ENTRIES", payload: [localId] });
+          dispatch({ type: "ADD_CLICKUP_ENTRY", payload: { id, teamId, ...shown } });
+        } catch (err) {
+          if (err instanceof ClickUpRateLimitError) {
+            // Keep the card's minutes and retry once ClickUp allows calls again.
+            // ponytail: in-memory retry — quitting before it fires leaves this
+            // session out of ClickUp (AgileDay already has it).
+            const wait = Math.max(0, err.retryAt - Date.now());
+            dispatch({
+              type: "SET_ERROR",
+              payload: `ClickUp is rate limiting requests. Saved to AgileDay; logging in ClickUp in ${Math.ceil(wait / 1000)}s.`,
+            });
+            setTimeout(() => void attempt(), wait);
+            return;
+          }
+          dispatch({ type: "REMOVE_CLICKUP_ENTRIES", payload: [localId] });
+          const reason = err instanceof Error ? err.message : "Unknown error";
+          dispatch({
+            type: "SET_ERROR",
+            payload: `Saved to AgileDay, but logging time in ClickUp failed: ${reason}`,
+          });
         }
-        dispatch({ type: "MARK_CLICKUP_SYNCED", payload: [{ id, start }] });
-        dispatch({ type: "REMOVE_CLICKUP_ENTRIES", payload: [localId] });
-        dispatch({ type: "ADD_CLICKUP_ENTRY", payload: { id, teamId, ...shown } });
-      } catch (err) {
-        dispatch({ type: "REMOVE_CLICKUP_ENTRIES", payload: [localId] });
-        const reason = err instanceof Error ? err.message : "Unknown error";
-        dispatch({
-          type: "SET_ERROR",
-          payload: `Saved to AgileDay, but logging time in ClickUp failed: ${reason}`,
-        });
-      }
+      };
+      await attempt();
     },
     [dispatch, clickupClient]
   );

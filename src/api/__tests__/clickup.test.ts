@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import {
+  ClickUpRateLimitError,
   accountedMinutes,
   clickupTasksIn,
   createClickUpClient,
@@ -8,6 +9,7 @@ import {
   migrateStored,
   nonClickupLines,
   parseTaskRef,
+  rateLimitRetryAt,
   startOfToday,
   unsyncedGroups,
   upsertAccount,
@@ -179,5 +181,57 @@ describe("ClickUp client", () => {
     const client = createClickUpClient(accounts, fetchMock as typeof fetch);
     await expect(client.getRunning("1")).rejects.toThrow("ClickUp 401");
     await expect(client.getRunning("999")).rejects.toThrow("No connected ClickUp account");
+  });
+});
+
+describe("rate limiting", () => {
+  const limited = (resetSec: number) =>
+    new Response("rate limited", {
+      status: 429,
+      headers: { "X-RateLimit-Reset": String(resetSec) },
+    });
+
+  it("reads the retry time from X-RateLimit-Reset, clamped", () => {
+    const now = 1_000_000;
+    expect(rateLimitRetryAt(limited(now / 1000 + 30), now)).toBe(now + 30_000);
+    expect(rateLimitRetryAt(limited(now / 1000 - 5), now)).toBe(now + 1000);
+    expect(rateLimitRetryAt(new Response("", { status: 429 }), now)).toBe(now + 60_000);
+  });
+
+  it("pauses the token after a 429 without calling ClickUp again", async () => {
+    const fetchMock = vi.fn(async () => limited(Math.floor(Date.now() / 1000) + 30));
+    const accts = [{ token: "pk_limited", teams: [{ id: "7", name: "QTE" }] }];
+    const client = createClickUpClient(accts, fetchMock as typeof fetch);
+    await expect(client.getRunning("7")).rejects.toBeInstanceOf(ClickUpRateLimitError);
+    // A fresh client for the same token stays quiet too.
+    const again = createClickUpClient(accts, fetchMock as typeof fetch);
+    await expect(again.getTimeEntries("7", 0, 1)).rejects.toBeInstanceOf(ClickUpRateLimitError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("only pauses the limited account", async () => {
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) =>
+      authOf(init) === "pk_busy" ? limited(Math.floor(Date.now() / 1000) + 30) : ok({ data: null })
+    );
+    const client = createClickUpClient(
+      [
+        { token: "pk_busy", teams: [{ id: "8", name: "Busy" }] },
+        { token: "pk_calm", teams: [{ id: "9", name: "Calm" }] },
+      ],
+      fetchMock as unknown as typeof fetch
+    );
+    await expect(client.getRunning("8")).rejects.toBeInstanceOf(ClickUpRateLimitError);
+    expect(await client.getRunning("9")).toBeNull();
+  });
+
+  it("task lookup reports the rate limit instead of 'not found'", async () => {
+    const fetchMock = vi.fn(async () => limited(Math.floor(Date.now() / 1000) + 30));
+    const client = createClickUpClient(
+      [{ token: "pk_lookup", teams: [{ id: "10", name: "QTE" }] }],
+      fetchMock as typeof fetch
+    );
+    await expect(client.getTask({ id: "abc", custom: false })).rejects.toBeInstanceOf(
+      ClickUpRateLimitError
+    );
   });
 });

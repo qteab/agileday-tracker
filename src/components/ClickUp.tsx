@@ -7,6 +7,7 @@ import { TaskPicker } from "./TaskPicker";
 import { Modal } from "./Modal";
 import { isLocalOnlyEntry } from "./entry-edit";
 import {
+  ClickUpRateLimitError,
   clickupTasksIn,
   entryDate,
   isAccounted,
@@ -141,8 +142,15 @@ export function ClickUpDialog({
     try {
       setTask(await clickupClient.getTask(parsed));
       setLookup({ busy: false, error: null });
-    } catch {
-      setLookup({ busy: false, error: "Task not found in your connected ClickUp accounts" });
+    } catch (err) {
+      lastLookup.current = ""; // let the same input be looked up again
+      setLookup({
+        busy: false,
+        error:
+          err instanceof ClickUpRateLimitError
+            ? err.message
+            : "Task not found in your connected ClickUp accounts",
+      });
     }
   };
 

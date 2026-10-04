@@ -294,6 +294,27 @@ function toEntry(r: RawEntry, teamId: string): ClickUpTimeEntry | null {
   };
 }
 
+/** Thrown while ClickUp rate limits a token; `retryAt` (ms) is when it accepts calls again. */
+export class ClickUpRateLimitError extends Error {
+  constructor(public retryAt: number) {
+    super(
+      `ClickUp is rate limiting requests — try again in ${Math.ceil((retryAt - Date.now()) / 1000)}s`
+    );
+  }
+}
+
+/** When a 429 response says calls are allowed again: `X-RateLimit-Reset`
+ * (unix seconds), else a minute; clamped to 1s–2min. */
+export function rateLimitRetryAt(res: Response, now = Date.now()): number {
+  const reset = Number(res.headers.get("X-RateLimit-Reset"));
+  const at = reset > 0 ? reset * 1000 : now + 60_000;
+  return Math.min(Math.max(at, now + 1000), now + 120_000);
+}
+
+// token → when ClickUp accepts calls again. Module-level so every client
+// (they're recreated freely) stays quiet instead of extending the limit.
+const pausedUntil = new Map<string, number>();
+
 /**
  * Workspace-scoped calls take the workspace id and use the token of the account
  * that workspace belongs to.
@@ -303,11 +324,18 @@ export function createClickUpClient(
   fetchOverride?: typeof globalThis.fetch
 ) {
   async function request<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
+    const paused = pausedUntil.get(token);
+    if (paused && paused > Date.now()) throw new ClickUpRateLimitError(paused);
     const doFetch = fetchOverride ?? (await tauriFetch());
     const res = await doFetch(`${API}${path}`, {
       ...init,
       headers: { Authorization: token, "Content-Type": "application/json" },
     });
+    if (res.status === 429) {
+      const retryAt = rateLimitRetryAt(res);
+      pausedUntil.set(token, retryAt);
+      throw new ClickUpRateLimitError(retryAt);
+    }
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       throw new Error(`ClickUp ${res.status}${body ? `: ${body.slice(0, 200)}` : ""}`);
@@ -353,7 +381,8 @@ export function createClickUpClient(
       for (const attempt of attempts) {
         try {
           return task(await attempt());
-        } catch {
+        } catch (err) {
+          if (err instanceof ClickUpRateLimitError) throw err;
           // not visible to this account / workspace — try the next
         }
       }
