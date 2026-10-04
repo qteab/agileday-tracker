@@ -209,15 +209,32 @@ interface ClickUpCardProps {
   /** Minutes this task holds of the entry's total. */
   minutes: number;
   isToday: boolean;
+  /** Start collapsed, per the list's auto-collapse preference. */
+  autoCollapsed?: boolean;
 }
 
+const footerLink =
+  "inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle transition-colors cursor-pointer";
+
 /** One ClickUp task's share of an AgileDay entry, with its own timer. */
-export function ClickUpCard({ entry, task, minutes, isToday }: ClickUpCardProps) {
+export function ClickUpCard({
+  entry,
+  task,
+  minutes,
+  isToday,
+  autoCollapsed = false,
+}: ClickUpCardProps) {
   const { state, dispatch, clickupClient } = useApp();
   const api = useApi();
   const persist = usePersistEntry(entry);
+  const ensureLine = useEnsureClickUpLine();
   const { isRunning, clickupTask, elapsed, startForCard, stop } = useTimer();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Same as project cards: the list preference sets the baseline, toggling
+  // overrides it until the preference changes.
+  const [collapseOverride, setCollapseOverride] = useState<boolean | null>(null);
+  const collapsed = collapseOverride ?? autoCollapsed;
+  useEffect(() => setCollapseOverride(null), [autoCollapsed]);
   const [error, setError] = useState<string | null>(null);
 
   const project = state.projects.find((p) => p.id === entry.projectId);
@@ -310,27 +327,79 @@ export function ClickUpCard({ entry, task, minutes, isToday }: ClickUpCardProps)
             </svg>
           </button>
         )}
-        {isEditable && (
+        {/* Past days: track this ClickUp task again today, on the same
+            project + task. Already tracked today → this just resumes it. */}
+        {!isToday && entry.taskId && (
           <button
-            onClick={() => setConfirmDelete(true)}
-            className="w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-text-subtle hover:text-danger hover:bg-bg-edit transition-colors"
-            aria-label="Delete ClickUp time"
-            title="Delete"
+            onClick={() => {
+              const today = localDate(new Date());
+              ensureLine(entry.projectId, entry.taskId!, today, task);
+              void startForCard(entry.projectId, entry.taskId!, task);
+            }}
+            title="Start today"
+            className="w-[36px] h-[36px] shrink-0 rounded-full flex items-center justify-center transition-all duration-200 active:scale-[0.94] border-2 border-primary text-primary hover:bg-primary hover:text-white"
+            aria-label="Start today"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="6 4 20 12 6 20 6 4" />
+            </svg>
+          </button>
+        )}
+      </div>
+      {/* Footer, same as project cards: collapsed shows "Expand"; expanded
+          shows Delete (left) and "Collapse" (right). Nothing to expand on
+          submitted cards. */}
+      {isEditable && (
+        <div className="flex items-center gap-3 mt-2">
+          {!collapsed && (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className={`${footerLink} hover:text-danger`}
+              aria-label="Delete ClickUp time"
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="shrink-0"
+              >
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                <line x1="10" y1="11" x2="10" y2="17" />
+                <line x1="14" y1="11" x2="14" y2="17" />
+              </svg>
+              <span>Delete</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setCollapseOverride(!collapsed)}
+            className={`ml-auto ${footerLink} hover:text-primary`}
+            aria-label={collapsed ? "Expand entry" : "Collapse entry"}
+            aria-expanded={!collapsed}
           >
             <svg
-              width="15"
-              height="15"
+              width="14"
+              height="14"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
               strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0"
             >
-              <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
+              <polyline points={collapsed ? "6 9 12 15 18 9" : "18 15 12 9 6 15"} />
             </svg>
+            <span>{collapsed ? "Expand" : "Collapse"}</span>
           </button>
-        )}
-      </div>
+        </div>
+      )}
       {error && <p className="mt-2 text-xs text-danger">{error}</p>}
       {confirmDelete && (
         <Modal

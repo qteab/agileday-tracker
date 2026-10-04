@@ -200,15 +200,11 @@ export function ProjectCardList() {
                   ),
                 }));
                 const cuMinutes = splits.reduce((sum, sp) => sum + sp.minutes, 0);
-                const ownRunning =
-                  isToday &&
-                  timer.isRunning &&
-                  !timer.clickupTask &&
-                  timer.projectId === entry.projectId &&
-                  (timer.taskId ?? null) === (entry.taskId ?? null);
-                // Hide the project card when the ClickUp cards hold everything.
+                // Hide the project card on past days when the ClickUp cards hold
+                // everything. Today it stays, so plain time can still be tracked
+                // on this project + task (+ won't offer a task already used today).
                 const showOwn =
-                  ownRunning ||
+                  isToday ||
                   entry.minutes > cuMinutes ||
                   nonClickupLines(entry.description).length > 0;
                 return [
@@ -230,6 +226,7 @@ export function ProjectCardList() {
                       task={task}
                       minutes={minutes}
                       isToday={isToday}
+                      autoCollapsed={autoCollapsed}
                     />
                   )),
                 ];
