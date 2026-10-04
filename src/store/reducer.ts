@@ -51,6 +51,9 @@ export interface AppState {
   allocations: Allocation[];
   allocationsFetchedAt: number | null;
   timer: TimerState;
+  /** What the last stopped timer tracked, so tray Continue resumes it —
+   * including its ClickUp task, which the entries alone can't tell. */
+  lastTimer: Pick<TimerState, "projectId" | "taskId" | "clickupTask"> | null;
   flexConfig: FlexConfig | null;
   vacationConfig: VacationConfig | null;
   /** Entries fetched before the 30-day window, back to the earliest
@@ -88,6 +91,7 @@ export const initialState: AppState = {
     startTime: null,
     clickupTask: null,
   },
+  lastTimer: null,
   flexConfig: null,
   vacationConfig: null,
   flexEntries: null,
@@ -117,7 +121,8 @@ export type AppAction =
   | { type: "UPDATE_ENTRY"; payload: { id: string; updates: Partial<TimeEntry> } }
   | { type: "DELETE_ENTRY"; payload: string }
   | { type: "SET_TIMER"; payload: Partial<TimerState> }
-  | { type: "RESET_TIMER" }
+  /** `stopped`: the session was saved, so remember it for Continue. */
+  | { type: "RESET_TIMER"; stopped?: boolean }
   | { type: "SET_FLEX_CONFIG"; payload: FlexConfig | null }
   | { type: "SET_VACATION_CONFIG"; payload: VacationConfig | null }
   | { type: "SET_FLEX_ENTRIES"; payload: TimeEntry[] | null }
@@ -189,8 +194,17 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     case "SET_TIMER":
       return { ...state, timer: { ...state.timer, ...action.payload } };
-    case "RESET_TIMER":
-      return { ...state, timer: initialState.timer };
+    case "RESET_TIMER": {
+      if (!action.stopped) return { ...state, timer: initialState.timer };
+      const { projectId, taskId, clickupTask } = state.timer;
+      // The adopted ClickUp timer is stopped with this session; never resume it.
+      const task = clickupTask ? { ...clickupTask, timerId: undefined } : null;
+      return {
+        ...state,
+        timer: initialState.timer,
+        lastTimer: { projectId, taskId, clickupTask: task },
+      };
+    }
     case "SET_FLEX_CONFIG":
       return { ...state, flexConfig: action.payload };
     case "SET_VACATION_CONFIG":
