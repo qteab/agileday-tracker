@@ -627,7 +627,10 @@ function ProjectGroupSection({
             <RoundedTotalInput group={group} onChange={onOverride} />
           </>
         ) : (
-          <span className="text-text-muted">{fmtHM(group.totalMinutes)}</span>
+          // totalMinutes counts only unsubmitted entries (what rounding touches); show them all
+          <span className="text-text-muted">
+            {fmtHM(group.entries.reduce((s, e) => s + e.currentMinutes, 0))}
+          </span>
         )}
         {isLocked && (
           <svg
