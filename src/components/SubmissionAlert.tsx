@@ -5,7 +5,6 @@ import type { TimeEntry } from "../api/types";
 interface SubmissionAlertProps {
   entries: TimeEntry[];
   onOpenFinalize: () => void;
-  dismissedWeeks: Set<string>;
 }
 
 const ALERT_CONFIG: Record<AlertLevel, { bg: string; text: string; border: string }> = {
@@ -29,7 +28,7 @@ function buildMessage(weekCount: number, level: AlertLevel): string {
   return subject + suffix;
 }
 
-export function SubmissionAlert({ entries, onOpenFinalize, dismissedWeeks }: SubmissionAlertProps) {
+export function SubmissionAlert({ entries, onOpenFinalize }: SubmissionAlertProps) {
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
 
@@ -39,10 +38,7 @@ export function SubmissionAlert({ entries, onOpenFinalize, dismissedWeeks }: Sub
     return () => clearInterval(interval);
   }, []);
 
-  const unsubmittedWeeks = useMemo(
-    () => getUnsubmittedWeeks(entries, now).filter((w) => !dismissedWeeks.has(w.start)),
-    [entries, now, dismissedWeeks]
-  );
+  const unsubmittedWeeks = useMemo(() => getUnsubmittedWeeks(entries, now), [entries, now]);
   const alertLevel = useMemo(() => getAlertLevel(now), [now]);
 
   // Build a key from the current set of unsubmitted weeks so that

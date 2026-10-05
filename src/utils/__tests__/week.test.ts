@@ -6,6 +6,7 @@ import {
   getLastWeekRange,
   hasUnsubmittedEntries,
   getUnsubmittedWeeks,
+  getTimesheetPeriod,
   getAlertLevel,
   syncedOnly,
 } from "../week";
@@ -187,6 +188,49 @@ describe("getUnsubmittedWeeks", () => {
   it("returns empty for no entries", () => {
     const now = new Date("2026-05-11T09:00:00");
     expect(getUnsubmittedWeeks([], now)).toEqual([]);
+  });
+});
+
+// --- getTimesheetPeriod ---
+
+describe("getTimesheetPeriod", () => {
+  it("covers the whole week when it stays in one month", () => {
+    const p = getTimesheetPeriod("2026-10-07");
+    expect(p).toMatchObject({
+      start: "2026-10-05",
+      end: "2026-10-11",
+      weekStart: "2026-10-05",
+      month: "2026-10-01",
+    });
+  });
+
+  it("splits a week at the month boundary", () => {
+    expect(getTimesheetPeriod("2026-09-29")).toMatchObject({
+      start: "2026-09-28",
+      end: "2026-09-30",
+      weekStart: "2026-09-28",
+      month: "2026-09-01",
+      label: "Sep 28 – 30",
+    });
+    expect(getTimesheetPeriod("2026-10-02")).toMatchObject({
+      start: "2026-10-01",
+      end: "2026-10-04",
+      weekStart: "2026-09-28",
+      month: "2026-10-01",
+      label: "Oct 1 – 4",
+    });
+  });
+});
+
+describe("getUnsubmittedWeeks across a month boundary", () => {
+  it("reports only the unsubmitted half of a split week", () => {
+    const now = new Date("2026-10-05T13:00:00");
+    const entries = [
+      makeEntry({ id: "e1", date: "2026-09-30", status: "SUBMITTED" }),
+      makeEntry({ id: "e2", date: "2026-10-01", status: "SAVED" }),
+    ];
+    const weeks = getUnsubmittedWeeks(entries, now);
+    expect(weeks.map((w) => w.start)).toEqual(["2026-10-01"]);
   });
 });
 

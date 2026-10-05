@@ -21,18 +21,53 @@ export function fmtDate(d: Date): string {
 export function formatWeekLabel(monday: Date): string {
   const friday = new Date(monday);
   friday.setDate(monday.getDate() + 4);
-  const monStr = monday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const friStr =
-    monday.getMonth() === friday.getMonth()
-      ? friday.toLocaleDateString("en-US", { day: "numeric" })
-      : friday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  return `${monStr} – ${friStr}`;
+  return formatRangeLabel(monday, friday);
+}
+
+function formatRangeLabel(from: Date, to: Date): string {
+  const fromStr = from.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const toStr =
+    from.getMonth() === to.getMonth()
+      ? to.toLocaleDateString("en-US", { day: "numeric" })
+      : to.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return `${fromStr} – ${toStr}`;
 }
 
 export interface WeekRange {
   start: string;
   end: string;
   label: string;
+}
+
+export interface TimesheetPeriod extends WeekRange {
+  /** Monday of the week — the AgileDay timecard's `week` */
+  weekStart: string;
+  /** First day of the month — the AgileDay timecard's `month` */
+  month: string;
+}
+
+/**
+ * The timesheet a work date belongs to. AgileDay keeps one timecard per week
+ * per month, so a week crossing a month boundary is two timesheets, each
+ * submitted (and frozen) on its own.
+ */
+export function getTimesheetPeriod(date: string): TimesheetPeriod {
+  const d = new Date(date + "T12:00:00");
+  const monday = getWeekStart(d);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const monthStart = new Date(d.getFullYear(), d.getMonth(), 1);
+  const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  const start = monday < monthStart ? monthStart : monday;
+  const end = sunday > monthEnd ? monthEnd : sunday;
+  const isSplit = start !== monday || end !== sunday;
+  return {
+    start: fmtDate(start),
+    end: fmtDate(end),
+    label: isSplit ? formatRangeLabel(start, end) : formatWeekLabel(monday),
+    weekStart: fmtDate(monday),
+    month: fmtDate(monthStart),
+  };
 }
 
 /** Filter out unsaved entries — they don't exist in AgileDay */
@@ -54,28 +89,18 @@ export function getLastWeekRange(now: Date): WeekRange {
   };
 }
 
-/** Get all week ranges from entries, excluding the current week */
-export function getPastWeekRanges(entries: TimeEntry[], now: Date): WeekRange[] {
+/** Get all timesheet periods from entries, excluding the current week */
+export function getPastWeekRanges(entries: TimeEntry[], now: Date): TimesheetPeriod[] {
   const currentWeekStart = fmtDate(getWeekStart(now));
-  const weekMap = new Map<string, WeekRange>();
+  const periods = new Map<string, TimesheetPeriod>();
 
   for (const entry of entries) {
-    const d = new Date(entry.date + "T12:00:00");
-    const monday = getWeekStart(d);
-    const key = fmtDate(monday);
-    if (key === currentWeekStart) continue; // exclude current week
-    if (!weekMap.has(key)) {
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      weekMap.set(key, {
-        start: key,
-        end: fmtDate(sunday),
-        label: formatWeekLabel(monday),
-      });
-    }
+    const period = getTimesheetPeriod(entry.date);
+    if (period.weekStart === currentWeekStart) continue; // exclude current week
+    periods.set(period.start, period);
   }
 
-  return [...weekMap.values()].sort((a, b) => b.start.localeCompare(a.start));
+  return [...periods.values()].sort((a, b) => b.start.localeCompare(a.start));
 }
 
 /** Check if any synced SAVED entries exist in the given week range */
@@ -90,8 +115,8 @@ export function hasUnsubmittedEntries(entries: TimeEntry[], range: WeekRange): b
   );
 }
 
-/** Get all past weeks that have unsubmitted entries */
-export function getUnsubmittedWeeks(entries: TimeEntry[], now: Date): WeekRange[] {
+/** Get all past timesheet periods that have unsubmitted entries */
+export function getUnsubmittedWeeks(entries: TimeEntry[], now: Date): TimesheetPeriod[] {
   const pastWeeks = getPastWeekRanges(entries, now);
   return pastWeeks.filter((range) => hasUnsubmittedEntries(entries, range));
 }

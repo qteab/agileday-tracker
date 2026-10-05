@@ -44,7 +44,6 @@ function AuthenticatedApp() {
   const [settingsPage, setSettingsPage] = useState<SettingsPage | null>(null);
   const [showFinalize, setShowFinalize] = useState(false);
   const [showFlex, setShowFlex] = useState(false);
-  const [dismissedWeeks, setDismissedWeeks] = useState<Set<string>>(new Set());
 
   function openSettings(page: SettingsPage | null = null) {
     setShowFinalize(false);
@@ -163,7 +162,6 @@ function AuthenticatedApp() {
       {/* Submission deadline alert */}
       <SubmissionAlert
         entries={state.entries}
-        dismissedWeeks={dismissedWeeks}
         onOpenFinalize={() => {
           closeSettings();
           setShowFinalize(true);
@@ -202,12 +200,7 @@ function AuthenticatedApp() {
       ) : showFlex ? (
         <FlexView onBack={() => setShowFlex(false)} onOpenSettings={(page) => openSettings(page)} />
       ) : showFinalize ? (
-        <FinalizeView
-          onBack={() => setShowFinalize(false)}
-          onMarkSubmitted={(weekStart) =>
-            setDismissedWeeks((prev) => new Set([...prev, weekStart]))
-          }
-        />
+        <FinalizeView onBack={() => setShowFinalize(false)} />
       ) : (
         <>
           {/* Tab switcher */}
