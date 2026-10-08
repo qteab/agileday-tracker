@@ -26,6 +26,7 @@ import {
 } from "../api/auth-manager";
 import type { Project, TimeEntry } from "../api/types";
 import { loadTimerState, saveTimerState, clearTimerState } from "./timer-store";
+import { loadUnsavedEntries, saveUnsavedEntries } from "./unsaved-store";
 import { loadFlexConfig } from "./flex-store";
 import { loadVacationConfig } from "./vacation-store";
 import { loadDisplayPrefs } from "./display-store";
@@ -65,6 +66,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [syncCounter, setSyncCounter] = useState(0);
   const [timerLoaded, setTimerLoaded] = useState(false);
+  const [unsavedLoaded, setUnsavedLoaded] = useState(false);
   const authStateRef = useRef<AuthState | null>(null);
 
   authStateRef.current = authState;
@@ -100,7 +102,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await clearAuth().catch(() => {});
     setAuthState(null);
     setIsConnected(false);
-    dispatch({ type: "SET_ENTRIES", payload: [] });
+    dispatch({ type: "CLEAR_ENTRIES" });
     dispatch({ type: "SET_PROJECTS", payload: [] });
     dispatch({ type: "CLEAR_ALLOCATIONS" });
     dispatch({ type: "SET_ERROR", payload: null });
@@ -115,6 +117,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useWindowDockSnap();
   useTimerRestore(dispatch, setTimerLoaded);
   useTimerPersistence(state.timer, timerLoaded);
+  useUnsavedRestore(dispatch, setUnsavedLoaded);
+  useUnsavedPersistence(state.entries, unsavedLoaded);
   useTrayDisplayPush(state);
   useAuthBootstrap(setAuthState, setIsConnected, setIsAuthLoading);
   useBackgroundTokenRefresh(isConnected, authState?.refreshToken, authStateRef, setAuthState);
@@ -490,6 +494,28 @@ function useTimerPersistence(timer: AppState["timer"], timerLoaded: boolean) {
       clearTimerState().catch(() => {});
     }
   }, [timerLoaded, timer]);
+}
+
+// Bring back entries whose save failed in a previous run.
+function useUnsavedRestore(
+  dispatch: React.Dispatch<AppAction>,
+  setLoaded: (loaded: boolean) => void
+) {
+  useEffect(() => {
+    loadUnsavedEntries()
+      .then((saved) => dispatch({ type: "RESTORE_UNSAVED", payload: saved }))
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, [dispatch, setLoaded]);
+}
+
+// Mirror unsaved entries to disk. Waits for the restore so the initial empty
+// list can't overwrite what a previous run saved.
+function useUnsavedPersistence(entries: TimeEntry[], unsavedLoaded: boolean) {
+  useEffect(() => {
+    if (!unsavedLoaded) return;
+    saveUnsavedEntries(entries.filter((e) => e.syncStatus === "unsaved")).catch(() => {});
+  }, [unsavedLoaded, entries]);
 }
 
 // Tray contents have to keep updating while the Timer view is unmounted

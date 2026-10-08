@@ -2,6 +2,7 @@ import type { Allocation, Employee, Holiday, Project, Task, TimeEntry } from "..
 import type { FlexConfig } from "./flex-store";
 import type { VacationConfig } from "./vacation-store";
 import { DEFAULT_DISPLAY_PREFS, type DisplayPrefs } from "./display-store";
+import { mergeUnsaved } from "./unsaved-store";
 import {
   markSynced,
   upsertAccount,
@@ -114,7 +115,12 @@ export type AppAction =
   | { type: "MERGE_TASK_BILLABLE"; payload: Record<string, boolean> }
   | { type: "MERGE_PROJECT_BILLABLE"; payload: Record<string, boolean> }
   | { type: "MERGE_TASK_NAMES"; payload: Record<string, string> }
+  /** Replace entries with a fresh load; entries whose save failed are kept. */
   | { type: "SET_ENTRIES"; payload: TimeEntry[] }
+  /** Bring back unsaved entries persisted by a previous run. */
+  | { type: "RESTORE_UNSAVED"; payload: TimeEntry[] }
+  /** Drop every entry, unsaved ones included (logout). */
+  | { type: "CLEAR_ENTRIES" }
   | { type: "SET_ALLOCATIONS"; payload: { allocations: Allocation[]; fetchedAt: number } }
   | { type: "CLEAR_ALLOCATIONS" }
   | { type: "ADD_ENTRY"; payload: TimeEntry }
@@ -169,7 +175,17 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         taskNamesById: { ...state.taskNamesById, ...action.payload },
       };
     case "SET_ENTRIES":
-      return { ...state, entries: action.payload };
+      return {
+        ...state,
+        entries: mergeUnsaved(
+          action.payload,
+          state.entries.filter((e) => e.syncStatus === "unsaved")
+        ),
+      };
+    case "RESTORE_UNSAVED":
+      return { ...state, entries: mergeUnsaved(state.entries, action.payload) };
+    case "CLEAR_ENTRIES":
+      return { ...state, entries: [] };
     case "SET_ALLOCATIONS":
       return {
         ...state,

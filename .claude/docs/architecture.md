@@ -85,6 +85,7 @@ interface AppState {
 
 **Persistence** (via Tauri store plugin):
 - `timer-store.ts` — running timer survives app quit/crash
+- `unsaved-store.ts` — entries whose save failed (`syncStatus: "unsaved"`) survive sync and restart; `SET_ENTRIES` keeps them over the fetched copy until the card's Retry succeeds or Discard drops them
 - `flex-store.ts` — flex config (startDate + initialHours)
 - Auth tokens stored in Tauri store (see auth section)
 
