@@ -25,6 +25,26 @@ export function projectDotColor(projectType: ProjectType | undefined): string {
   return "bg-[#18a058]";
 }
 
+/** Padlock shown with the "Submitted in AgileDay" label. */
+export function LockIcon() {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="shrink-0"
+    >
+      <rect x="4" y="11" width="16" height="11" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
+  );
+}
+
 /** Tag icon shown before a task name. */
 export function TaskIcon() {
   return (
@@ -561,19 +581,12 @@ export function ProjectCard({
           folded away when collapsed, so mirror it in the bottom-right corner. */}
       {isSubmitted && (
         <span
-          className={`absolute bottom-[8px] right-3 flex items-center pointer-events-none gap-0.5 text-[10px] text-text-muted/50 ${motion} ${
+          className={`absolute bottom-[10px] right-3 flex items-center pointer-events-none gap-1 text-[10px] leading-none text-text-muted/50 ${motion} ${
             collapsed ? "opacity-100" : "opacity-0"
           }`}
           aria-hidden={!collapsed}
         >
-          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2.5}
-              d="M12 15v2m0 0v2m0-2h2m-2 0H10m-4-6V7a4 4 0 118 0v4m-8 0h12a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6a2 2 0 012-2z"
-            />
-          </svg>
+          <LockIcon />
           Submitted in AgileDay
         </span>
       )}
@@ -934,47 +947,13 @@ export function ProjectCard({
           </div>
         </div>
 
-        {/* Footer: delete (left), collapse (right), lock indicator when submitted */}
+        {/* Footer: collapse (right), lock indicator when submitted. Delete sits in
+            the same row's bottom-left corner, outside, so it shows collapsed too. */}
         {/* Locked cards have no "add description" row, so the footer needs its own gap. */}
         <div className={`flex items-center gap-3 px-4 pb-3 ${isSubmitted ? "mt-0.5" : "-mt-1"}`}>
-          {isEditable && (
-            <button
-              onClick={() => {
-                setActionError(null);
-                setEditMode("delete");
-              }}
-              className="inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-danger transition-colors cursor-pointer"
-              aria-label="Delete entry"
-            >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="shrink-0"
-              >
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                <line x1="10" y1="11" x2="10" y2="17" />
-                <line x1="14" y1="11" x2="14" y2="17" />
-              </svg>
-              <span>Delete</span>
-            </button>
-          )}
           {isSubmitted && (
-            <span className="text-[10px] text-text-muted/50 flex items-center gap-0.5">
-              <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2.5}
-                  d="M12 15v2m0 0v2m0-2h2m-2 0H10m-4-6V7a4 4 0 118 0v4m-8 0h12a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6a2 2 0 012-2z"
-                />
-              </svg>
+            <span className="text-[10px] leading-none text-text-muted/50 flex items-center gap-1">
+              <LockIcon />
               Submitted — edit in AgileDay
             </span>
           )}
@@ -1002,6 +981,37 @@ export function ProjectCard({
           </button>
         </div>
       </Collapsible>
+
+      {/* Delete, bottom-left both collapsed and expanded: lines up with the
+          footer row, which keeps its height via "Collapse". */}
+      {isEditable && (
+        <button
+          onClick={() => {
+            setActionError(null);
+            setEditMode("delete");
+          }}
+          className="absolute bottom-3 left-4 inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-danger transition-colors cursor-pointer"
+          aria-label="Delete entry"
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="shrink-0"
+          >
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            <line x1="10" y1="11" x2="10" y2="17" />
+            <line x1="14" y1="11" x2="14" y2="17" />
+          </svg>
+          <span>Delete</span>
+        </button>
+      )}
 
       {/* Delete confirmation modal */}
       {editMode === "delete" && (

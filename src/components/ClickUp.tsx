@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useApp, useApi } from "../store/context";
 import { useAddTime, useTimer, formatTime, formatMinutes } from "../hooks/useTimer";
-import { usePersistEntry, projectDotColor, TaskIcon } from "./ProjectCard";
+import { usePersistEntry, projectDotColor, TaskIcon, LockIcon } from "./ProjectCard";
 import { ProjectPicker } from "./ProjectPicker";
 import { TaskPicker } from "./TaskPicker";
 import { Modal } from "./Modal";
+import { Collapsible } from "./Collapsible";
 import { isLocalOnlyEntry } from "./entry-edit";
 import {
   ClickUpRateLimitError,
@@ -12,6 +13,7 @@ import {
   entryDate,
   isAccounted,
   parseTaskRef,
+  sessionMinutes,
   unsyncedGroups,
   withClickupLine,
   withoutClickupLine,
@@ -27,7 +29,14 @@ function localDate(d: Date): string {
 export function ClickUpLogo({ size = 16, mono = false }: { size?: number; mono?: boolean }) {
   const id = useId();
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      className="shrink-0"
+    >
       {!mono && (
         <defs>
           <linearGradient id={`${id}a`} x1="0" y1="0" x2="1" y2="0">
@@ -217,10 +226,23 @@ interface ClickUpCardProps {
   /** Minutes this task holds of the entry's total. */
   minutes: number;
   isToday: boolean;
+  /** Start collapsed, per the list's auto-collapse preference. */
+  autoCollapsed?: boolean;
+}
+
+/** "09:05" in local time. */
+function clockTime(ms: number): string {
+  return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 /** One ClickUp task's share of an AgileDay entry, with its own timer. */
-export function ClickUpCard({ entry, task, minutes, isToday }: ClickUpCardProps) {
+export function ClickUpCard({
+  entry,
+  task,
+  minutes,
+  isToday,
+  autoCollapsed = false,
+}: ClickUpCardProps) {
   const { state, dispatch, clickupClient } = useApp();
   const api = useApi();
   const persist = usePersistEntry(entry);
@@ -240,6 +262,25 @@ export function ClickUpCard({ entry, task, minutes, isToday }: ClickUpCardProps)
     state.timer.projectId === entry.projectId &&
     (state.timer.taskId ?? null) === (entry.taskId ?? null) &&
     isToday;
+  const showTimerButton = isToday && !isSubmitted && !!entry.taskId;
+  const canQuickOpen = !isToday && !!entry.taskId;
+
+  // Folds like a project card: the header stays, the time slots and footer
+  // animate away. Submitted cards expand from a chevron in the button slot;
+  // editable ones from an "Expand" link where the footer's "Collapse" sits.
+  const [collapseOverride, setCollapsed] = useState<boolean | null>(null);
+  const collapsed = collapseOverride ?? autoCollapsed;
+  const expandInHeader = collapsed && isSubmitted;
+  const motion = "transition-all duration-200 ease-out motion-reduce:transition-none";
+  /** This task's ClickUp sessions on the entry's day that count toward it. */
+  const sessions = useMemo(
+    () =>
+      (state.clickupEntries ?? [])
+        .filter((e) => e.taskId === task.id && entryDate(e) === entry.date && e.duration >= 0)
+        .filter((e) => state.clickup && isAccounted(e, state.clickup.sync))
+        .sort((a, b) => a.start - b.start),
+    [state.clickupEntries, state.clickup, task.id, entry.date]
+  );
 
   // Tick while running so the clock moves.
   const [, setTick] = useState(0);
@@ -323,8 +364,13 @@ export function ClickUpCard({ entry, task, minutes, isToday }: ClickUpCardProps)
     : "cursor-default";
 
   return (
-    <div className="relative bg-bg-card border border-border rounded-xl shadow-[0_1px_2px_rgba(11,4,21,0.04)] px-4 py-3">
-      <div className="flex items-center gap-3">
+    <div
+      className={`relative bg-bg-card border border-border rounded-xl shadow-[0_1px_2px_rgba(11,4,21,0.04)] px-4 pt-[14px] ${motion} ${
+        collapsed ? (isSubmitted ? "pb-[26px]" : "pb-[33px]") : "pb-3"
+      }`}
+    >
+      {/* Same row geometry as a project card: 36px button slot even when empty. */}
+      <div className="flex items-center gap-3 min-h-[36px]">
         <div className="flex-1 min-w-0">
           <button
             type="button"
@@ -332,106 +378,189 @@ export function ClickUpCard({ entry, task, minutes, isToday }: ClickUpCardProps)
             title="Open in ClickUp"
             className="flex items-center gap-2 w-full text-left font-bold text-[17px] leading-[1.25] text-text hover:text-primary transition-colors cursor-pointer"
           >
-            <ClickUpLogo />
+            <ClickUpLogo size={20} />
             <span className="truncate">{task.name || `CU-${task.id}`}</span>
           </button>
-          {/* AgileDay project + task, styled like a project card's task row. */}
-          <div className="flex items-center gap-2 mt-1 text-[13.5px] text-text-muted min-w-0">
-            <span
-              className={`w-[9px] h-[9px] rounded-full shrink-0 ${projectDotColor(
-                entry.projectType ?? project?.projectType
-              )}`}
-            />
-            {edit === "project" ? (
-              <ProjectPicker
-                selectedId={entry.projectId}
-                onSelect={(id) => {
-                  setPendingProjectId(id);
-                  setEdit("task");
-                }}
-                variant="chip"
-                usageDate={entry.date}
-                onClose={cancelEdit}
-              />
-            ) : edit === "task" ? (
-              <TaskPicker
-                projectId={pendingProjectId ?? entry.projectId}
-                selectedId={pendingProjectId ? null : (entry.taskId ?? null)}
-                onSelect={(id) => id && void moveTo(pendingProjectId ?? entry.projectId, id)}
-                variant="chip"
-                onClose={cancelEdit}
-              />
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => isEditable && setEdit("project")}
-                  disabled={!isEditable}
-                  className={`truncate min-w-0 ${metaButton}`}
-                >
-                  {project?.name ?? entry.projectName ?? "Unknown project"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => isEditable && setEdit("task")}
-                  disabled={!isEditable}
-                  className={`flex items-center gap-[5px] min-w-0 shrink-0 max-w-[50%] ${metaButton}`}
-                >
-                  <TaskIcon />
-                  <span className="truncate">{taskName ?? "Select task"}</span>
-                </button>
-              </>
-            )}
-          </div>
         </div>
         <span
           className={`text-[17px] font-semibold tabular-nums ${isThisRunning ? "text-primary" : "text-text"}`}
         >
           {displayTime}
         </span>
-        {isToday && !isSubmitted && entry.taskId && (
-          <button
-            onClick={() =>
-              isThisRunning ? void stop() : void startForCard(entry.projectId, entry.taskId!, task)
-            }
-            className={`w-[36px] h-[36px] shrink-0 rounded-full flex items-center justify-center text-white transition-all duration-200 active:scale-[0.94] ${
-              isThisRunning ? "bg-danger hover:bg-[#d8363c]" : "bg-primary hover:bg-primary-dark"
-            }`}
-            aria-label={isThisRunning ? "Stop timer" : "Start timer"}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-              {isThisRunning ? (
-                <rect x="6" y="6" width="12" height="12" rx="2.5" />
-              ) : (
+        {/* Button slot, as on project cards: on submitted cards the
+            "Start today" button cross-fades with the expand chevron. */}
+        <div
+          className={`relative h-[36px] shrink-0 overflow-hidden ${
+            showTimerButton || canQuickOpen || expandInHeader ? "w-[36px]" : "w-0"
+          }`}
+        >
+          {showTimerButton && (
+            <button
+              onClick={() =>
+                isThisRunning
+                  ? void stop()
+                  : void startForCard(entry.projectId, entry.taskId!, task)
+              }
+              className={`absolute inset-0 rounded-full flex items-center justify-center text-white transition-all duration-200 active:scale-[0.94] ${
+                isThisRunning ? "bg-danger hover:bg-[#d8363c]" : "bg-primary hover:bg-primary-dark"
+              }`}
+              aria-label={isThisRunning ? "Stop timer" : "Start timer"}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                {isThisRunning ? (
+                  <rect x="6" y="6" width="12" height="12" rx="2.5" />
+                ) : (
+                  <polygon points="6 4 20 12 6 20 6 4" />
+                )}
+              </svg>
+            </button>
+          )}
+          {/* Past days: track this ClickUp task again today, on the same
+              project + task. Already tracked today → this just resumes it. */}
+          {canQuickOpen && (
+            <button
+              onClick={() => {
+                const today = localDate(new Date());
+                ensureLine(entry.projectId, entry.taskId!, today, task);
+                void startForCard(entry.projectId, entry.taskId!, task);
+              }}
+              tabIndex={expandInHeader ? -1 : undefined}
+              aria-hidden={expandInHeader}
+              title="Start today"
+              className={`absolute inset-0 rounded-full flex items-center justify-center transition-all duration-200 active:scale-[0.94] border-2 border-primary text-primary hover:bg-primary hover:text-white ${
+                expandInHeader ? "opacity-0 scale-90 pointer-events-none" : "opacity-100"
+              }`}
+              aria-label="Start today"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
                 <polygon points="6 4 20 12 6 20 6 4" />
-              )}
-            </svg>
-          </button>
-        )}
-        {/* Past days: track this ClickUp task again today, on the same
-            project + task. Already tracked today → this just resumes it. */}
-        {!isToday && entry.taskId && (
-          <button
-            onClick={() => {
-              const today = localDate(new Date());
-              ensureLine(entry.projectId, entry.taskId!, today, task);
-              void startForCard(entry.projectId, entry.taskId!, task);
+              </svg>
+            </button>
+          )}
+          {isSubmitted && (
+            <button
+              type="button"
+              onClick={() => setCollapsed(false)}
+              tabIndex={expandInHeader ? undefined : -1}
+              aria-hidden={!expandInHeader}
+              aria-label="Expand entry"
+              aria-expanded={false}
+              title="Expand"
+              className={`absolute inset-0 rounded-full flex items-center justify-center text-text-subtle hover:text-primary hover:bg-bg-edit transition-all duration-200 cursor-pointer ${
+                expandInHeader ? "opacity-100" : "opacity-0 scale-90 pointer-events-none"
+              }`}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+      {/* AgileDay project + task, styled like a project card's task row. */}
+      <div className="flex items-center gap-2 mt-1 text-[13.5px] text-text-muted min-w-0">
+        <span
+          className={`w-[9px] h-[9px] rounded-full shrink-0 ${projectDotColor(
+            entry.projectType ?? project?.projectType
+          )}`}
+        />
+        {edit === "project" ? (
+          <ProjectPicker
+            selectedId={entry.projectId}
+            onSelect={(id) => {
+              setPendingProjectId(id);
+              setEdit("task");
             }}
-            title="Start today"
-            className="w-[36px] h-[36px] shrink-0 rounded-full flex items-center justify-center transition-all duration-200 active:scale-[0.94] border-2 border-primary text-primary hover:bg-primary hover:text-white"
-            aria-label="Start today"
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
-              <polygon points="6 4 20 12 6 20 6 4" />
-            </svg>
-          </button>
+            variant="chip"
+            usageDate={entry.date}
+            onClose={cancelEdit}
+          />
+        ) : edit === "task" ? (
+          <TaskPicker
+            projectId={pendingProjectId ?? entry.projectId}
+            selectedId={pendingProjectId ? null : (entry.taskId ?? null)}
+            onSelect={(id) => id && void moveTo(pendingProjectId ?? entry.projectId, id)}
+            variant="chip"
+            onClose={cancelEdit}
+          />
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => isEditable && setEdit("project")}
+              disabled={!isEditable}
+              className={`truncate min-w-0 ${metaButton}`}
+            >
+              {project?.name ?? entry.projectName ?? "Unknown project"}
+            </button>
+            <button
+              type="button"
+              onClick={() => isEditable && setEdit("task")}
+              disabled={!isEditable}
+              className={`flex items-center gap-[5px] min-w-0 shrink-0 max-w-[50%] ${metaButton}`}
+            >
+              <TaskIcon />
+              <span className="truncate">{taskName ?? "Select task"}</span>
+            </button>
+          </>
         )}
       </div>
-      {/* Footer: delete, styled like a project card's. Not on submitted cards. */}
+      {/* Collapsed: submitted cards show the lock in the corner, editable ones
+          an "Expand" link. Expanded: the day's ClickUp time slots for this task. */}
+      {isSubmitted && (
+        <span
+          className={`absolute bottom-[10px] right-3 flex items-center pointer-events-none gap-1 text-[10px] leading-none text-text-muted/50 ${motion} ${
+            collapsed ? "opacity-100" : "opacity-0"
+          }`}
+          aria-hidden={!collapsed}
+        >
+          <LockIcon />
+          Submitted in AgileDay
+        </span>
+      )}
+      {!isSubmitted && (
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          tabIndex={collapsed ? undefined : -1}
+          aria-hidden={!collapsed}
+          aria-label="Expand entry"
+          aria-expanded={false}
+          className={`absolute bottom-3 right-4 inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-primary cursor-pointer ${motion} ${
+            collapsed ? "opacity-100" : "opacity-0 pointer-events-none"
+          }`}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="shrink-0"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+          <span>Expand</span>
+        </button>
+      )}
+      {/* Delete sits bottom-left both collapsed and expanded: it lines up with
+          the footer row, which keeps its height via "Collapse". */}
       {isEditable && (
         <button
           onClick={() => setConfirmDelete(true)}
-          className="mt-2 inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-danger transition-colors cursor-pointer"
+          className="absolute bottom-3 left-4 inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-danger transition-colors cursor-pointer"
           aria-label="Delete ClickUp time"
         >
           <svg
@@ -454,6 +583,62 @@ export function ClickUpCard({ entry, task, minutes, isToday }: ClickUpCardProps)
         </button>
       )}
       {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+      <Collapsible collapsed={collapsed}>
+        <div className="pt-3 pb-3">
+          <div className="border-l-2 border-border ml-1 pl-[14px] flex flex-col gap-[9px]">
+            {sessions.map((e) => (
+              <div
+                key={e.id}
+                className="flex items-center gap-[9px] text-sm text-text leading-[1.4]"
+              >
+                <span className="w-[5px] h-[5px] rounded-full bg-primary shrink-0" />
+                <span className="flex-1 tabular-nums">
+                  {clockTime(e.start)}–{clockTime(e.start + e.duration)}
+                </span>
+                <span className="tabular-nums text-text-muted">
+                  {formatMinutes(sessionMinutes(e.duration))}
+                </span>
+              </div>
+            ))}
+            {sessions.length === 0 && (
+              <div className="text-sm text-text-subtle">No ClickUp sessions</div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-3 mt-0.5">
+          {isSubmitted && (
+            <span className="text-[10px] leading-none text-text-muted/50 flex items-center gap-1">
+              <LockIcon />
+              Submitted — edit in AgileDay
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              cancelEdit();
+              setCollapsed(true);
+            }}
+            className="ml-auto inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-primary transition-colors cursor-pointer"
+            aria-label="Collapse entry"
+            aria-expanded={true}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0"
+            >
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+            <span>Collapse</span>
+          </button>
+        </div>
+      </Collapsible>
       {confirmDelete && (
         <Modal
           onClose={() => setConfirmDelete(false)}
