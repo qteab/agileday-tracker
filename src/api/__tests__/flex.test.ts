@@ -468,10 +468,10 @@ describe("formatFlexMinutes", () => {
 describe("calculateLiveFlex", () => {
   const NO_HOLIDAYS: Holiday[] = [];
 
-  it("adds today's worked minus expected on a workday", () => {
+  it("doesn't count today's shortfall until the day is over", () => {
     // startDate = Jan 4 (Sun) → counting starts Mon Jan 5
     // Week Jan 5-11: 40h worked = 0 flex through yesterday
-    // Reference: Mon Jan 12, 6h worked today → 0 + 360 - 480 = -120
+    // Reference: Mon Jan 12, 6h worked today → balance stays 0, -120 at day end
     const entries = [
       entry("2026-01-05", 480),
       entry("2026-01-06", 480),
@@ -491,7 +491,21 @@ describe("calculateLiveFlex", () => {
     expect(result.todayWorkedMinutes).toBe(360);
     expect(result.todayExpectedMinutes).toBe(480);
     expect(result.countsToday).toBe(true);
-    expect(result.totalMinutes).toBe(-120);
+    expect(result.totalMinutes).toBe(0);
+    expect(result.endOfDayMinutes).toBe(-120);
+  });
+
+  it("counts today's overtime right away", () => {
+    // 10h worked today → +2h now
+    const result = calculateLiveFlex(
+      [entry("2026-01-12", 600)],
+      "2026-01-11",
+      0,
+      NO_HOLIDAYS,
+      new Date("2026-01-12T19:00:00")
+    );
+    expect(result.totalMinutes).toBe(120);
+    expect(result.endOfDayMinutes).toBe(120);
   });
 
   it("includes running timer minutes via extraMinutes", () => {
@@ -503,9 +517,10 @@ describe("calculateLiveFlex", () => {
       new Date("2026-01-12T15:00:00"),
       90
     );
-    // today: 300 + 90 = 390 worked, 480 expected → -90
+    // today: 300 + 90 = 390 worked, 480 expected → -90 at day end
     expect(result.todayWorkedMinutes).toBe(390);
-    expect(result.totalMinutes).toBe(-90);
+    expect(result.totalMinutes).toBe(0);
+    expect(result.endOfDayMinutes).toBe(-90);
   });
 
   it("expects 0 on weekends", () => {
@@ -561,7 +576,7 @@ describe("calculateLiveFlex", () => {
       new Date("2026-01-12T15:00:00")
     );
     expect(result.todayWorkedMinutes).toBe(0);
-    expect(result.totalMinutes).toBe(-480);
+    expect(result.endOfDayMinutes).toBe(-480);
   });
 });
 
@@ -582,7 +597,8 @@ describe("calculateMonthStats", () => {
     expect(result.workedMinutes).toBe(990);
     // Workdays Jan 1-12: 1,2,5,6,7,8,9,12 = 8
     expect(result.workdaysToDate).toBe(8);
-    expect(result.expectedToDateMinutes).toBe(8 * 480);
+    // Nothing logged on Jan 12 yet → only the 7 days before count
+    expect(result.expectedToDateMinutes).toBe(7 * 480);
   });
 
   it("excludes holidays from workdays", () => {
@@ -601,6 +617,8 @@ describe("calculateMonthStats", () => {
       45
     );
     expect(result.workedMinutes).toBe(345);
+    // Today's target grows with today's work, capped at 8h
+    expect(result.expectedToDateMinutes).toBe(7 * 480 + 345);
   });
 });
 

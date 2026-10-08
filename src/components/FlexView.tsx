@@ -1,5 +1,10 @@
 import { useApp } from "../store/context";
-import { formatFlexMinutes, type FlexWeek, type MonthSummary } from "../utils/flex";
+import {
+  formatFlexMinutes,
+  RESET_CAP_MINUTES,
+  type FlexWeek,
+  type MonthSummary,
+} from "../utils/flex";
 import { formatVacationDays, type VacationResult } from "../utils/vacation";
 import { useLiveFlex } from "../hooks/useLiveFlex";
 import { useVacation } from "../hooks/useVacation";
@@ -30,6 +35,13 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
   const { flexConfig, vacationConfig } = state;
   const { flex, month, lastMonth, now } = useLiveFlex();
   const vacation = useVacation();
+
+  // In a reset month, flex above the cap is paid out at month end
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const payoutMinutes =
+    flex && flexConfig?.resetMonths?.includes(monthKey)
+      ? Math.max(0, flex.totalMinutes - RESET_CAP_MINUTES)
+      : 0;
 
   const vacationSection =
     vacationConfig && vacation ? (
@@ -121,13 +133,13 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-text-muted">Before today</span>
+                          <span className="text-text-muted">If you stop now</span>
                           <span
                             className={`tabular-nums ${
-                              flex.baseMinutes >= 0 ? "text-emerald-600" : "text-danger"
+                              flex.endOfDayMinutes >= 0 ? "text-emerald-600" : "text-danger"
                             }`}
                           >
-                            {formatFlexMinutes(flex.baseMinutes)}
+                            {formatFlexMinutes(flex.endOfDayMinutes)}
                           </span>
                         </div>
                       </>
@@ -146,7 +158,7 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
             {vacationSection}
 
             {/* This month: worked vs target */}
-            <MonthProgressCard month={month} now={now} />
+            <MonthProgressCard month={month} now={now} payoutMinutes={payoutMinutes} />
 
             {/* Last month: closed summary */}
             {lastMonth && <LastMonthCard summary={lastMonth} />}
@@ -249,51 +261,52 @@ function LastMonthCard({ summary }: { summary: MonthSummary }) {
   const monthLabel = new Date(summary.monthStart + "T12:00:00").toLocaleDateString("en-US", {
     month: "long",
   });
-  const deltaPositive = summary.deltaMinutes >= 0;
+  const hasReset = summary.resetPayoutMinutes > 0;
+  // What the month itself added, before any payout
+  const monthMinutes = summary.deltaMinutes + summary.resetPayoutMinutes;
+  const beforeResetMinutes = summary.flexInMinutes + monthMinutes;
+  const signColor = (m: number) => (m >= 0 ? "text-emerald-600" : "text-danger");
 
   return (
     <div className="bg-bg-card rounded-xl p-4 border border-border">
-      <h3 className="text-sm font-semibold text-text mb-3">Last month — {monthLabel}</h3>
+      <div className="flex items-baseline justify-between mb-3">
+        <h3 className="text-sm font-semibold text-text">Last month — {monthLabel}</h3>
+        <span className="text-xs tabular-nums text-text-muted">
+          {formatHM(summary.workedMinutes)} / {formatHM(summary.expectedMinutes)} ·{" "}
+          {summary.workdays} days
+        </span>
+      </div>
       <div className="space-y-1 text-sm">
         <div className="flex items-center justify-between">
-          <span className="text-text-muted">Worked</span>
-          <span className="font-semibold tabular-nums text-text">
-            {formatHM(summary.workedMinutes)}
-          </span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-text-muted">Target</span>
-          <span className="tabular-nums text-text">
-            {formatHM(summary.expectedMinutes)}
-            <span className="text-text-muted"> · {summary.workdays} days</span>
-          </span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-text-muted">Flex in</span>
+          <span className="text-text-muted">Opening balance</span>
           <span className="tabular-nums text-text">{formatFlexMinutes(summary.flexInMinutes)}</span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-text-muted">Flex out</span>
-          <span className="tabular-nums text-text">
-            {formatFlexMinutes(summary.flexOutMinutes)}
+          <span className="text-text-muted">Worked vs target</span>
+          <span className={`tabular-nums ${signColor(monthMinutes)}`}>
+            {formatFlexMinutes(monthMinutes)}
           </span>
         </div>
-        {summary.resetPayoutMinutes > 0 && (
-          <div className="flex items-center justify-between">
-            <span className="text-text-muted">Reset payout</span>
-            <span className="tabular-nums text-text">
-              {formatFlexMinutes(-summary.resetPayoutMinutes)}
-            </span>
-          </div>
+        {hasReset && (
+          <>
+            <div className="flex items-center justify-between border-t border-border pt-1">
+              <span className="text-text-muted">Before reset</span>
+              <span className="tabular-nums text-text">
+                {formatFlexMinutes(beforeResetMinutes)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-text-muted">Reset payout</span>
+              <span className="font-semibold tabular-nums text-amber-500">
+                {formatFlexMinutes(summary.resetPayoutMinutes)}
+              </span>
+            </div>
+          </>
         )}
-        <div className="flex items-center justify-between">
-          <span className="text-text-muted">Change</span>
-          <span
-            className={`font-semibold tabular-nums ${
-              deltaPositive ? "text-emerald-600" : "text-danger"
-            }`}
-          >
-            {formatFlexMinutes(summary.deltaMinutes)}
+        <div className="flex items-center justify-between border-t border-border pt-1">
+          <span className="font-medium text-text">Closing balance</span>
+          <span className={`font-semibold tabular-nums ${signColor(summary.flexOutMinutes)}`}>
+            {formatFlexMinutes(summary.flexOutMinutes)}
           </span>
         </div>
       </div>
