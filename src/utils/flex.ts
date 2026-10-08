@@ -167,12 +167,14 @@ export interface LiveFlexResult extends FlexResult {
   todayExpectedMinutes: number;
   /** False when today is still before the flex period (nothing counted yet). */
   countsToday: boolean;
+  /** Balance if the day ended now: base + today's worked − expected. */
+  endOfDayMinutes: number;
 }
 
 /**
- * Live flex balance: through-yesterday balance plus today counted as a full
- * day (worked − expected). Starts the morning a workday down and climbs back
- * as hours are logged, so the number never jumps at midnight.
+ * Live flex balance: through-yesterday balance plus today's overtime only.
+ * Today's shortfall isn't counted until the day is over, so the morning
+ * doesn't start a workday down.
  *
  * @param extraMinutes - Minutes worked today that aren't in entries yet
  *   (the running timer's elapsed time)
@@ -199,6 +201,7 @@ export function calculateLiveFlex(
       todayWorkedMinutes: 0,
       todayExpectedMinutes: 0,
       countsToday: false,
+      endOfDayMinutes: base.totalMinutes,
     };
   }
 
@@ -215,10 +218,11 @@ export function calculateLiveFlex(
   return {
     ...base,
     baseMinutes: base.totalMinutes,
-    totalMinutes: base.totalMinutes + todayWorkedMinutes - todayExpectedMinutes,
+    totalMinutes: base.totalMinutes + Math.max(0, todayWorkedMinutes - todayExpectedMinutes),
     todayWorkedMinutes,
     todayExpectedMinutes,
     countsToday: true,
+    endOfDayMinutes: base.totalMinutes + todayWorkedMinutes - todayExpectedMinutes,
   };
 }
 
@@ -227,7 +231,10 @@ export interface MonthStats {
   workedMinutes: number;
   /** Full-month target: workdays in the month × 480. */
   expectedMinutes: number;
-  /** Target through today: elapsed workdays × 480. */
+  /**
+   * Target so far: workdays before today × 480, plus today's worked minutes
+   * up to 480 — today's shortfall isn't counted until the day is over.
+   */
   expectedToDateMinutes: number;
   workdays: number;
   workdaysToDate: number;
@@ -254,6 +261,7 @@ export function calculateMonthStats(
 
   let workdays = 0;
   let workdaysToDate = 0;
+  let todayIsWorkday = false;
   for (let d = 1; d <= daysInMonth; d++) {
     const day = new Date(year, month, d);
     const dayStr = fmtDate(day);
@@ -261,18 +269,24 @@ export function calculateMonthStats(
     if (dayOfWeek === 0 || dayOfWeek === 6 || hSet.has(dayStr)) continue;
     workdays++;
     if (dayStr <= todayStr) workdaysToDate++;
+    if (dayStr === todayStr) todayIsWorkday = true;
   }
 
   let workedMinutes = extraMinutes;
+  let todayWorkedMinutes = extraMinutes;
   for (const entry of entries) {
     if (entry.syncStatus === "unsaved") continue;
     if (entry.date.startsWith(monthPrefix)) workedMinutes += entry.minutes;
+    if (entry.date === todayStr) todayWorkedMinutes += entry.minutes;
   }
+
+  const workdaysBeforeToday = workdaysToDate - (todayIsWorkday ? 1 : 0);
+  const todayExpected = todayIsWorkday ? Math.min(todayWorkedMinutes, WORKDAY_MINUTES) : 0;
 
   return {
     workedMinutes,
     expectedMinutes: workdays * WORKDAY_MINUTES,
-    expectedToDateMinutes: workdaysToDate * WORKDAY_MINUTES,
+    expectedToDateMinutes: workdaysBeforeToday * WORKDAY_MINUTES + todayExpected,
     workdays,
     workdaysToDate,
   };

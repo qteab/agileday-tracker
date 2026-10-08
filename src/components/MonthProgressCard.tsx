@@ -7,7 +7,16 @@ function formatHM(minutes: number): string {
 }
 
 /** Worked vs expected hours for the current month, with a circular progress diagram. */
-export function MonthProgressCard({ month, now }: { month: MonthStats; now: Date }) {
+export function MonthProgressCard({
+  month,
+  now,
+  payoutMinutes,
+}: {
+  month: MonthStats;
+  now: Date;
+  /** Flex above the reset cap right now, in a reset month (0 otherwise) */
+  payoutMinutes: number;
+}) {
   const monthLabel = now.toLocaleDateString("en-US", { month: "long" });
   const percent =
     month.expectedMinutes > 0 ? (month.workedMinutes / month.expectedMinutes) * 100 : 0;
@@ -34,7 +43,7 @@ export function MonthProgressCard({ month, now }: { month: MonthStats; now: Date
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-text-muted">Expected by today</span>
+            <span className="text-text-muted">Expected so far</span>
             <span className="tabular-nums text-text">{formatHM(month.expectedToDateMinutes)}</span>
           </div>
           <div className="flex items-center justify-between">
@@ -53,17 +62,26 @@ export function MonthProgressCard({ month, now }: { month: MonthStats; now: Date
               </span>
             </span>
           </div>
+          {payoutMinutes > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-text-muted">Payout at month end</span>
+              <span className="font-semibold tabular-nums text-amber-500">
+                ≈ {formatFlexMinutes(payoutMinutes)}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-/** Circular progress: worked vs full-month target */
+/** Circular progress: worked vs full-month target; overtime laps the ring in green */
 function MonthDonut({ percent }: { percent: number }) {
   const r = 42;
   const circumference = 2 * Math.PI * r;
   const clamped = Math.max(0, Math.min(percent, 100));
+  const overtime = Math.max(0, Math.min(percent - 100, 100));
 
   return (
     <div className="relative w-24 h-24 shrink-0">
@@ -79,6 +97,18 @@ function MonthDonut({ percent }: { percent: number }) {
           strokeDasharray={`${(circumference * clamped) / 100} ${circumference}`}
           className="stroke-primary transition-[stroke-dasharray] duration-500"
         />
+        {overtime > 0 && (
+          <circle
+            cx="50"
+            cy="50"
+            r={r}
+            fill="none"
+            strokeWidth="9"
+            strokeLinecap="round"
+            strokeDasharray={`${(circumference * overtime) / 100} ${circumference}`}
+            className="stroke-emerald-500 transition-[stroke-dasharray] duration-500"
+          />
+        )}
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
         <span className="text-base font-bold tabular-nums text-text">{Math.round(percent)}%</span>
