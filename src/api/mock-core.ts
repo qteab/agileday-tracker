@@ -1,5 +1,6 @@
 import type { ApiProvider } from "./provider";
 import type { Allocation, Employee, Project, Task, TimeEntry } from "./types";
+import { getTimesheetPeriod } from "../utils/week";
 
 export const MOCK_PROJECTS: Project[] = [
   { id: "p1", name: "Fokus", customerName: "QTE", color: "#E5B80B", projectType: "INTERNAL" },
@@ -184,6 +185,15 @@ export function createMockProvider(
       }
       await store.setEntries(entries);
       return results;
+    },
+
+    async submitTimesheet(_employeeId: string, weekStart: string, month: string) {
+      const entries = await store.getEntries();
+      for (const e of entries) {
+        const p = getTimesheetPeriod(e.date);
+        if (p.weekStart === weekStart && p.month === month) e.status = "SUBMITTED";
+      }
+      await store.setEntries(entries);
     },
 
     async getAllocations(_employeeId: string) {

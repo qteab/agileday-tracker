@@ -755,6 +755,58 @@ describe("security", () => {
   });
 });
 
+// --- submitTimesheet ---
+
+describe("submitTimesheet", () => {
+  const cards = {
+    timecards: [
+      {
+        id: "tc-sep",
+        employeeId: "emp-1",
+        week: "2026-09-28",
+        month: "2026-09-01",
+        status: "SUBMITTED",
+      },
+      {
+        id: "tc-oct",
+        employeeId: "emp-1",
+        week: "2026-09-28",
+        month: "2026-10-01",
+        status: "SAVED",
+      },
+    ],
+  };
+
+  it("looks up the week+month timecard and sets it SUBMITTED", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(cards)).mockResolvedValueOnce(jsonResponse({}));
+
+    await provider.submitTimesheet("emp-1", "2026-09-28", "2026-10-01");
+
+    const [lookupUrl, lookupOpts] = mockFetch.mock.calls[0];
+    expect(lookupUrl).toContain("/v1/timesheets/by-employee/month/2026-10-01");
+    expect(lookupOpts.method).toBe("POST");
+    expect(JSON.parse(lookupOpts.body).filter).toEqual({ id: { in: ["emp-1"] } });
+
+    const [url, opts] = mockFetch.mock.calls[1];
+    expect(url).toContain("/v1/time_entry/employee/id/emp-1/time_card/id/tc-oct");
+    expect(opts.method).toBe("POST");
+    expect(JSON.parse(opts.body)).toEqual({ status: "SUBMITTED" });
+  });
+
+  it("does nothing when the timecard is already submitted", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(cards));
+    await provider.submitTimesheet("emp-1", "2026-09-28", "2026-09-01");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws when no timecard matches", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(cards));
+    await expect(provider.submitTimesheet("emp-1", "2026-10-05", "2026-10-01")).rejects.toThrow(
+      /No AgileDay timesheet/
+    );
+  });
+});
+
 // --- batchUpdateEntries ---
 
 describe("batchUpdateEntries", () => {

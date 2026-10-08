@@ -26,6 +26,8 @@ export interface ApiProvider {
     employeeId: string,
     updates: Array<{ id: string } & Partial<TimeEntry>>
   ): Promise<TimeEntry[]>;
+  /** Submit the timecard for one week of one month (weekStart = Monday, month = 1st). */
+  submitTimesheet(employeeId: string, weekStart: string, month: string): Promise<void>;
   getAllocations(employeeId: string): Promise<Allocation[]>;
   getMyProjects(employeeId: string): Promise<MyProjectInfo[]>;
   getHolidays(countryCode: string, startDate: string, endDate: string): Promise<Holiday[]>;

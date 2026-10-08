@@ -63,6 +63,7 @@ AgileDay requires `Origin: https://qvik.agileday.io` header on all requests (Tau
 - Fallback (only if the primary read fails): `/v1/time_entry/employee/id/{id}/updated` with a 400-day `updatedAfter` lookback. This param filters by last-update time, not work date — never use it as a date range.
 - Top-up: `/v1/timesheets/{id}/summary` (all statuses, no descriptions), fetched for **every** month the window touches.
 - Creating: `POST /v1/time_entry/employee/id/{id}` — checks for existing entry first (same project+date+description), PATCHes if found, creates if not. Multiple duplicates are consolidated (create new total, delete old).
+- Submitting: `POST /v1/timesheets/by-employee/month/{month}` (employee filter) to find the timecard for week+month, then `POST /v1/time_entry/employee/id/{id}/time_card/id/{timeCardId}` with `{status: "SUBMITTED"}`. AgileDay keeps one timecard per week **per month**, so a week crossing a month boundary is two timesheets (`getTimesheetPeriod` in `src/utils/week.ts`).
 - Projects: `GET /v1/project?projectStage=ACTIVE`
 - Allocated projects: `GET /v2/opening` with employee filter
 - Tasks: `GET /v1/project/id/{id}/task`

@@ -7,12 +7,13 @@ import {
   floorTo15,
   type DayProjectRounding,
 } from "../api/rounding";
-import { getWeekStart, fmtDate, formatWeekLabel, syncedOnly } from "../utils/week";
+import { fmtDate, getTimesheetPeriod, syncedOnly, type TimesheetPeriod } from "../utils/week";
+import type { ApiProvider } from "../api/provider";
 import type { TimeEntry } from "../api/types";
+import type { AppAction } from "../store/reducer";
 
 interface FinalizeViewProps {
   onBack: () => void;
-  onMarkSubmitted: (weekStart: string) => void;
 }
 
 const WORKDAY_MINUTES = 480;
@@ -39,10 +40,7 @@ function fmtHM(minutes: number): string {
 
 type WeekStatus = "active" | "rounded" | "submitted";
 
-interface WeekSummary {
-  weekStart: string;
-  weekEnd: string;
-  label: string;
+interface WeekSummary extends TimesheetPeriod {
   totalMinutes: number;
   entryCount: number;
   groupsToRound: number;
@@ -61,30 +59,24 @@ function computeWeekStatus(entries: TimeEntry[]): WeekStatus {
   return needsRounding ? "active" : "rounded";
 }
 
+// One summary per AgileDay timesheet: weeks crossing a month boundary are split.
 function buildWeekSummaries(entries: TimeEntry[]): WeekSummary[] {
-  const weekMap = new Map<string, TimeEntry[]>();
+  const periodMap = new Map<string, { period: TimesheetPeriod; entries: TimeEntry[] }>();
 
   for (const entry of entries) {
-    const d = new Date(entry.date + "T12:00:00");
-    const monday = getWeekStart(d);
-    const key = fmtDate(monday);
-    const existing = weekMap.get(key) ?? [];
-    existing.push(entry);
-    weekMap.set(key, existing);
+    const period = getTimesheetPeriod(entry.date);
+    const group = periodMap.get(period.start) ?? { period, entries: [] };
+    group.entries.push(entry);
+    periodMap.set(period.start, group);
   }
 
   const summaries: WeekSummary[] = [];
-  for (const [weekStartStr, weekEntries] of weekMap) {
-    const monday = new Date(weekStartStr + "T12:00:00");
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
+  for (const { period, entries: weekEntries } of periodMap.values()) {
     const synced = syncedOnly(weekEntries);
     const plan = buildRoundingPlan(synced);
 
     summaries.push({
-      weekStart: weekStartStr,
-      weekEnd: fmtDate(sunday),
-      label: formatWeekLabel(monday),
+      ...period,
       totalMinutes: weekEntries.reduce((s, e) => s + e.minutes, 0),
       entryCount: weekEntries.length,
       groupsToRound: plan.filter((p) => p.difference > 0).length,
@@ -94,7 +86,27 @@ function buildWeekSummaries(entries: TimeEntry[]): WeekSummary[] {
     });
   }
 
-  return summaries.sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+  return summaries.sort((a, b) => b.start.localeCompare(a.start));
+}
+
+/** Re-read the ±30-day entry window after a write so statuses reflect AgileDay. */
+async function reloadEntries(
+  api: ApiProvider,
+  employeeId: string,
+  dispatch: (a: AppAction) => void
+) {
+  dispatch({ type: "SET_LOADING", payload: true });
+  try {
+    const now = new Date();
+    const past = new Date(now);
+    past.setDate(past.getDate() - 30);
+    const future = new Date(now);
+    future.setDate(future.getDate() + 30);
+    const entries = await api.getTimeEntries(employeeId, fmtDate(past), fmtDate(future));
+    dispatch({ type: "SET_ENTRIES", payload: entries });
+  } finally {
+    dispatch({ type: "SET_LOADING", payload: false });
+  }
 }
 
 // --- Status badge ---
@@ -214,7 +226,7 @@ function RoundedTotalInput({
 
 // --- Main component ---
 
-export function FinalizeView({ onBack, onMarkSubmitted }: FinalizeViewProps) {
+export function FinalizeView({ onBack }: FinalizeViewProps) {
   const { state } = useApp();
   const [selectedWeek, setSelectedWeek] = useState<WeekSummary | null>(null);
   const [showInfo, setShowInfo] = useState(false);
@@ -262,7 +274,7 @@ export function FinalizeView({ onBack, onMarkSubmitted }: FinalizeViewProps) {
           onShowInfo={() => setShowInfo(true)}
         />
       ) : (
-        <WeekList weeks={weeks} onSelect={setSelectedWeek} onMarkSubmitted={onMarkSubmitted} />
+        <WeekList weeks={weeks} onSelect={setSelectedWeek} />
       )}
     </div>
   );
@@ -273,11 +285,9 @@ export function FinalizeView({ onBack, onMarkSubmitted }: FinalizeViewProps) {
 function WeekList({
   weeks,
   onSelect,
-  onMarkSubmitted,
 }: {
   weeks: WeekSummary[];
   onSelect: (w: WeekSummary) => void;
-  onMarkSubmitted: (weekStart: string) => void;
 }) {
   if (weeks.length === 0) {
     return (
@@ -291,7 +301,7 @@ function WeekList({
     <div className="px-4 py-3 space-y-2">
       {weeks.map((week) => (
         <div
-          key={week.weekStart}
+          key={week.start}
           role="button"
           tabIndex={0}
           onClick={() => onSelect(week)}
@@ -320,19 +330,70 @@ function WeekList({
               </>
             )}
           </div>
-          {week.status === "rounded" && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onMarkSubmitted(week.weekStart);
-              }}
-              className="mt-2 w-full py-1.5 text-[10px] font-medium text-primary bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors"
-            >
-              Mark as submitted
-            </button>
-          )}
+          {week.status === "rounded" && week.unsavedCount === 0 && <SubmitButton week={week} />}
         </div>
       ))}
+    </div>
+  );
+}
+
+// --- Submit to AgileDay ---
+
+function SubmitButton({ week }: { week: WeekSummary }) {
+  const { state, dispatch } = useApp();
+  const api = useApi();
+  const [confirming, setConfirming] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit() {
+    if (!state.employee) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await api.submitTimesheet(state.employee.id, week.weekStart, week.month);
+      await reloadEntries(api, state.employee.id, dispatch);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit timesheet");
+      setSubmitting(false);
+      setConfirming(false);
+    }
+  }
+
+  const btn = "py-1.5 text-[10px] font-medium rounded-lg transition-colors disabled:opacity-50";
+
+  return (
+    // Clicks here must not open the week detail behind it
+    <div className="mt-2 space-y-1.5" onClick={(e) => e.stopPropagation()} role="presentation">
+      {error && (
+        <p className="text-[10px] text-danger bg-danger/10 rounded-lg px-2 py-1">{error}</p>
+      )}
+      {confirming ? (
+        <div className="flex items-center gap-2">
+          <span className="flex-1 text-[10px] text-text-muted">Submit {week.label}?</span>
+          <button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className={`${btn} px-3 text-white bg-primary hover:bg-primary-dark`}
+          >
+            {submitting ? "Submitting..." : "Yes, submit"}
+          </button>
+          <button
+            onClick={() => setConfirming(false)}
+            disabled={submitting}
+            className={`${btn} px-3 text-text-muted bg-bg hover:bg-border`}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setConfirming(true)}
+          className={`${btn} w-full text-primary bg-primary/10 hover:bg-primary/20`}
+        >
+          Submit to AgileDay
+        </button>
+      )}
     </div>
   );
 }
@@ -401,19 +462,7 @@ function WeekDetail({
         minutes: e.adjustedMinutes,
       }));
       await api.batchUpdateEntries(state.employee.id, updates);
-
-      // Trigger sync to reload fresh data
-      dispatch({ type: "SET_LOADING", payload: true });
-      const fmt = (d: Date) =>
-        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      const now = new Date();
-      const past = new Date(now);
-      past.setDate(past.getDate() - 30);
-      const future = new Date(now);
-      future.setDate(future.getDate() + 30);
-      const entries = await api.getTimeEntries(state.employee.id, fmt(past), fmt(future));
-      dispatch({ type: "SET_ENTRIES", payload: entries });
-      dispatch({ type: "SET_LOADING", payload: false });
+      await reloadEntries(api, state.employee.id, dispatch);
 
       onRounded();
     } catch (err) {
@@ -578,7 +627,10 @@ function ProjectGroupSection({
             <RoundedTotalInput group={group} onChange={onOverride} />
           </>
         ) : (
-          <span className="text-text-muted">{fmtHM(group.totalMinutes)}</span>
+          // totalMinutes counts only unsubmitted entries (what rounding touches); show them all
+          <span className="text-text-muted">
+            {fmtHM(group.entries.reduce((s, e) => s + e.currentMinutes, 0))}
+          </span>
         )}
         {isLocked && (
           <svg
