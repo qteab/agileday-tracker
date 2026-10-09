@@ -28,6 +28,7 @@ import type { Project, TimeEntry } from "../api/types";
 import { loadTimerState, saveTimerState, clearTimerState } from "./timer-store";
 import { loadUnsavedEntries, saveUnsavedEntries } from "./unsaved-store";
 import { loadFlexConfig } from "./flex-store";
+import { addDays } from "../utils/date-range";
 import { loadVacationConfig } from "./vacation-store";
 import { loadDisplayPrefs } from "./display-store";
 import {
@@ -770,7 +771,13 @@ async function loadAndApplyBalanceConfigs(
   const earliestStart = startDates.sort()[0];
   if (earliestStart < windowStartDate) {
     try {
-      const flexEntries = await api.getTimeEntries(employeeId, earliestStart, windowStartDate);
+      // getTimeEntries' endDate is inclusive and the window already has its
+      // first day, so stop the day before or that day is counted twice
+      const flexEntries = await api.getTimeEntries(
+        employeeId,
+        earliestStart,
+        addDays(windowStartDate, -1)
+      );
       if (!isCancelled()) dispatch({ type: "SET_FLEX_ENTRIES", payload: flexEntries });
     } catch {
       // Balances will use available entries only
