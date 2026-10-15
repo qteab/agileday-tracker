@@ -95,6 +95,55 @@ describe("sync accounting", () => {
     expect(unsyncedGroups(entries, sync)).toEqual([]);
     expect(accountedMinutes(entries, sync, task.id, "2026-10-02")).toBe(65);
   });
+
+  it("syncs the difference when a synced entry is lengthened in ClickUp", () => {
+    // Synced at 1 minute, then edited in ClickUp to 3 hours.
+    const sync = markSynced({ since, synced: {} }, [e("a", day, 1), entries[2]]);
+    const edited = [e("a", day - 3 * 3600_000 + 60_000, 180), entries[2]];
+    expect(accountedMinutes(edited, sync, task.id, "2026-10-02")).toBe(16);
+    const groups = unsyncedGroups(edited, sync);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ minutes: 179, edited: true });
+    expect(groups[0].entries.map((x) => x.id)).toEqual(["a"]);
+
+    const after = markSynced(sync, groups[0].entries);
+    expect(unsyncedGroups(edited, after)).toEqual([]);
+    expect(accountedMinutes(edited, after, task.id, "2026-10-02")).toBe(195);
+  });
+
+  it("takes time off when a synced entry is shortened in ClickUp", () => {
+    const sync = markSynced({ since, synced: {} }, [entries[1]]);
+    const groups = unsyncedGroups([e("a", day, 20)], sync);
+    expect(groups[0]).toMatchObject({ minutes: -10, edited: true });
+  });
+
+  it("nets new and edited time for the same task and day", () => {
+    const sync = markSynced({ since, synced: {} }, [entries[1]]);
+    const groups = unsyncedGroups([e("a", day, 20), entries[2]], sync);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ minutes: 5, edited: true });
+  });
+
+  it("does not follow edits to old-format or ignored entries", () => {
+    const legacy = { since, synced: { a: day } };
+    const edited = [e("a", day, 180)];
+    expect(unsyncedGroups(edited, legacy)).toEqual([]);
+    expect(accountedMinutes(edited, legacy, task.id, "2026-10-02")).toBe(180);
+
+    const ignored = markSynced({ since, synced: {} }, [entries[1]], { counted: false });
+    expect(ignored.synced.a).toBe(day);
+    expect(unsyncedGroups(edited, ignored)).toEqual([]);
+  });
+
+  it("prunes old records of either format", () => {
+    const old = Date.now() - 50 * 86_400_000;
+    const recent = Date.now() - 86_400_000;
+    const sync = {
+      since,
+      synced: { x: old, y: { start: old, minutes: 5 }, z: { start: recent, minutes: 5 } },
+    };
+    expect(Object.keys(markSynced(sync, []).synced)).toEqual(["z"]);
+  });
 });
 
 describe("accounts", () => {

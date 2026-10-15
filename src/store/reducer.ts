@@ -139,7 +139,12 @@ export type AppAction =
   | { type: "SET_CLICKUP"; payload: ClickUpStored | null }
   | { type: "SET_CLICKUP_ACCOUNT"; payload: ClickUpAccount }
   | { type: "REMOVE_CLICKUP_ACCOUNT"; payload: { token: string } }
-  | { type: "MARK_CLICKUP_SYNCED"; payload: Pick<ClickUpTimeEntry, "id" | "start">[] }
+  | {
+      type: "MARK_CLICKUP_SYNCED";
+      payload: Pick<ClickUpTimeEntry, "id" | "start" | "duration">[];
+      /** Ignored rather than added to AgileDay. */
+      ignored?: boolean;
+    }
   | { type: "SET_CLICKUP_ENTRIES"; payload: ClickUpTimeEntry[] | null }
   | { type: "ADD_CLICKUP_ENTRY"; payload: ClickUpTimeEntry }
   | { type: "REMOVE_CLICKUP_ENTRIES"; payload: string[] }
@@ -271,12 +276,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           accounts.length > 0 && state.clickup ? { ...state.clickup, config: { accounts } } : null,
       };
     }
-    case "MARK_CLICKUP_SYNCED":
+    case "MARK_CLICKUP_SYNCED": {
       if (!state.clickup) return state;
-      return {
-        ...state,
-        clickup: { ...state.clickup, sync: markSynced(state.clickup.sync, action.payload) },
-      };
+      const counted = !action.ignored;
+      const sync = markSynced(state.clickup.sync, action.payload, { counted });
+      return { ...state, clickup: { ...state.clickup, sync } };
+    }
     case "SET_CLICKUP_ENTRIES":
       return { ...state, clickupEntries: action.payload };
     case "ADD_CLICKUP_ENTRY":

@@ -654,12 +654,21 @@ export function ClickUpCard({
   );
 }
 
+/** Banner time like "3:00", or "−0:20" when an edit took time off. */
+function signedTime(minutes: number): string {
+  const time = formatMinutes(Math.abs(minutes)).slice(0, -3);
+  if (minutes < 0) return `−${time}`;
+  return time;
+}
+
 /**
  * Brings time tracked in ClickUp itself into the app:
  * - a timer running in ClickUp can be taken over ("Track here");
  * - finished ClickUp time on a task already linked to that day's AgileDay
  *   entry is added automatically;
- * - other finished ClickUp time is offered one task at a time (Add / Ignore).
+ * - other finished ClickUp time is offered one task at a time (Add / Ignore);
+ * - an already-synced entry edited in ClickUp counts as the difference, handled
+ *   the same way (added automatically when its task is linked, else offered).
  */
 export function ClickUpBanner() {
   const { state, dispatch } = useApp();
@@ -702,8 +711,10 @@ export function ClickUpBanner() {
     const group = groups.find((g) => linkedEntry(g.date, g.task.id));
     const target = group && linkedEntry(group.date, group.task.id);
     if (!group || !target) return;
-    busy.current = true;
     dispatch({ type: "MARK_CLICKUP_SYNCED", payload: group.entries });
+    // Edits that cancel each other out leave AgileDay as it is.
+    if (group.minutes === 0) return;
+    busy.current = true;
     void addTime({
       projectId: target.projectId,
       taskId: target.taskId ?? null,
@@ -719,6 +730,7 @@ export function ClickUpBanner() {
   const showRunning = clickupRunning && clickupRunning.id !== adoptedId;
   const pending = groups.find((g) => !linkedEntry(g.date, g.task.id));
   if (!showRunning && !pending) return null;
+  const pendingTime = pending ? signedTime(pending.minutes) : "";
 
   const runningTask = clickupRunning
     ? { id: clickupRunning.taskId, name: clickupRunning.taskName, teamId: clickupRunning.teamId }
@@ -742,17 +754,29 @@ export function ClickUpBanner() {
       ) : pending ? (
         <>
           <span className="flex-1 min-w-0 truncate text-text">
-            <b>{pending.task.name}</b> · {formatMinutes(pending.minutes).slice(0, -3)} in ClickUp,
-            not in AgileDay
+            {pending.edited ? (
+              <>
+                <b>{pending.task.name}</b> · edited in ClickUp, {pendingTime} not in AgileDay
+              </>
+            ) : (
+              <>
+                <b>{pending.task.name}</b> · {pendingTime} in ClickUp, not in AgileDay
+              </>
+            )}
           </span>
+          {/* Shortened time with no editable entry to take it from: only Ignore. */}
+          {pending.minutes > 0 && (
+            <button
+              onClick={() => setDialog("add")}
+              className="px-2.5 py-1 font-semibold text-white bg-primary rounded-md hover:bg-primary-dark"
+            >
+              Add
+            </button>
+          )}
           <button
-            onClick={() => setDialog("add")}
-            className="px-2.5 py-1 font-semibold text-white bg-primary rounded-md hover:bg-primary-dark"
-          >
-            Add
-          </button>
-          <button
-            onClick={() => dispatch({ type: "MARK_CLICKUP_SYNCED", payload: pending.entries })}
+            onClick={() =>
+              dispatch({ type: "MARK_CLICKUP_SYNCED", payload: pending.entries, ignored: true })
+            }
             className="px-2 py-1 font-medium text-text-muted hover:text-text"
           >
             Ignore
@@ -783,7 +807,7 @@ export function ClickUpBanner() {
       {dialog === "add" && pending && (
         <ClickUpDialog
           title="Add ClickUp time to AgileDay"
-          actionLabel={`Add ${formatMinutes(pending.minutes).slice(0, -3)}`}
+          actionLabel={`Add ${pendingTime}`}
           task={pending.task}
           usageDate={pending.date}
           onClose={() => setDialog(null)}

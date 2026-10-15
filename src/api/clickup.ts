@@ -135,8 +135,32 @@ export function entryDate(e: ClickUpTimeEntry): string {
 export interface ClickUpSyncState {
   /** workspace id → start of the day it was connected (ms) */
   since: Record<string, number>;
-  /** entry id → start ms (start kept so old ids can be pruned) */
-  synced: Record<string, number>;
+  /**
+   * entry id → what was counted. A bare number is the start ms only (older
+   * records, and ignored entries): those count as handled whatever their
+   * duration. A record also holds the minutes AgileDay got, so an entry whose
+   * duration is edited in ClickUp afterwards has the difference synced.
+   */
+  synced: Record<string, number | SyncedRecord>;
+}
+
+export interface SyncedRecord {
+  /** Unix ms, kept so old ids can be pruned */
+  start: number;
+  /** Minutes this entry added to AgileDay */
+  minutes: number;
+}
+
+function syncedStart(value: number | SyncedRecord): number {
+  if (typeof value === "number") return value;
+  return value.start;
+}
+
+/** Minutes AgileDay holds for an entry, if known; undefined for untracked ones. */
+function countedMinutes(e: ClickUpTimeEntry, sync: ClickUpSyncState): number | undefined {
+  const value = sync.synced[e.id];
+  if (value === undefined || typeof value === "number") return undefined;
+  return value.minutes;
 }
 
 export function isAccounted(e: ClickUpTimeEntry, sync: ClickUpSyncState): boolean {
@@ -168,30 +192,63 @@ export function upsertAccount(
   };
 }
 
-/** Minutes per ClickUp task already in AgileDay for one date. */
+/**
+ * Minutes per ClickUp task already in AgileDay for one date. An entry edited
+ * in ClickUp since it was synced counts with the minutes AgileDay got, until
+ * the difference is synced too.
+ */
 export function accountedMinutes(
   entries: ClickUpTimeEntry[],
   sync: ClickUpSyncState,
   taskId: string,
   date: string
 ): number {
-  return entries
-    .filter((e) => e.taskId === taskId && e.duration > 0 && entryDate(e) === date)
-    .filter((e) => isAccounted(e, sync))
-    .reduce((sum, e) => sum + sessionMinutes(e.duration), 0);
+  let total = 0;
+  for (const e of entries) {
+    if (e.taskId !== taskId || e.duration <= 0 || entryDate(e) !== date) continue;
+    if (!isAccounted(e, sync)) continue;
+    const counted = countedMinutes(e, sync);
+    if (counted === undefined) total += sessionMinutes(e.duration);
+    else total += counted;
+  }
+  return total;
 }
 
-/** Completed ClickUp time not yet in AgileDay, grouped per (date, task). */
+/** Minutes an entry still has to add to AgileDay; negative when it shrank. */
+function pendingMinutes(e: ClickUpTimeEntry, sync: ClickUpSyncState): number {
+  if (e.duration <= 0) return 0;
+  const current = sessionMinutes(e.duration);
+  if (!isAccounted(e, sync)) return current;
+  const counted = countedMinutes(e, sync);
+  if (counted === undefined) return 0;
+  return current - counted;
+}
+
+export interface UnsyncedGroup {
+  date: string;
+  task: ClickUpTask;
+  entries: ClickUpTimeEntry[];
+  /** Minutes to add to AgileDay; negative when synced entries were shortened. */
+  minutes: number;
+  /** True when the group holds already-synced entries edited in ClickUp. */
+  edited: boolean;
+}
+
+/**
+ * ClickUp time not yet in AgileDay, grouped per (date, task): completed entries
+ * never synced, plus the difference on synced entries whose duration was
+ * edited in ClickUp afterwards.
+ * ponytail: an entry moved to another day in ClickUp keeps its minutes on the
+ * day it was synced; only its duration change is followed.
+ */
 export function unsyncedGroups(
   entries: ClickUpTimeEntry[],
   sync: ClickUpSyncState
-): { date: string; task: ClickUpTask; entries: ClickUpTimeEntry[]; minutes: number }[] {
-  const groups = new Map<
-    string,
-    { date: string; task: ClickUpTask; entries: ClickUpTimeEntry[]; minutes: number }
-  >();
+): UnsyncedGroup[] {
+  const groups = new Map<string, UnsyncedGroup>();
   for (const e of entries) {
-    if (e.duration <= 0 || isAccounted(e, sync)) continue;
+    const minutes = pendingMinutes(e, sync);
+    if (minutes === 0) continue;
     const date = entryDate(e);
     const key = `${date}|${e.taskId}`;
     const g = groups.get(key) ?? {
@@ -199,22 +256,35 @@ export function unsyncedGroups(
       task: { id: e.taskId, name: e.taskName, teamId: e.teamId },
       entries: [],
       minutes: 0,
+      edited: false,
     };
     g.entries.push(e);
-    g.minutes += sessionMinutes(e.duration);
+    g.minutes += minutes;
+    if (isAccounted(e, sync)) g.edited = true;
     groups.set(key, g);
   }
   return [...groups.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/**
+ * Record entries as counted in AgileDay with their current duration. Ignored
+ * entries (`counted: false`) keep only their start, so later edits to them are
+ * not synced either.
+ */
 export function markSynced(
   sync: ClickUpSyncState,
-  entries: Pick<ClickUpTimeEntry, "id" | "start">[]
+  entries: Pick<ClickUpTimeEntry, "id" | "start" | "duration">[],
+  { counted = true }: { counted?: boolean } = {}
 ): ClickUpSyncState {
   const cutoff = Date.now() - 45 * 86_400_000;
-  const synced: Record<string, number> = {};
-  for (const [id, start] of Object.entries(sync.synced)) if (start >= cutoff) synced[id] = start;
-  for (const e of entries) synced[e.id] = e.start;
+  const synced: Record<string, number | SyncedRecord> = {};
+  for (const [id, value] of Object.entries(sync.synced)) {
+    if (syncedStart(value) >= cutoff) synced[id] = value;
+  }
+  for (const e of entries) {
+    if (counted) synced[e.id] = { start: e.start, minutes: sessionMinutes(e.duration) };
+    else synced[e.id] = e.start;
+  }
   return { ...sync, synced };
 }
 

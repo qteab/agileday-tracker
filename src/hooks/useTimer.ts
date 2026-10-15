@@ -208,8 +208,9 @@ export function useAddTime() {
 
       let workingId: string;
       const description = clickupTasks.reduce(withClickupLine, existing?.description ?? "");
-      // Total minutes = existing entry + this session (app is source of truth)
-      const totalMinutes = (existing?.minutes ?? 0) + minutes;
+      // Total minutes = existing entry + this session (app is source of truth).
+      // `minutes` is negative when a ClickUp entry was shortened after syncing.
+      const totalMinutes = Math.max(0, (existing?.minutes ?? 0) + minutes);
 
       if (existing) {
         workingId = existing.id;
@@ -325,7 +326,7 @@ export function useLogClickUp() {
           } else {
             id = (await clickupClient.createTimeEntry(teamId, task.id, start, duration)).id;
           }
-          dispatch({ type: "MARK_CLICKUP_SYNCED", payload: [{ id, start }] });
+          dispatch({ type: "MARK_CLICKUP_SYNCED", payload: [{ id, start, duration }] });
           dispatch({ type: "REMOVE_CLICKUP_ENTRIES", payload: [localId] });
           dispatch({ type: "ADD_CLICKUP_ENTRY", payload: { id, teamId, ...shown } });
         } catch (err) {
