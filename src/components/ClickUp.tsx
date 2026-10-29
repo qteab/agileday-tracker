@@ -659,14 +659,16 @@ export function ClickUpCard({
  * - a timer running in ClickUp can be taken over ("Track here");
  * - finished ClickUp time on a task already linked to that day's AgileDay
  *   entry is added automatically;
- * - other finished ClickUp time is offered one task at a time (Add / Ignore).
+ * - other finished ClickUp time is offered per task and day (Add / Ignore).
  */
 export function ClickUpBanner() {
   const { state, dispatch } = useApp();
   const addTime = useAddTime();
   const ensureLine = useEnsureClickUpLine();
   const { startForCard } = useTimer();
-  const [dialog, setDialog] = useState<"adopt" | "add" | null>(null);
+  const [dialog, setDialog] = useState<"adopt" | ReturnType<typeof unsyncedGroups>[number] | null>(
+    null
+  );
 
   const { clickup, clickupEntries, clickupRunning, timer } = state;
   const adoptedId = timer.clickupTask?.timerId;
@@ -717,18 +719,18 @@ export function ClickUpBanner() {
   }, [groups, linkedEntry, state.loading, addTime, dispatch, round]);
 
   const showRunning = clickupRunning && clickupRunning.id !== adoptedId;
-  const pending = groups.find((g) => !linkedEntry(g.date, g.task.id));
-  if (!showRunning && !pending) return null;
+  const pending = groups.filter((g) => !linkedEntry(g.date, g.task.id));
+  if (!showRunning && pending.length === 0) return null;
 
   const runningTask = clickupRunning
     ? { id: clickupRunning.taskId, name: clickupRunning.taskName, teamId: clickupRunning.teamId }
     : null;
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2 bg-bg-card border-b border-border text-xs">
-      <ClickUpLogo size={14} />
-      {showRunning && runningTask ? (
-        <>
+    <div className="flex flex-col gap-1.5 px-4 py-2 bg-bg-card border-b border-border text-xs max-h-40 overflow-y-auto">
+      {showRunning && runningTask && (
+        <div className="flex items-center gap-2">
+          <ClickUpLogo size={14} />
           <span className="flex-1 min-w-0 truncate text-text">
             Timer running in ClickUp · <b>{runningTask.name}</b>
           </span>
@@ -738,27 +740,30 @@ export function ClickUpBanner() {
           >
             Track here
           </button>
-        </>
-      ) : pending ? (
-        <>
+        </div>
+      )}
+      {pending.map((g) => (
+        <div key={`${g.date}|${g.task.id}`} className="flex items-center gap-2">
+          <ClickUpLogo size={14} />
           <span className="flex-1 min-w-0 truncate text-text">
-            <b>{pending.task.name}</b> · {formatMinutes(pending.minutes).slice(0, -3)} in ClickUp,
-            not in AgileDay
+            <b>{g.task.name}</b> · {formatMinutes(g.minutes).slice(0, -3)}
+            {g.date !== localDate(new Date()) && ` on ${g.date.slice(5)}`} in ClickUp, not in
+            AgileDay
           </span>
           <button
-            onClick={() => setDialog("add")}
+            onClick={() => setDialog(g)}
             className="px-2.5 py-1 font-semibold text-white bg-primary rounded-md hover:bg-primary-dark"
           >
             Add
           </button>
           <button
-            onClick={() => dispatch({ type: "MARK_CLICKUP_SYNCED", payload: pending.entries })}
+            onClick={() => dispatch({ type: "MARK_CLICKUP_SYNCED", payload: g.entries })}
             className="px-2 py-1 font-medium text-text-muted hover:text-text"
           >
             Ignore
           </button>
-        </>
-      ) : null}
+        </div>
+      ))}
 
       {dialog === "adopt" && clickupRunning && runningTask && (
         <ClickUpDialog
@@ -780,22 +785,22 @@ export function ClickUpBanner() {
           }}
         />
       )}
-      {dialog === "add" && pending && (
+      {typeof dialog === "object" && dialog && (
         <ClickUpDialog
           title="Add ClickUp time to AgileDay"
-          actionLabel={`Add ${formatMinutes(pending.minutes).slice(0, -3)}`}
-          task={pending.task}
-          usageDate={pending.date}
+          actionLabel={`Add ${formatMinutes(dialog.minutes).slice(0, -3)}`}
+          task={dialog.task}
+          usageDate={dialog.date}
           onClose={() => setDialog(null)}
           onConfirm={(projectId, taskId, task) => {
             setDialog(null);
-            dispatch({ type: "MARK_CLICKUP_SYNCED", payload: pending.entries });
+            dispatch({ type: "MARK_CLICKUP_SYNCED", payload: dialog.entries });
             void addTime({
               projectId,
               taskId,
-              date: pending.date,
-              minutes: pending.minutes,
-              startTime: new Date(pending.entries[0].start).toISOString(),
+              date: dialog.date,
+              minutes: dialog.minutes,
+              startTime: new Date(dialog.entries[0].start).toISOString(),
               clickupTasks: [task],
             });
           }}
