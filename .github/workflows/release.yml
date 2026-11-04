@@ -104,6 +104,7 @@ jobs:
 
             **First install:** Right-click the app → Open → confirm (one time only).
             **Updates:** The app checks for updates automatically.
+          generateReleaseNotes: true
           releaseDraft: false
           prerelease: false
 
