@@ -57,7 +57,7 @@ macOS menu bar time tracker that syncs to AgileDay. Tauri v2 (Rust) shell + Reac
 
 ### Telemetry (PostHog)
 
-`src/posthog.ts` — product events, unhandled JS errors and AgileDay API error logs, EU host. Only active in builds that get `VITE_POSTHOG_KEY`/`VITE_POSTHOG_HOST` (release CI reads repo variables `POSTHOG_KEY`/`POSTHOG_HOST`); never in tests, and in dev only with `VITE_POSTHOG_ENABLE_IN_DEV=true`. Explicit events only — no autocapture, no session replay, no remote scripts. Never put entry descriptions, project or customer names in event properties. See `.claude/docs/architecture.md` → Telemetry.
+`src/posthog.ts` — product events, unhandled JS errors and AgileDay API error logs, EU host. Only active in builds that get `VITE_POSTHOG_KEY`/`VITE_POSTHOG_HOST` (release CI reads repo variables `POSTHOG_KEY`/`POSTHOG_HOST`); never in tests, and in dev only with `VITE_POSTHOG_ENABLE_IN_DEV=true`. Anonymous: no `identify()`, no person profiles, no GeoIP, exception messages scrubbed (`src/utils/telemetry-scrub.ts`). Explicit events only — no autocapture, no session replay, no remote scripts. Never put employee ID, email, name, entry descriptions, project or customer names in events. See `.claude/docs/architecture.md` → Telemetry.
 
 ## API endpoints used
 

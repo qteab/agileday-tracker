@@ -24,8 +24,7 @@ import {
   buildApiBaseUrl,
   DEFAULT_CONNECTION,
 } from "../api/auth-manager";
-import type { Employee, Project, TimeEntry } from "../api/types";
-import { posthogClient } from "../posthog";
+import type { Project, TimeEntry } from "../api/types";
 import { loadTimerState, saveTimerState, clearTimerState } from "./timer-store";
 import { loadUnsavedEntries, saveUnsavedEntries } from "./unsaved-store";
 import { loadFlexConfig } from "./flex-store";
@@ -70,7 +69,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [timerLoaded, setTimerLoaded] = useState(false);
   const [unsavedLoaded, setUnsavedLoaded] = useState(false);
   const authStateRef = useRef<AuthState | null>(null);
-  const identifiedEmployeeIdRef = useRef<string | null>(null);
 
   authStateRef.current = authState;
 
@@ -87,8 +85,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         saveAuthState(newState).catch(() => {});
       },
       () => {
-        posthogClient?.reset();
-        identifiedEmployeeIdRef.current = null;
         setAuthState(null);
         setIsConnected(false);
         dispatch({ type: "SET_ERROR", payload: "Session expired — please sign in again" });
@@ -105,8 +101,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     await clearAuth().catch(() => {});
-    posthogClient?.reset();
-    identifiedEmployeeIdRef.current = null;
     setAuthState(null);
     setIsConnected(false);
     dispatch({ type: "CLEAR_ENTRIES" });
@@ -127,9 +121,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useUnsavedRestore(dispatch, setUnsavedLoaded);
   useUnsavedPersistence(state.entries, unsavedLoaded);
   useTrayDisplayPush(state);
-  useAuthBootstrap(setAuthState, setIsConnected, setIsAuthLoading, identifiedEmployeeIdRef);
+  useAuthBootstrap(setAuthState, setIsConnected, setIsAuthLoading);
   useBackgroundTokenRefresh(isConnected, authState?.refreshToken, authStateRef, setAuthState);
-  useConnectedDataLoad(api, isConnected, syncCounter, dispatch, identifiedEmployeeIdRef);
+  useConnectedDataLoad(api, isConnected, syncCounter, dispatch);
 
   const clickupAccounts = state.clickup?.config.accounts;
   const clickupClient = useMemo(
@@ -625,8 +619,7 @@ function useInactivitySync(dispatch: React.Dispatch<AppAction>) {
 function useAuthBootstrap(
   setAuthState: (auth: AuthState | null) => void,
   setIsConnected: (connected: boolean) => void,
-  setIsAuthLoading: (loading: boolean) => void,
-  identifiedEmployeeIdRef: React.RefObject<string | null>
+  setIsAuthLoading: (loading: boolean) => void
 ) {
   useEffect(() => {
     loadAuthState()
@@ -639,8 +632,6 @@ function useAuthBootstrap(
         }
         if (!saved.refreshToken) {
           await clearAuth().catch(() => {});
-          posthogClient?.reset();
-          identifiedEmployeeIdRef.current = null;
           return;
         }
         try {
@@ -651,13 +642,11 @@ function useAuthBootstrap(
           setIsConnected(true);
         } catch {
           await clearAuth().catch(() => {});
-          posthogClient?.reset();
-          identifiedEmployeeIdRef.current = null;
         }
       })
       .catch(() => {})
       .finally(() => setIsAuthLoading(false));
-  }, [setAuthState, setIsConnected, setIsAuthLoading, identifiedEmployeeIdRef]);
+  }, [setAuthState, setIsConnected, setIsAuthLoading]);
 }
 
 function useBackgroundTokenRefresh(
@@ -694,8 +683,7 @@ function useConnectedDataLoad(
   api: ApiProvider | null,
   isConnected: boolean,
   syncCounter: number,
-  dispatch: React.Dispatch<AppAction>,
-  identifiedEmployeeIdRef: React.RefObject<string | null>
+  dispatch: React.Dispatch<AppAction>
 ) {
   useEffect(() => {
     if (!api || !isConnected) return;
@@ -709,7 +697,6 @@ function useConnectedDataLoad(
       try {
         const employee = await api.getCurrentEmployee();
         if (cancelled) return;
-        identifyEmployee(employee, identifiedEmployeeIdRef);
         dispatch({ type: "SET_EMPLOYEE", payload: employee });
 
         const [projects, absenceProjects, myProjects] = await Promise.all([
@@ -755,20 +742,7 @@ function useConnectedDataLoad(
     return () => {
       cancelled = true;
     };
-  }, [api, isConnected, syncCounter, dispatch, identifiedEmployeeIdRef]);
-}
-
-function identifyEmployee(
-  employee: Employee,
-  identifiedEmployeeIdRef: React.RefObject<string | null>
-) {
-  if (identifiedEmployeeIdRef.current === employee.id) return;
-
-  posthogClient?.identify(employee.id, {
-    email: employee.email,
-    name: employee.name,
-  });
-  identifiedEmployeeIdRef.current = employee.id;
+  }, [api, isConnected, syncCounter, dispatch]);
 }
 
 async function loadAndApplyBalanceConfigs(

@@ -5,6 +5,7 @@ import { getVersion } from "@tauri-apps/api/app";
 // runs remote scripts — the webview has access to Tauri IPC.
 import "posthog-js/dist/exception-autocapture";
 import "posthog-js/dist/logs";
+import { scrubExceptionEvent } from "./utils/telemetry-scrub";
 
 const posthogKey = import.meta.env.VITE_POSTHOG_KEY;
 const posthogHost = import.meta.env.VITE_POSTHOG_HOST;
@@ -27,6 +28,10 @@ function initPostHog(apiKey: string, apiHost: string): PostHog {
     api_host: apiHost,
     defaults: "2026-08-30",
     disable_external_dependency_loading: true,
+    // Anonymous by design: no identify(), no person profiles, no GeoIP.
+    // Each install keeps a random ID so unique-user counts still work.
+    person_profiles: "never",
+    before_send: scrubExceptionEvent,
     // Explicit events only. Session replay would record entry descriptions,
     // customer and project names, so it stays off even if enabled in PostHog.
     autocapture: false,
@@ -61,6 +66,8 @@ function createPostHogClient(): PostHog | undefined {
   if (!isTelemetryEnabled() || !posthogKey || !posthogHost) return undefined;
 
   const client = initPostHog(posthogKey, posthogHost);
+  // Skip city/country lookup from the IP address on every event.
+  client.register({ $geoip_disable: true });
   void registerAppVersion(client);
   return client;
 }
