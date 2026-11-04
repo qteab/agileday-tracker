@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useApp, useApi } from "../store/context";
+import { posthogClient } from "../posthog";
 import { useTimer, formatTime, formatMinutes } from "../hooks/useTimer";
 import { ProjectPicker } from "./ProjectPicker";
 import { TaskPicker } from "./TaskPicker";
@@ -99,6 +100,10 @@ export function usePersistEntry(entry: TimeEntry) {
               syncStatus: "synced",
             },
           },
+        });
+        posthogClient?.capture("time_entry_updated", {
+          description_changed: overrides.description !== undefined,
+          minutes_changed: overrides.minutes !== undefined,
         });
       } catch {
         dispatch({
@@ -431,6 +436,7 @@ export function ProjectCard({
             },
           },
         });
+        posthogClient?.capture("time_entry_updated", { task_changed: true });
       } catch (err) {
         dispatch({
           type: "UPDATE_ENTRY",
@@ -541,12 +547,14 @@ export function ProjectCard({
     // Local-only entries were never persisted — remove without an API call.
     if (isLocalOnlyEntry(entry)) {
       dispatch({ type: "DELETE_ENTRY", payload: entry.id });
+      posthogClient?.capture("time_entry_deleted", { persisted: false });
       return;
     }
 
     try {
       await api.deleteTimeEntry([entry.id]);
       dispatch({ type: "DELETE_ENTRY", payload: entry.id });
+      posthogClient?.capture("time_entry_deleted", { persisted: true });
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Failed to delete entry");
     }

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useApp } from "../store/context";
+import { posthogClient } from "../posthog";
 import { saveFlexConfig, type FlexConfig } from "../store/flex-store";
 import { saveVacationConfig, type VacationConfig } from "../store/vacation-store";
 import {
@@ -887,6 +888,7 @@ function ClickUpSettings() {
       // ClickUp time from today on is offered for AgileDay; older time is
       // assumed to be logged already.
       dispatch({ type: "SET_CLICKUP_ACCOUNT", payload: account });
+      posthogClient?.capture("clickup_connected", { workspace_count: account.teams.length });
       setToken("");
       setAdding(false);
     } catch (err) {
