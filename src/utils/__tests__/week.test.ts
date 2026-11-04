@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+
+import type { TimeEntry } from "../../api/types";
 import {
   getWeekStart,
   fmtDate,
@@ -10,7 +12,6 @@ import {
   getAlertLevel,
   syncedOnly,
 } from "../week";
-import type { TimeEntry } from "../../api/types";
 
 function makeEntry(overrides: Partial<TimeEntry> = {}): TimeEntry {
   return {
@@ -153,7 +154,7 @@ describe("getUnsubmittedWeeks", () => {
     const entries = [makeEntry({ date: "2026-05-05", status: "SAVED" })]; // prev week
     const weeks = getUnsubmittedWeeks(entries, now);
     expect(weeks).toHaveLength(1);
-    expect(weeks[0].start).toBe("2026-05-04");
+    expect(weeks[0]?.start).toBe("2026-05-04");
   });
 
   it("returns multiple weeks when several are unsubmitted", () => {

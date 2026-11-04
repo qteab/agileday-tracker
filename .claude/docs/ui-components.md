@@ -18,16 +18,16 @@ Settings and Finalize are triggered by tray menu events or header buttons.
 
 ### Core (`src/components/`)
 
-| Component | File | Purpose |
-|---|---|---|
-| **ProjectCard** | `ProjectCard.tsx` | Card per project-per-day. Everything is edited **inline** on non-submitted cards: descriptions (contentEditable, save on blur), **time** (click the counter → `H:MM` input; works while running too), **project** + **task** (click the name/tag → inline `chip` pickers), and **delete** (trash icon → confirmation modal with Cancel/Delete; closes on backdrop click or Escape). Past-day cards show a **quick-open** play button that starts the same project+task as a new Today entry (disabled if already tracked today). The delete confirmation is the only modal. |
-| **ProjectCardList** | `ProjectCardList.tsx` | Scrollable list of entries grouped by day. Each day has a header (day name + total) then a column of `ProjectCard` components. |
-| **Fab** | `Fab.tsx` | Floating + button (bottom-right). Opens a centered `Modal` with ProjectPicker + TaskPicker to create a new Today entry and auto-start the timer. The task picker hides tasks already tracked today for the selected project (one entry per project+task+date). Locally-created entries get a `local-` id prefix until first synced. |
-| **entry-edit** (helpers) | `entry-edit.ts` | Pure helpers for card editing: `parseDurationInput`/`formatDurationInput` (duration ⇄ minutes), `computeRunningTimeEdit` (running-time edit math), `isLocalOnlyEntry` (`local-` id prefix check), `usedTaskIds` (task ids already used for a project+date, used to filter the picker). Unit-tested in `entry-edit.test.ts`. |
-| **ProjectPicker** | `ProjectPicker.tsx` | Dropdown for selecting a project. Three groups: "My projects" (allocated, non-absence — plus, when `usageDate` is set, any non-absence project already tracked that day, and the currently-selected project), "Other projects" (shown when searching), and "Absence" (always visible, all `projectType: "ABSENCE"` projects regardless of allocation). Search bar searches all active projects; absence matches stay in the Absence group. The optional `usageDate` prop surfaces that day's tracked projects so a card's own (possibly non-allocated) project is always pickable. |
-| **TaskPicker** | `TaskPicker.tsx` | Dropdown filtered by selected project. Shows billable indicator, and a muted "(global default)" hint on tenant-level tasks. Optional `excludeIds` set hides tasks (used inline to hide tasks already logged for the same project+date, preventing duplicate entries). Renders a disabled "No tasks available" / "Couldn't load tasks" notice instead of vanishing — see below. |
-| **BillableIndicator** | `BillableIndicator.tsx` | 22px square display-only indicator showing if a task is billable (accent $ when billable, grey when not). |
-| **Modal** | `Modal.tsx` | Generic centered modal dialog over a slightly blurred backdrop (`bg-black/20 backdrop-blur-[2px]`). Closes on backdrop click or Escape via `onClose`. Owns the layout so all modals look alike: `title` (bold), optional `subtitle`, optional custom `children`, and `actions` — full-width buttons with `primary`/`secondary`/`danger` variants, `disabled` and `autoFocus` flags. Used for the delete confirmation in ProjectCard and the new-entry dialog in Fab. |
+| Component                | File                    | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **ProjectCard**          | `ProjectCard.tsx`       | Card per project-per-day. Everything is edited **inline** on non-submitted cards: descriptions (contentEditable, save on blur), **time** (click the counter → `H:MM` input; works while running too), **project** + **task** (click the name/tag → inline `chip` pickers), and **delete** (trash icon → confirmation modal with Cancel/Delete; closes on backdrop click or Escape). Past-day cards show a **quick-open** play button that starts the same project+task as a new Today entry (disabled if already tracked today). The delete confirmation is the only modal.        |
+| **ProjectCardList**      | `ProjectCardList.tsx`   | Scrollable list of entries grouped by day. Each day has a header (day name + total) then a column of `ProjectCard` components.                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **Fab**                  | `Fab.tsx`               | Floating + button (bottom-right). Opens a centered `Modal` with ProjectPicker + TaskPicker to create a new Today entry and auto-start the timer. The task picker hides tasks already tracked today for the selected project (one entry per project+task+date). Locally-created entries get a `local-` id prefix until first synced.                                                                                                                                                                                                                                                |
+| **entry-edit** (helpers) | `entry-edit.ts`         | Pure helpers for card editing: `parseDurationInput`/`formatDurationInput` (duration ⇄ minutes), `computeRunningTimeEdit` (running-time edit math), `isLocalOnlyEntry` (`local-` id prefix check), `usedTaskIds` (task ids already used for a project+date, used to filter the picker). Unit-tested in `entry-edit.test.ts`.                                                                                                                                                                                                                                                        |
+| **ProjectPicker**        | `ProjectPicker.tsx`     | Dropdown for selecting a project. Three groups: "My projects" (allocated, non-absence — plus, when `usageDate` is set, any non-absence project already tracked that day, and the currently-selected project), "Other projects" (shown when searching), and "Absence" (always visible, all `projectType: "ABSENCE"` projects regardless of allocation). Search bar searches all active projects; absence matches stay in the Absence group. The optional `usageDate` prop surfaces that day's tracked projects so a card's own (possibly non-allocated) project is always pickable. |
+| **TaskPicker**           | `TaskPicker.tsx`        | Dropdown filtered by selected project. Shows billable indicator, and a muted "(global default)" hint on tenant-level tasks. Optional `excludeIds` set hides tasks (used inline to hide tasks already logged for the same project+date, preventing duplicate entries). Renders a disabled "No tasks available" / "Couldn't load tasks" notice instead of vanishing — see below.                                                                                                                                                                                                     |
+| **BillableIndicator**    | `BillableIndicator.tsx` | 22px square display-only indicator showing if a task is billable (accent $ when billable, grey when not).                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **Modal**                | `Modal.tsx`             | Generic centered modal dialog over a slightly blurred backdrop (`bg-black/20 backdrop-blur-[2px]`). Closes on backdrop click or Escape via `onClose`. Owns the layout so all modals look alike: `title` (bold), optional `subtitle`, optional custom `children`, and `actions` — full-width buttons with `primary`/`secondary`/`danger` variants, `disabled` and `autoFocus` flags. Used for the delete confirmation in ProjectCard and the new-entry dialog in Fab.                                                                                                               |
 
 #### TaskPicker states
 
@@ -40,34 +40,34 @@ timer simply could not start and nothing said why.
 `describeTaskPickerState` (`src/utils/task-picker.ts`) now decides what to show,
 as a pure function so the states are unit-testable without a DOM:
 
-| State | When | Renders |
-|---|---|---|
-| `hidden` | no project selected, or the fetch is still in flight | nothing (loading stays hidden to avoid flashing an empty state) |
-| `notice` | task list empty → "No tasks available"; fetch rejected → "Couldn't load tasks" | a disabled, non-interactive control carrying the label |
-| `ready` | at least one active task | the dropdown; rows whose task is a global default get a muted "(global default)" hint |
+| State    | When                                                                           | Renders                                                                               |
+| -------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `hidden` | no project selected, or the fetch is still in flight                           | nothing (loading stays hidden to avoid flashing an empty state)                       |
+| `notice` | task list empty → "No tasks available"; fetch rejected → "Couldn't load tasks" | a disabled, non-interactive control carrying the label                                |
+| `ready`  | at least one active task                                                       | the dropdown; rows whose task is a global default get a muted "(global default)" hint |
 
-The error check comes *before* the task list, so a stale list left over from the
+The error check comes _before_ the task list, so a stale list left over from the
 previously selected project cannot mask a failed fetch.
 
 ### Views
 
-| Component | File | Purpose |
-|---|---|---|
-| **AllocationView** | `AllocationView.tsx` | Week/month allocation vs actual hours comparison. Shows per-project breakdowns. |
-| **FinalizeView** | `FinalizeView.tsx` | Timesheet submission UI: week summaries, per-day detail, rounding confirmation (15-min increments). |
-| **FlexView** | `FlexView.tsx` | Flex time balance display: hourly delta per week from configured start date. |
-| **SettingsView** | `SettingsView.tsx` | Tabbed settings: Flex (start date, initial hours), Display (menu-bar mode), Account (appearance/theme, inactivity toggle + minutes, name, email, logout). |
-| **LoginScreen** | `LoginScreen.tsx` | OAuth "Sign in with AgileDay" button. Shown when not authenticated. |
+| Component          | File                 | Purpose                                                                                                                                                   |
+| ------------------ | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AllocationView** | `AllocationView.tsx` | Week/month allocation vs actual hours comparison. Shows per-project breakdowns.                                                                           |
+| **FinalizeView**   | `FinalizeView.tsx`   | Timesheet submission UI: week summaries, per-day detail, rounding confirmation (15-min increments).                                                       |
+| **FlexView**       | `FlexView.tsx`       | Flex time balance display: hourly delta per week from configured start date.                                                                              |
+| **SettingsView**   | `SettingsView.tsx`   | Tabbed settings: Flex (start date, initial hours), Display (menu-bar mode), Account (appearance/theme, inactivity toggle + minutes, name, email, logout). |
+| **LoginScreen**    | `LoginScreen.tsx`    | OAuth "Sign in with AgileDay" button. Shown when not authenticated.                                                                                       |
 
 ### Alerts & Indicators
 
-| Component | File | Purpose |
-|---|---|---|
-| **SubmissionAlert** | `SubmissionAlert.tsx` | Banner showing submission deadline for the current week. Dismissable per-week. |
-| **FlexSetupAlert** | `FlexSetupAlert.tsx` | Banner prompting flex configuration if not set up. |
-| **FlexBadge** | `FlexBadge.tsx` | Small badge in header showing current flex balance. Clickable → opens flex settings. |
-| **UpdateChecker** | `UpdateChecker.tsx` | App update notification banner (Tauri updater plugin). |
-| **TabSwitcher** | `TabSwitcher.tsx` | List/Allocation segmented control. Styled with sandbox background, pill-shaped track, bold tabs. |
+| Component            | File                   | Purpose                                                                                                                                                                                                                                                                                                                                 |
+| -------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SubmissionAlert**  | `SubmissionAlert.tsx`  | Banner showing submission deadline for the current week. Dismissable per-week.                                                                                                                                                                                                                                                          |
+| **FlexSetupAlert**   | `FlexSetupAlert.tsx`   | Banner prompting flex configuration if not set up.                                                                                                                                                                                                                                                                                      |
+| **FlexBadge**        | `FlexBadge.tsx`        | Small badge in header showing current flex balance. Clickable → opens flex settings.                                                                                                                                                                                                                                                    |
+| **UpdateChecker**    | `UpdateChecker.tsx`    | App update notification banner (Tauri updater plugin).                                                                                                                                                                                                                                                                                  |
+| **TabSwitcher**      | `TabSwitcher.tsx`      | List/Allocation segmented control. Styled with sandbox background, pill-shaped track, bold tabs.                                                                                                                                                                                                                                        |
 | **InactivityBanner** | `InactivityBanner.tsx` | Rendered on the List tab, above `ProjectCardList`. Amber "Inactive for Hh Mm" while away; on return a persistent "You were away … — Discard/Keep" prompt. Discard rewinds the timer's `startTime`; Keep dismisses. Reads the `inactivity` reducer slice; light-amber (matches the empty-description warning, stays light in dark mode). |
 
 ## Hooks
@@ -78,12 +78,17 @@ Card-level timer hook. Returns:
 
 ```typescript
 {
-  isRunning, projectId, taskId, elapsed,  // state
-  startForCard, stop  // actions
+  (isRunning,
+    projectId,
+    taskId,
+    elapsed, // state
+    startForCard,
+    stop); // actions
 }
 ```
 
 Key behaviors:
+
 - Timer state is `(projectId, taskId, startTime, isRunning)` — no description (descriptions live on entries)
 - `startForCard(projectId, taskId)` stops any running timer first (single-timer invariant)
 - Elapsed calculated as `now() - startTime` (timestamp-based, no drift)
@@ -123,8 +128,9 @@ Key behaviors:
 Theme is a user preference (`DisplayPrefs.theme`: `"system" | "light" | "dark"`, default `"system"`), persisted in `display.json`. The control lives in **Settings → Account → Appearance**.
 
 How it works:
+
 - `src/utils/theme.ts` resolves the preference (`"system"` → `prefers-color-scheme`) and toggles a `dark` class on `<html>` plus `style.colorScheme`.
-- `index.css` defines `:root.dark { … }` overriding the same `@theme` variable *values*. Because components reference semantic vars (`bg-bg`, `text-text`, `bg-bg-card`, `border-border`, …), the whole UI flips with no `dark:` utilities.
+- `index.css` defines `:root.dark { … }` overriding the same `@theme` variable _values_. Because components reference semantic vars (`bg-bg`, `text-text`, `bg-bg-card`, `border-border`, …), the whole UI flips with no `dark:` utilities.
 - `useThemeSync` (in `context.tsx`) applies the theme on pref change and, while `"system"`, listens for live OS appearance changes. `main.tsx` calls `applyTheme("system")` before first paint to avoid a flash.
 
 ## Patterns

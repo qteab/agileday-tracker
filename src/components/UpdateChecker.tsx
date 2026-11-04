@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { check } from "@tauri-apps/plugin-updater";
+import { useEffect, useState } from "react";
 
 export function UpdateChecker() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -53,21 +53,31 @@ export function UpdateChecker() {
   if (!updateAvailable || dismissed) return null;
 
   return (
-    <div className="flex flex-col px-4 py-2 bg-primary/10 text-primary text-xs gap-1">
+    <div className="flex flex-col gap-1 bg-primary/10 px-4 py-2 text-xs text-primary">
       <div className="flex items-center justify-between">
         <span>{installing ? "Installing update..." : `Version ${version} available`}</span>
         {!installing && (
           <div className="flex gap-2">
-            <button onClick={() => setDismissed(true)} className="text-text-muted hover:text-text">
+            <button
+              onClick={() => {
+                setDismissed(true);
+              }}
+              className="text-text-muted hover:text-text"
+            >
               Later
             </button>
-            <button onClick={handleUpdate} className="font-medium hover:text-primary-dark">
+            <button
+              onClick={() => {
+                void handleUpdate();
+              }}
+              className="font-medium hover:text-primary-dark"
+            >
               Update
             </button>
           </div>
         )}
       </div>
-      {error && <span className="text-danger text-[10px]">{error}</span>}
+      {error && <span className="text-[10px] text-danger">{error}</span>}
     </div>
   );
 }

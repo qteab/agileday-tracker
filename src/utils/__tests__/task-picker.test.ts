@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
+
+import type { Task } from "../../api/types";
 import {
   describeTaskPickerState,
   GLOBAL_DEFAULT_HINT,
   NO_TASKS_LABEL,
   TASKS_ERROR_LABEL,
 } from "../task-picker";
-import type { Task } from "../../api/types";
 
 function task(overrides: Partial<Task> = {}): Task {
   return {
@@ -77,8 +78,8 @@ describe("describeTaskPickerState", () => {
     });
 
     if (state.kind !== "ready") throw new Error("expected ready");
-    expect(state.rows[0].hint).toBeUndefined();
-    expect(state.rows[1].hint).toBe(GLOBAL_DEFAULT_HINT);
+    expect(state.rows[0]?.hint).toBeUndefined();
+    expect(state.rows[1]?.hint).toBe(GLOBAL_DEFAULT_HINT);
     expect(GLOBAL_DEFAULT_HINT).toBe("(global default)");
   });
 

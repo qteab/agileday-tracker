@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+
 import type { GlobalTaskFetch } from "../global-tasks";
 import { createGlobalDefaultTaskLoader, GLOBAL_TASK_PAGE_SIZE } from "../global-tasks";
 
@@ -88,7 +89,7 @@ describe("createGlobalDefaultTaskLoader", () => {
     // The only real template is active:false and AgileDay's web UI still
     // offers it — active must not gate global defaults.
     expect(tasks).toHaveLength(1);
-    expect(tasks[0].active).toBe(true);
+    expect(tasks[0]?.active).toBe(true);
   });
 
   it("pages through every page, fetching pages after the first in parallel", async () => {
@@ -100,7 +101,7 @@ describe("createGlobalDefaultTaskLoader", () => {
     const tasks = await createGlobalDefaultTaskLoader(apiFetch)();
 
     expect(apiFetch).toHaveBeenCalledTimes(3);
-    const paths = apiFetch.mock.calls.map((c) => c[0] as string);
+    const paths = apiFetch.mock.calls.map((c) => c[0]);
     expect(paths[0]).toContain(`limit=${GLOBAL_TASK_PAGE_SIZE}&offset=0`);
     expect(paths[1]).toContain(`offset=${GLOBAL_TASK_PAGE_SIZE}`);
     expect(paths[2]).toContain(`offset=${GLOBAL_TASK_PAGE_SIZE * 2}`);
@@ -118,7 +119,7 @@ describe("createGlobalDefaultTaskLoader", () => {
     const tasks = await createGlobalDefaultTaskLoader(apiFetch)();
 
     expect(tasks).toHaveLength(1);
-    expect(tasks[0].id).toBe("27717b20");
+    expect(tasks[0]?.id).toBe("27717b20");
   });
 
   it("deduplicates duplicates within a single page", async () => {

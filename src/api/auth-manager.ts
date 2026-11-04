@@ -9,8 +9,9 @@
  * 5. Exchange code for tokens
  */
 
-import { load } from "@tauri-apps/plugin-store";
 import { invoke } from "@tauri-apps/api/core";
+import { load } from "@tauri-apps/plugin-store";
+
 import type { AuthConfig, AuthState } from "./auth";
 import {
   generatePKCE,
@@ -125,7 +126,9 @@ export async function login(conn: ConnectionConfig = DEFAULT_CONNECTION): Promis
   let returnedState: string;
   try {
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Login timed out — please try again")), LOGIN_TIMEOUT_MS)
+      setTimeout(() => {
+        reject(new Error("Login timed out — please try again"));
+      }, LOGIN_TIMEOUT_MS)
     );
     [code, returnedState] = await Promise.race([callbackPromise, timeoutPromise]);
   } catch (err) {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
-import { getUnsubmittedWeeks, getAlertLevel, type AlertLevel } from "../utils/week";
+
 import type { TimeEntry } from "../api/types";
+import { getUnsubmittedWeeks, getAlertLevel, type AlertLevel } from "../utils/week";
 
 interface SubmissionAlertProps {
   entries: TimeEntry[];
@@ -34,8 +35,12 @@ export function SubmissionAlert({ entries, onOpenFinalize }: SubmissionAlertProp
 
   // Re-check every minute to catch 11:00 and 12:00 transitions
   useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 60_000);
+    return () => {
+      clearInterval(interval);
+    };
   }, []);
 
   const unsubmittedWeeks = useMemo(() => getUnsubmittedWeeks(entries, now), [entries, now]);
@@ -55,9 +60,9 @@ export function SubmissionAlert({ entries, onOpenFinalize }: SubmissionAlertProp
 
   return (
     <div
-      className={`flex items-center gap-2 px-4 py-2 text-xs border-b ${config.bg} ${config.text} ${config.border}`}
+      className={`flex items-center gap-2 border-b px-4 py-2 text-xs ${config.bg} ${config.text} ${config.border}`}
     >
-      <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         {alertLevel === "info" ? (
           <path
             strokeLinecap="round"
@@ -77,15 +82,17 @@ export function SubmissionAlert({ entries, onOpenFinalize }: SubmissionAlertProp
       <span className="flex-1">{message}</span>
       <button
         onClick={onOpenFinalize}
-        className="px-3 py-1 text-[10px] font-semibold rounded-lg bg-bg-card text-text shadow-sm hover:bg-bg transition-colors"
+        className="rounded-lg bg-bg-card px-3 py-1 text-[10px] font-semibold text-text shadow-sm transition-colors hover:bg-bg"
       >
         Finalize
       </button>
       <button
-        onClick={() => setDismissedKey(currentKey)}
-        className="hover:opacity-70 transition-opacity"
+        onClick={() => {
+          setDismissedKey(currentKey);
+        }}
+        className="transition-opacity hover:opacity-70"
       >
-        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"

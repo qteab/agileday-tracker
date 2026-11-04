@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+
 import { appReducer, initialState } from "../reducer";
 
 describe("inactivity reducer", () => {

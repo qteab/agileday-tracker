@@ -24,27 +24,27 @@ export function MonthProgressCard({
   const onPace = paceDelta >= 0;
 
   return (
-    <div className="bg-bg-card rounded-xl p-4 border border-border">
-      <h3 className="text-sm font-semibold text-text mb-3">This month — {monthLabel}</h3>
+    <div className="rounded-xl border border-border bg-bg-card p-4">
+      <h3 className="mb-3 text-sm font-semibold text-text">This month — {monthLabel}</h3>
       <div className="flex items-center gap-4">
         <MonthDonut percent={percent} />
         <div className="flex-1 space-y-1 text-sm">
           <div className="flex items-center justify-between">
             <span className="text-text-muted">Worked</span>
-            <span className="font-semibold tabular-nums text-text">
+            <span className="font-semibold text-text tabular-nums">
               {formatHM(month.workedMinutes)}
             </span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-text-muted">Month target</span>
-            <span className="tabular-nums text-text">
+            <span className="text-text tabular-nums">
               {formatHM(month.expectedMinutes)}
               <span className="text-text-muted"> · {month.workdays} days</span>
             </span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-text-muted">Expected so far</span>
-            <span className="tabular-nums text-text">{formatHM(month.expectedToDateMinutes)}</span>
+            <span className="text-text tabular-nums">{formatHM(month.expectedToDateMinutes)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-text-muted">Pace</span>
@@ -65,7 +65,7 @@ export function MonthProgressCard({
           {payoutMinutes > 0 && (
             <div className="flex items-center justify-between">
               <span className="text-text-muted">Payout at month end</span>
-              <span className="font-semibold tabular-nums text-amber-500">
+              <span className="font-semibold text-amber-500 tabular-nums">
                 ≈ {formatFlexMinutes(payoutMinutes)}
               </span>
             </div>
@@ -84,8 +84,8 @@ function MonthDonut({ percent }: { percent: number }) {
   const overtime = Math.max(0, Math.min(percent - 100, 100));
 
   return (
-    <div className="relative w-24 h-24 shrink-0">
-      <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+    <div className="relative h-24 w-24 shrink-0">
+      <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
         <circle cx="50" cy="50" r={r} fill="none" strokeWidth="9" className="stroke-border" />
         <circle
           cx="50"
@@ -111,7 +111,7 @@ function MonthDonut({ percent }: { percent: number }) {
         )}
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-base font-bold tabular-nums text-text">{Math.round(percent)}%</span>
+        <span className="text-base font-bold text-text tabular-nums">{Math.round(percent)}%</span>
       </div>
     </div>
   );

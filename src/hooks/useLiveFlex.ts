@@ -1,6 +1,6 @@
 import { useMemo } from "react";
+
 import { useApp } from "../store/context";
-import { useNow } from "./useNow";
 import {
   calculateLastMonthSummary,
   calculateLiveFlex,
@@ -9,6 +9,7 @@ import {
   type MonthStats,
   type MonthSummary,
 } from "../utils/flex";
+import { useNow } from "./useNow";
 
 export interface LiveFlex {
   /** Null until flex is configured. */

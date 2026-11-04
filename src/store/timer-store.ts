@@ -1,4 +1,5 @@
 import { load } from "@tauri-apps/plugin-store";
+
 import type { TimerState } from "./reducer";
 
 const TIMER_STORE_FILE = "timer.json";

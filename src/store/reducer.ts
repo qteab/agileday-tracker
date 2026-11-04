@@ -1,8 +1,3 @@
-import type { Allocation, Employee, Holiday, Project, Task, TimeEntry } from "../api/types";
-import type { FlexConfig } from "./flex-store";
-import type { VacationConfig } from "./vacation-store";
-import { DEFAULT_DISPLAY_PREFS, type DisplayPrefs } from "./display-store";
-import { mergeUnsaved } from "./unsaved-store";
 import {
   markSynced,
   upsertAccount,
@@ -11,6 +6,11 @@ import {
   type ClickUpAccount,
   type ClickUpTimeEntry,
 } from "../api/clickup";
+import type { Allocation, Employee, Holiday, Project, Task, TimeEntry } from "../api/types";
+import { DEFAULT_DISPLAY_PREFS, type DisplayPrefs } from "./display-store";
+import type { FlexConfig } from "./flex-store";
+import { mergeUnsaved } from "./unsaved-store";
+import type { VacationConfig } from "./vacation-store";
 
 export interface TimerState {
   isRunning: boolean;
@@ -214,7 +214,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       if (!action.stopped) return { ...state, timer: initialState.timer };
       const { projectId, taskId, clickupTask } = state.timer;
       // The adopted ClickUp timer is stopped with this session; never resume it.
-      const task = clickupTask ? { ...clickupTask, timerId: undefined } : null;
+      let task: ClickUpTask | null = null;
+      if (clickupTask) {
+        const { timerId: _timerId, ...rest } = clickupTask;
+        task = rest;
+      }
       return {
         ...state,
         timer: initialState.timer,

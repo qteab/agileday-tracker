@@ -1,19 +1,20 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   createContext,
+  useCallback,
   useContext,
   useReducer,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
-import { appReducer, initialState, type AppState, type AppAction } from "./reducer";
-import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import type { ApiProvider, MyProjectInfo } from "../api/provider";
-import { createAgileDayProvider, type AgileDayConfig } from "../api/agileday";
+
+import { createAgileDayProvider } from "../api/agileday";
 import type { AuthState } from "../api/auth";
 import { isTokenExpired, refreshAuthState } from "../api/auth";
 import {
@@ -24,13 +25,6 @@ import {
   buildApiBaseUrl,
   DEFAULT_CONNECTION,
 } from "../api/auth-manager";
-import type { Project, TimeEntry } from "../api/types";
-import { loadTimerState, saveTimerState, clearTimerState } from "./timer-store";
-import { loadUnsavedEntries, saveUnsavedEntries } from "./unsaved-store";
-import { loadFlexConfig } from "./flex-store";
-import { addDays } from "../utils/date-range";
-import { loadVacationConfig } from "./vacation-store";
-import { loadDisplayPrefs } from "./display-store";
 import {
   ClickUpRateLimitError,
   createClickUpClient,
@@ -40,9 +34,18 @@ import {
   type ClickUpClient,
   type ClickUpStored,
 } from "../api/clickup";
-import { loadWindowLayout, saveWindowLayout, type WindowLayout } from "./window-store";
+import type { ApiProvider, MyProjectInfo } from "../api/provider";
+import type { Project, TimeEntry } from "../api/types";
+import { addDays } from "../utils/date-range";
 import { applyTheme, watchSystemTheme } from "../utils/theme";
+import { loadDisplayPrefs } from "./display-store";
 import type { ThemeMode } from "./display-store";
+import { loadFlexConfig } from "./flex-store";
+import { appReducer, initialState, type AppState, type AppAction } from "./reducer";
+import { loadTimerState, saveTimerState, clearTimerState } from "./timer-store";
+import { loadUnsavedEntries, saveUnsavedEntries } from "./unsaved-store";
+import { loadVacationConfig } from "./vacation-store";
+import { loadWindowLayout, saveWindowLayout, type WindowLayout } from "./window-store";
 
 interface AppContextValue {
   state: AppState;
@@ -63,35 +66,45 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const [authState, setAuthState] = useState<AuthState | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [api, setApi] = useState<ApiProvider | null>(null);
+  const isConnected = api !== null;
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [syncCounter, setSyncCounter] = useState(0);
   const [timerLoaded, setTimerLoaded] = useState(false);
   const [unsavedLoaded, setUnsavedLoaded] = useState(false);
   const authStateRef = useRef<AuthState | null>(null);
 
-  authStateRef.current = authState;
+  useLayoutEffect(() => {
+    authStateRef.current = authState;
+  });
 
-  const api = useMemo<ApiProvider | null>(() => {
-    if (!isConnected) return null;
-    return createAgileDayProvider(
-      {
-        apiBaseUrl: buildApiBaseUrl(DEFAULT_CONNECTION),
-        authConfig: buildAuthConfig(DEFAULT_CONNECTION),
-      } as AgileDayConfig,
-      () => authStateRef.current,
-      (newState: AuthState) => {
-        setAuthState(newState);
-        saveAuthState(newState).catch(() => {});
-      },
-      () => {
-        setAuthState(null);
-        setIsConnected(false);
-        dispatch({ type: "SET_ERROR", payload: "Session expired — please sign in again" });
-        clearAuth().catch(() => {});
-      }
-    );
-  }, [isConnected]);
+  // The client is built on connect rather than during render: it reads the
+  // live auth state through authStateRef on every request.
+  const setIsConnected = useCallback((connected: boolean) => {
+    setApi((current) => {
+      if (!connected) return null;
+      return (
+        current ??
+        createAgileDayProvider(
+          {
+            apiBaseUrl: buildApiBaseUrl(DEFAULT_CONNECTION),
+            authConfig: buildAuthConfig(DEFAULT_CONNECTION),
+          },
+          () => authStateRef.current,
+          (newState: AuthState) => {
+            setAuthState(newState);
+            saveAuthState(newState).catch(() => {});
+          },
+          () => {
+            setAuthState(null);
+            setApi(null);
+            dispatch({ type: "SET_ERROR", payload: "Session expired — please sign in again" });
+            clearAuth().catch(() => {});
+          }
+        )
+      );
+    });
+  }, []);
 
   function onLogin(auth: AuthState) {
     dispatch({ type: "SET_ERROR", payload: null });
@@ -143,7 +156,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         isAuthLoading,
         logout,
         onLogin,
-        resync: () => setSyncCounter((n) => n + 1),
+        resync: () => {
+          setSyncCounter((n) => n + 1);
+        },
         clickupClient,
       }}
     >
@@ -185,10 +200,8 @@ function mergeProjectSources(
   const byId = new Map<string, Project>();
 
   for (const project of projects) {
-    byId.set(
-      project.id,
-      typeById.has(project.id) ? { ...project, projectType: typeById.get(project.id) } : project
-    );
+    const projectType = typeById.get(project.id);
+    byId.set(project.id, projectType ? { ...project, projectType } : project);
   }
 
   for (const absence of absenceProjects) {
@@ -257,7 +270,11 @@ function useTrayMenuSyncTrigger(setSyncCounter: (updater: (n: number) => number)
       setSyncCounter((n) => n + 1);
     });
     return () => {
-      unlisten.then((fn) => fn());
+      unlisten
+        .then((fn) => {
+          fn();
+        })
+        .catch(() => {});
     };
   }, [setSyncCounter]);
 }
@@ -283,15 +300,22 @@ function useVisibilityTokenRefresh(
         // Refresh failed — let the next API call surface it
       }
     };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    const onVisibilityChange = () => {
+      void handleVisibility();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [authStateRef, setAuthState]);
 }
 
 function useDisplayPrefsBootstrap(dispatch: React.Dispatch<AppAction>) {
   useEffect(() => {
     loadDisplayPrefs()
-      .then((prefs) => dispatch({ type: "SET_DISPLAY_PREFS", payload: prefs }))
+      .then((prefs) => {
+        dispatch({ type: "SET_DISPLAY_PREFS", payload: prefs });
+      })
       .catch(() => {});
   }, [dispatch]);
 }
@@ -302,7 +326,9 @@ function useThemeSync(mode: ThemeMode) {
   useEffect(() => {
     applyTheme(mode);
     if (mode !== "system") return;
-    return watchSystemTheme(() => applyTheme("system"));
+    return watchSystemTheme(() => {
+      applyTheme("system");
+    });
   }, [mode]);
 }
 
@@ -315,8 +341,7 @@ function useWindowDockSnap() {
     const SNAP_THRESHOLD_LOGICAL_PIXELS = 40;
     const MOVE_DEBOUNCE_MS = 250;
     let cancelled = false;
-    let debounce: ReturnType<typeof setTimeout> | null = null;
-    let unlisten: (() => void) | null = null;
+    const handles: { debounce?: ReturnType<typeof setTimeout>; unlisten?: () => void } = {};
 
     async function pushLayoutToRust(layout: WindowLayout) {
       await invoke("set_window_layout", {
@@ -348,17 +373,17 @@ function useWindowDockSnap() {
       await pushLayoutToRust(layout);
 
       const window = getCurrentWindow();
-      unlisten = await window.onMoved(() => {
-        if (debounce) clearTimeout(debounce);
-        debounce = setTimeout(() => classifyAndPersist(window), MOVE_DEBOUNCE_MS);
+      handles.unlisten = await window.onMoved(() => {
+        clearTimeout(handles.debounce);
+        handles.debounce = setTimeout(() => classifyAndPersist(window), MOVE_DEBOUNCE_MS);
       });
     }
 
-    init();
+    init().catch(() => {});
     return () => {
       cancelled = true;
-      if (debounce) clearTimeout(debounce);
-      unlisten?.();
+      clearTimeout(handles.debounce);
+      handles.unlisten?.();
     };
   }, []);
 }
@@ -369,9 +394,13 @@ function useClickUpPersistence(clickup: ClickUpStored | null, dispatch: React.Di
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     loadClickUp()
-      .then((stored) => dispatch({ type: "SET_CLICKUP", payload: stored }))
+      .then((stored) => {
+        dispatch({ type: "SET_CLICKUP", payload: stored });
+      })
       .catch(() => {})
-      .finally(() => setLoaded(true));
+      .finally(() => {
+        setLoaded(true);
+      });
   }, [dispatch]);
   useEffect(() => {
     if (loaded) saveClickUp(clickup).catch(() => {});
@@ -391,14 +420,26 @@ function useClickUpDataLoad(
 ) {
   // Bumped to reload once a rate limit has passed.
   const [retry, setRetry] = useState(0);
+  // Keyed on tokens only, so a refreshed workspace list doesn't trigger another
+  // load; the effect reads the latest list through the ref.
+  const tokenKey = accounts?.map((a) => a.token).join(",");
+  const accountsRef = useRef(accounts);
+  useLayoutEffect(() => {
+    accountsRef.current = accounts;
+  });
   useEffect(() => {
+    const accounts = accountsRef.current;
     if (!accounts?.length || !isConnected) {
       dispatch({ type: "SET_CLICKUP_ENTRIES", payload: null });
       dispatch({ type: "SET_CLICKUP_RUNNING", payload: null });
       return;
     }
-    let cancelled = false;
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    // Fields, not `let`s: the async load below writes them after the effect returns.
+    const run: { cancelled: boolean; retryTimer?: ReturnType<typeof setTimeout> } = {
+      cancelled: false,
+    };
+    // A function so TS doesn't keep `run.cancelled` narrowed to false across awaits.
+    const isCancelled = (): boolean => run.cancelled;
     const now = Date.now();
     const reasonOf = (err: unknown) => (err instanceof Error ? err.message : "Unknown error");
     (async () => {
@@ -406,10 +447,10 @@ function useClickUpDataLoad(
       const refreshed = await Promise.allSettled(
         accounts.map((a) => createClickUpClient([]).getAccount(a.token))
       );
-      if (cancelled) return;
+      if (isCancelled()) return;
       const fresh = accounts.map((a, i) => {
         const r = refreshed[i];
-        return r.status === "fulfilled" ? r.value : a;
+        return r?.status === "fulfilled" ? r.value : a;
       });
       for (const r of refreshed)
         if (r.status === "fulfilled") dispatch({ type: "SET_CLICKUP_ACCOUNT", payload: r.value });
@@ -423,7 +464,7 @@ function useClickUpDataLoad(
           ])
         )
       );
-      if (cancelled) return;
+      if (isCancelled()) return;
       const loaded = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
       if (loaded.length > 0) {
         dispatch({ type: "SET_CLICKUP_ENTRIES", payload: loaded.flatMap(([entries]) => entries) });
@@ -442,28 +483,29 @@ function useClickUpDataLoad(
       );
       if (limited.length > 0) {
         const at = Math.max(...limited.map((e) => e.retryAt));
-        retryTimer = setTimeout(() => setRetry((n) => n + 1), at - Date.now());
+        run.retryTimer = setTimeout(() => {
+          setRetry((n) => n + 1);
+        }, at - Date.now());
         dispatch({
           type: "SET_ERROR",
           payload: `ClickUp is rate limiting requests — reloading ClickUp time in ${Math.ceil((at - Date.now()) / 1000)}s.`,
         });
         return;
       }
-      const failed = teams.filter((_, i) => results[i].status === "rejected");
+      const failed = teams.filter((_, i) => results[i]?.status === "rejected");
       dispatch({
         type: "SET_ERROR",
         payload: `Couldn't load ClickUp time${failed.length ? ` from ${failed.map((t) => t.name).join(", ")}` : ""}: ${reasonOf(errors[0])}`,
       });
-    })().catch((err) => {
-      if (!cancelled)
+    })().catch((err: unknown) => {
+      if (!isCancelled())
         dispatch({ type: "SET_ERROR", payload: `Couldn't load ClickUp time: ${reasonOf(err)}` });
     });
     return () => {
-      cancelled = true;
-      clearTimeout(retryTimer);
+      run.cancelled = true;
+      clearTimeout(run.retryTimer);
     };
-    // Keyed on tokens only, so a refreshed workspace list doesn't trigger another load.
-  }, [accounts?.map((a) => a.token).join(","), isConnected, syncCounter, retry, dispatch]);
+  }, [tokenKey, isConnected, syncCounter, retry, dispatch]);
 }
 
 // Restore a running timer that survived a quit/crash. Elapsed is derived
@@ -480,7 +522,9 @@ function useTimerRestore(
         }
       })
       .catch(() => {})
-      .finally(() => setLoaded(true));
+      .finally(() => {
+        setLoaded(true);
+      });
   }, [dispatch, setLoaded]);
 }
 
@@ -504,9 +548,13 @@ function useUnsavedRestore(
 ) {
   useEffect(() => {
     loadUnsavedEntries()
-      .then((saved) => dispatch({ type: "RESTORE_UNSAVED", payload: saved }))
+      .then((saved) => {
+        dispatch({ type: "RESTORE_UNSAVED", payload: saved });
+      })
       .catch(() => {})
-      .finally(() => setLoaded(true));
+      .finally(() => {
+        setLoaded(true);
+      });
   }, [dispatch, setLoaded]);
 }
 
@@ -523,58 +571,63 @@ function useUnsavedPersistence(entries: TimeEntry[], unsavedLoaded: boolean) {
 // (Settings panel open, etc.), so the push lives in the always-mounted
 // provider rather than the useTimer hook.
 function useTrayDisplayPush(state: AppState) {
-  const todayDate = formatLocalDate(new Date());
-
-  // When paused, fall back to the most recent entry from today so the menu
-  // bar keeps showing the last task and ▶ has a sensible target to resume.
-  const lastEntryToday = !state.timer.isRunning
-    ? findLatestEntryForDate(state.entries, todayDate)
-    : null;
-
-  const displayProjectId = state.timer.isRunning
-    ? state.timer.projectId
-    : (lastEntryToday?.projectId ?? null);
-  const displayTaskId = state.timer.isRunning
-    ? state.timer.taskId
-    : (lastEntryToday?.taskId ?? null);
-  // Description lives on the entry, not the timer. Find the matching entry.
-  const runningEntry = state.timer.isRunning
-    ? state.entries.find(
-        (e) =>
-          e.projectId === state.timer.projectId &&
-          (e.taskId ?? null) === (state.timer.taskId ?? null) &&
-          e.date === todayDate
-      )
-    : null;
-  const displayDescription = state.timer.isRunning
-    ? (state.timer.clickupTask?.name ?? runningEntry?.description ?? null)
-    : (lastEntryToday?.description ?? null);
-
-  const displayProjectName =
-    (displayProjectId && state.projects.find((project) => project.id === displayProjectId)?.name) ||
-    null;
-  const displayTaskName = resolveTaskName(state, displayTaskId);
-
-  // While running we exclude the current session — Rust adds the elapsed
-  // seconds on each tick. While paused the just-stopped session is already
-  // in entries, so a plain sum gives the correct day total.
-  const todayBaseMinutes =
-    displayProjectId && displayTaskId
-      ? sumMinutesForDayTask(
-          state.entries,
-          displayProjectId,
-          displayTaskId,
-          todayDate,
-          state.timer.startTime
-        )
-      : 0;
+  // Derived inside the effect because "today" depends on the clock. The last
+  // payload is remembered so Rust is only called when something changed.
+  const lastPushedRef = useRef<string | null>(null);
 
   useEffect(() => {
+    const todayDate = formatLocalDate(new Date());
+
+    // When paused, fall back to the most recent entry from today so the menu
+    // bar keeps showing the last task and ▶ has a sensible target to resume.
+    const lastEntryToday = !state.timer.isRunning
+      ? findLatestEntryForDate(state.entries, todayDate)
+      : null;
+
+    const displayProjectId = state.timer.isRunning
+      ? state.timer.projectId
+      : (lastEntryToday?.projectId ?? null);
+    const displayTaskId = state.timer.isRunning
+      ? state.timer.taskId
+      : (lastEntryToday?.taskId ?? null);
+    // Description lives on the entry, not the timer. Find the matching entry.
+    const runningEntry = state.timer.isRunning
+      ? state.entries.find(
+          (e) =>
+            e.projectId === state.timer.projectId &&
+            (e.taskId ?? null) === (state.timer.taskId ?? null) &&
+            e.date === todayDate
+        )
+      : null;
+    const displayDescription = state.timer.isRunning
+      ? (state.timer.clickupTask?.name ?? runningEntry?.description ?? null)
+      : (lastEntryToday?.description ?? null);
+
+    const displayProjectName =
+      (displayProjectId &&
+        state.projects.find((project) => project.id === displayProjectId)?.name) ||
+      null;
+    const displayTaskName = resolveTaskName(state, displayTaskId);
+
+    // While running we exclude the current session — Rust adds the elapsed
+    // seconds on each tick. While paused the just-stopped session is already
+    // in entries, so a plain sum gives the correct day total.
+    const todayBaseMinutes =
+      displayProjectId && displayTaskId
+        ? sumMinutesForDayTask(
+            state.entries,
+            displayProjectId,
+            displayTaskId,
+            todayDate,
+            state.timer.startTime
+          )
+        : 0;
+
     const startMillis =
       state.timer.isRunning && state.timer.startTime
         ? new Date(state.timer.startTime).getTime()
         : null;
-    invoke("set_timer_status", {
+    const payload = {
       running: state.timer.isRunning,
       startTimeMs: startMillis,
       projectName: displayProjectName,
@@ -585,19 +638,12 @@ function useTrayDisplayPush(state: AppState) {
       showTrayIcon: state.displayPrefs.showTrayIcon,
       inactivityEnabled: state.displayPrefs.inactivityEnabled,
       inactivityMinutes: state.displayPrefs.inactivityMinutes,
-    }).catch(() => {});
-  }, [
-    state.timer.isRunning,
-    state.timer.startTime,
-    displayProjectName,
-    displayTaskName,
-    displayDescription,
-    todayBaseMinutes,
-    state.displayPrefs.menuBarMode,
-    state.displayPrefs.showTrayIcon,
-    state.displayPrefs.inactivityEnabled,
-    state.displayPrefs.inactivityMinutes,
-  ]);
+    };
+    const key = JSON.stringify(payload);
+    if (key === lastPushedRef.current) return;
+    lastPushedRef.current = key;
+    invoke("set_timer_status", payload).catch(() => {});
+  });
 }
 
 // Rust owns idle detection (system-wide, survives the WebView being hidden) and
@@ -611,7 +657,11 @@ function useInactivitySync(dispatch: React.Dispatch<AppAction>) {
       });
     });
     return () => {
-      unlisten.then((fn) => fn()).catch(() => {});
+      unlisten
+        .then((fn) => {
+          fn();
+        })
+        .catch(() => {});
     };
   }, [dispatch]);
 }
@@ -645,7 +695,9 @@ function useAuthBootstrap(
         }
       })
       .catch(() => {})
-      .finally(() => setIsAuthLoading(false));
+      .finally(() => {
+        setIsAuthLoading(false);
+      });
   }, [setAuthState, setIsConnected, setIsAuthLoading]);
 }
 
@@ -675,7 +727,9 @@ function useBackgroundTokenRefresh(
       }
     }, REFRESH_CHECK_INTERVAL_MS);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+    };
   }, [isConnected, refreshToken, authStateRef, setAuthState]);
 }
 
@@ -688,6 +742,9 @@ function useConnectedDataLoad(
   useEffect(() => {
     if (!api || !isConnected) return;
     let cancelled = false;
+    // A function, not the variable: TS narrows `cancelled` to false after the
+    // first check, so later checks would look always-false.
+    const isCancelled = (): boolean => cancelled;
 
     async function init() {
       if (!api) return;
@@ -696,7 +753,7 @@ function useConnectedDataLoad(
 
       try {
         const employee = await api.getCurrentEmployee();
-        if (cancelled) return;
+        if (isCancelled()) return;
         dispatch({ type: "SET_EMPLOYEE", payload: employee });
 
         const [projects, absenceProjects, myProjects] = await Promise.all([
@@ -704,7 +761,7 @@ function useConnectedDataLoad(
           api.getAbsenceProjects(),
           api.getMyProjects(employee.id),
         ]);
-        if (cancelled) return;
+        if (isCancelled()) return;
         const mergedProjects = mergeProjectSources(projects, absenceProjects, myProjects);
         dispatch({ type: "SET_PROJECTS", payload: mergedProjects });
         dispatch({ type: "SET_MY_PROJECT_IDS", payload: myProjects.map((project) => project.id) });
@@ -724,21 +781,21 @@ function useConnectedDataLoad(
         const pastStr = formatLocalDate(past);
         const futureStr = formatLocalDate(future);
         const entries = await api.getTimeEntries(employee.id, pastStr, futureStr);
-        if (cancelled) return;
+        if (isCancelled()) return;
         dispatch({ type: "SET_ENTRIES", payload: entries });
 
-        loadAndApplyBalanceConfigs(api, employee.id, pastStr, () => cancelled, dispatch);
-        hydrateTaskMetadataForEntries(api, entries, () => cancelled, dispatch);
+        void loadAndApplyBalanceConfigs(api, employee.id, pastStr, isCancelled, dispatch);
+        void hydrateTaskMetadataForEntries(api, entries, isCancelled, dispatch);
       } catch (err) {
-        if (cancelled) return;
+        if (isCancelled()) return;
         const message = err instanceof Error ? err.message : "Failed to connect to AgileDay";
         dispatch({ type: "SET_ERROR", payload: message });
       } finally {
-        if (!cancelled) dispatch({ type: "SET_LOADING", payload: false });
+        if (!isCancelled()) dispatch({ type: "SET_LOADING", payload: false });
       }
     }
 
-    init();
+    void init();
     return () => {
       cancelled = true;
     };
@@ -769,7 +826,7 @@ async function loadAndApplyBalanceConfigs(
     (d): d is string => !!d
   );
   const earliestStart = startDates.sort()[0];
-  if (earliestStart < windowStartDate) {
+  if (earliestStart && earliestStart < windowStartDate) {
     try {
       // getTimeEntries' endDate is inclusive and the window already has its
       // first day, so stop the day before or that day is counted twice
@@ -821,11 +878,12 @@ async function hydrateTaskMetadataForEntries(
   const billable: Record<string, boolean> = {};
   const names: Record<string, string> = {};
   const projectBillable: Record<string, boolean> = {};
-  taskLists.forEach((tasks, index) => {
+  projectIds.forEach((projectId, index) => {
+    const tasks = taskLists[index];
     // A null list means the fetch failed — leave that project unresolved rather
     // than recording it as having no billable tasks.
     if (!tasks || tasks.length === 0) return;
-    projectBillable[projectIds[index]] = tasks.some((task) => task.billable);
+    projectBillable[projectId] = tasks.some((task) => task.billable);
     for (const task of tasks) {
       billable[task.id] = task.billable;
       names[task.id] = task.name;

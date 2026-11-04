@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { appReducer, initialState } from "../reducer";
+
 import type { TimeEntry } from "../../api/types";
+import { appReducer, initialState } from "../reducer";
 
 const entry = (id: string, minutes: number, syncStatus: TimeEntry["syncStatus"]): TimeEntry => ({
   id,
@@ -27,10 +28,10 @@ describe("unsaved entries", () => {
     });
     const byId = Object.fromEntries(next.entries.map((e) => [e.id, e]));
     expect(next.entries).toHaveLength(3);
-    expect(byId["real-1"].minutes).toBe(90);
-    expect(byId["real-1"].syncStatus).toBe("unsaved");
-    expect(byId["local-1"].minutes).toBe(30);
-    expect(byId["real-2"].minutes).toBe(15);
+    expect(byId["real-1"]?.minutes).toBe(90);
+    expect(byId["real-1"]?.syncStatus).toBe("unsaved");
+    expect(byId["local-1"]?.minutes).toBe(30);
+    expect(byId["real-2"]?.minutes).toBe(15);
   });
 
   it("a sync replaces entries that saved fine", () => {

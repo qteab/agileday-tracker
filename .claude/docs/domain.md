@@ -2,17 +2,17 @@
 
 ## AgileDay Concepts
 
-| Term | Definition |
-|---|---|
-| **Employee** | A user in AgileDay, identified by ID. Has name and email. |
-| **Project** | A billable or internal project. Has name, customer, color, type (INTERNAL/EXTERNAL/ABSENCE/IDLE). |
-| **Task** | A line item within a project. Has billable flag and active status. Required for time entries. |
-| **Task template** | A tenant-level task with `projectId: null`. Project-owned tasks descend from one via `parentTaskId`. Not loggable itself unless it is also a global default. |
-| **Global default task** | A task template with `defaultTemplate: true`. Offered on *every* project, labelled "(global default)", and the only way to log time against the ~15% of projects that own no tasks. Note `defaultTemplate: true` also appears on project-owned tasks — a global default is specifically `projectId === null && defaultTemplate === true`. |
-| **Time Entry** | A logged block of time: project + task + date + minutes + description. Has status lifecycle. |
-| **Opening** | An allocation of an employee to a project. Contains percentage, hours, and date range. |
-| **Allocation** | The percentage of time an employee is expected to spend on a project, with periods of varying percentages. |
-| **Timesheet** | Weekly grouping of time entries for submission/approval. |
+| Term                    | Definition                                                                                                                                                                                                                                                                                                                                |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Employee**            | A user in AgileDay, identified by ID. Has name and email.                                                                                                                                                                                                                                                                                 |
+| **Project**             | A billable or internal project. Has name, customer, color, type (INTERNAL/EXTERNAL/ABSENCE/IDLE).                                                                                                                                                                                                                                         |
+| **Task**                | A line item within a project. Has billable flag and active status. Required for time entries.                                                                                                                                                                                                                                             |
+| **Task template**       | A tenant-level task with `projectId: null`. Project-owned tasks descend from one via `parentTaskId`. Not loggable itself unless it is also a global default.                                                                                                                                                                              |
+| **Global default task** | A task template with `defaultTemplate: true`. Offered on _every_ project, labelled "(global default)", and the only way to log time against the ~15% of projects that own no tasks. Note `defaultTemplate: true` also appears on project-owned tasks — a global default is specifically `projectId === null && defaultTemplate === true`. |
+| **Time Entry**          | A logged block of time: project + task + date + minutes + description. Has status lifecycle.                                                                                                                                                                                                                                              |
+| **Opening**             | An allocation of an employee to a project. Contains percentage, hours, and date range.                                                                                                                                                                                                                                                    |
+| **Allocation**          | The percentage of time an employee is expected to spend on a project, with periods of varying percentages.                                                                                                                                                                                                                                |
+| **Timesheet**           | Weekly grouping of time entries for submission/approval.                                                                                                                                                                                                                                                                                  |
 
 ## Entry Status Lifecycle
 
@@ -30,24 +30,24 @@ NEW → SAVED → SUBMITTED → APPROVED
 
 ## App-Specific Concepts
 
-| Term | Definition |
-|---|---|
-| **Session** | One timer start→stop cycle. Shown individually in the UI but consolidated into a single AgileDay entry per project+task+date+description. |
-| **Sync Status** | Local tracking of whether a session has been saved to AgileDay: `pending` (saving), `synced` (saved), `unsaved` (save failed). |
-| **Flex** | Overtime/undertime balance calculated from a configurable start date. Compares actual hours logged vs expected (8h/day — `WORKDAY_MINUTES = 480`, excluding weekends and holidays). Absence does **not** reduce expected hours; logged absence entries count as worked minutes instead, so a week whose entries fail to load reads as a full deficit. |
-| **Rounding** | 15-minute increment rounding applied during finalization. Uses ceil for totals, with per-project-day manual overrides. |
-| **Finalize** | The process of reviewing, rounding, and submitting a week's entries. |
-| **My Projects** | Projects the user is allocated to (via openings). Shown first in project picker. |
-| **Continue** | Starting a new timer with the same project/task/description as an existing entry. Always starts as today. |
+| Term            | Definition                                                                                                                                                                                                                                                                                                                                            |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Session**     | One timer start→stop cycle. Shown individually in the UI but consolidated into a single AgileDay entry per project+task+date+description.                                                                                                                                                                                                             |
+| **Sync Status** | Local tracking of whether a session has been saved to AgileDay: `pending` (saving), `synced` (saved), `unsaved` (save failed).                                                                                                                                                                                                                        |
+| **Flex**        | Overtime/undertime balance calculated from a configurable start date. Compares actual hours logged vs expected (8h/day — `WORKDAY_MINUTES = 480`, excluding weekends and holidays). Absence does **not** reduce expected hours; logged absence entries count as worked minutes instead, so a week whose entries fail to load reads as a full deficit. |
+| **Rounding**    | 15-minute increment rounding applied during finalization. Uses ceil for totals, with per-project-day manual overrides.                                                                                                                                                                                                                                |
+| **Finalize**    | The process of reviewing, rounding, and submitting a week's entries.                                                                                                                                                                                                                                                                                  |
+| **My Projects** | Projects the user is allocated to (via openings). Shown first in project picker.                                                                                                                                                                                                                                                                      |
+| **Continue**    | Starting a new timer with the same project/task/description as an existing entry. Always starts as today.                                                                                                                                                                                                                                             |
 
 ## Project Types
 
-| Type | Meaning |
-|---|---|
-| **EXTERNAL** | Client-facing billable work |
+| Type         | Meaning                              |
+| ------------ | ------------------------------------ |
+| **EXTERNAL** | Client-facing billable work          |
 | **INTERNAL** | Internal company work (non-billable) |
-| **ABSENCE** | Leave, vacation, sick days |
-| **IDLE** | Unallocated/bench time |
+| **ABSENCE**  | Leave, vacation, sick days           |
+| **IDLE**     | Unallocated/bench time               |
 
 These types come from AgileDay allocations and are used for visual grouping in the allocation view.
 

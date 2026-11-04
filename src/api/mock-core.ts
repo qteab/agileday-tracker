@@ -1,6 +1,6 @@
+import { getTimesheetPeriod } from "../utils/week";
 import type { ApiProvider } from "./provider";
 import type { Allocation, Employee, Project, Task, TimeEntry } from "./types";
-import { getTimesheetPeriod } from "../utils/week";
 
 export const MOCK_PROJECTS: Project[] = [
   { id: "p1", name: "Fokus", customerName: "QTE", color: "#E5B80B", projectType: "INTERNAL" },
@@ -104,19 +104,19 @@ export function createMockProvider(
   globalDefaultTasks: Task[] = []
 ): ApiProvider {
   return {
-    async getCurrentEmployee() {
-      return employee;
+    getCurrentEmployee() {
+      return Promise.resolve(employee);
     },
 
-    async getProjects() {
-      return projects;
+    getProjects() {
+      return Promise.resolve(projects);
     },
 
-    async getAbsenceProjects() {
-      return absenceProjects;
+    getAbsenceProjects() {
+      return Promise.resolve(absenceProjects);
     },
 
-    async getTasks(projectId: string) {
+    getTasks(projectId: string) {
       const own = tasks[projectId] ?? [];
       const ownIds = new Set(own.map((t) => t.id));
       // Mirrors the real provider: globals are appended, never substituted, and
@@ -124,7 +124,7 @@ export function createMockProvider(
       const extras = globalDefaultTasks
         .filter((t) => !ownIds.has(t.id))
         .map((t) => ({ ...t, projectId }));
-      return [...own, ...extras];
+      return Promise.resolve([...own, ...extras]);
     },
 
     async getTimeEntries(_employeeId: string, startDate: string, endDate: string) {
@@ -145,7 +145,7 @@ export function createMockProvider(
       );
       if (match) {
         match.minutes = entry.minutes;
-        match.description = entry.description ?? "";
+        match.description = entry.description;
         await store.setEntries(entries);
         return { ...match };
       }
@@ -163,10 +163,12 @@ export function createMockProvider(
     async updateTimeEntry(_employeeId: string, id: string, updates) {
       const entries = await store.getEntries();
       const index = entries.findIndex((e) => e.id === id);
-      if (index === -1) throw new Error(`Entry ${id} not found`);
-      entries[index] = { ...entries[index], ...updates };
+      const existing = entries[index];
+      if (!existing) throw new Error(`Entry ${id} not found`);
+      const updated = { ...existing, ...updates };
+      entries[index] = updated;
       await store.setEntries(entries);
-      return entries[index];
+      return updated;
     },
 
     async deleteTimeEntry(ids: string[]) {
@@ -179,9 +181,11 @@ export function createMockProvider(
       const results: typeof entries = [];
       for (const u of updates) {
         const index = entries.findIndex((e) => e.id === u.id);
-        if (index === -1) throw new Error(`Entry ${u.id} not found`);
-        entries[index] = { ...entries[index], ...u };
-        results.push(entries[index]);
+        const existing = entries[index];
+        if (!existing) throw new Error(`Entry ${u.id} not found`);
+        const updated = { ...existing, ...u };
+        entries[index] = updated;
+        results.push(updated);
       }
       await store.setEntries(entries);
       return results;
@@ -196,21 +200,23 @@ export function createMockProvider(
       await store.setEntries(entries);
     },
 
-    async getAllocations(_employeeId: string) {
-      return allocations;
+    getAllocations(_employeeId: string) {
+      return Promise.resolve(allocations);
     },
 
-    async getMyProjects(_employeeId: string) {
-      return projects.map((p) => ({
-        id: p.id,
-        name: p.name,
-        projectType: p.projectType,
-        openingId: `opening-${p.id}`,
-      }));
+    getMyProjects(_employeeId: string) {
+      return Promise.resolve(
+        projects.map((p) => ({
+          id: p.id,
+          name: p.name,
+          ...(p.projectType ? { projectType: p.projectType } : {}),
+          openingId: `opening-${p.id}`,
+        }))
+      );
     },
 
-    async getHolidays(_countryCode: string, _startDate: string, _endDate: string) {
-      return [];
+    getHolidays(_countryCode: string, _startDate: string, _endDate: string) {
+      return Promise.resolve([]);
     },
   };
 }

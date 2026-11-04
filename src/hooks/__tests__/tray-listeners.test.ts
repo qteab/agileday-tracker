@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import timer from "../useTimer.ts?raw";
-import app from "../../App.tsx?raw";
+
+import { default as app } from "../../App.tsx?raw";
+import { default as timer } from "../useTimer.ts?raw";
 
 // Regression: tray listeners inside useTimer() were registered once per
 // mounted ProjectCard, so one tray Stop click created 10–30 entries.

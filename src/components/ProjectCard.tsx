@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useApp, useApi } from "../store/context";
+
+import { isClickupOnly, nonClickupLines, parseClickupLine } from "../api/clickup";
+import type { ProjectType, TimeEntry } from "../api/types";
+import { useNow } from "../hooks/useNow";
 import { useTimer, formatTime, formatMinutes } from "../hooks/useTimer";
-import { ProjectPicker } from "./ProjectPicker";
-import { TaskPicker } from "./TaskPicker";
-import { Modal } from "./Modal";
+import { useApp, useApi } from "../store/context";
+import { splitDescriptions, joinDescriptions } from "../utils/descriptions";
 import { Collapsible } from "./Collapsible";
 import {
   parseDurationInput,
@@ -12,9 +14,9 @@ import {
   isLocalOnlyEntry,
   usedTaskIds,
 } from "./entry-edit";
-import type { ProjectType, TimeEntry } from "../api/types";
-import { splitDescriptions, joinDescriptions } from "../utils/descriptions";
-import { isClickupOnly, nonClickupLines, parseClickupLine } from "../api/clickup";
+import { Modal } from "./Modal";
+import { ProjectPicker } from "./ProjectPicker";
+import { TaskPicker } from "./TaskPicker";
 
 export { splitDescriptions, joinDescriptions };
 
@@ -57,7 +59,7 @@ export function TaskIcon() {
       strokeWidth="1.75"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="text-text-subtle shrink-0"
+      className="shrink-0 text-text-subtle"
     >
       <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
       <circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none" />
@@ -77,7 +79,8 @@ export function usePersistEntry(entry: TimeEntry) {
       });
 
       try {
-        const saved = await api.createTimeEntry(state.employee!.id, {
+        if (!state.employee) throw new Error("Not signed in");
+        const saved = await api.createTimeEntry(state.employee.id, {
           description: overrides.description ?? entry.description,
           projectId: entry.projectId,
           projectName: entry.projectName,
@@ -160,9 +163,10 @@ export function ProjectCard({
     (desc: string) => (split ? nonClickupLines(desc) : splitDescriptions(desc)),
     [split]
   );
-  const clickupLines = split
-    ? splitDescriptions(entry.description).filter((l) => parseClickupLine(l))
-    : [];
+  const clickupLines = useMemo(
+    () => (split ? splitDescriptions(entry.description).filter((l) => parseClickupLine(l)) : []),
+    [split, entry.description]
+  );
   const cuMinutes = clickupMinutes ?? 0;
   const ownMinutes = Math.max(0, entry.minutes - cuMinutes);
 
@@ -174,12 +178,38 @@ export function ProjectCard({
   // Descriptions state for inline editing
   const [descriptions, setDescriptions] = useState(() => ownLines(entry.description));
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  // Re-sync descriptions when the entry changes from the server or editing ends.
+  const [descSync, setDescSync] = useState({
+    description: entry.description,
+    editingIndex,
+    ownLines,
+  });
+  if (
+    descSync.description !== entry.description ||
+    descSync.editingIndex !== editingIndex ||
+    descSync.ownLines !== ownLines
+  ) {
+    setDescSync({ description: entry.description, editingIndex, ownLines });
+    if (editingIndex === null) setDescriptions(ownLines(entry.description));
+  }
   const editRef = useRef<HTMLSpanElement>(null);
 
   // Collapsed cards keep the header (project, task, description count, time)
   // and animate everything below it away. The auto-collapse preference sets the
   // baseline; toggling the card overrides it until the preference changes.
-  const [collapseOverride, setCollapseOverride] = useState<boolean | null>(null);
+  // A running card forces itself open so its descriptions stay in view. Otherwise a changed preference drops any manual override and
+  // the card falls back to the new baseline.
+  const [collapseOverride, setCollapseOverride] = useState<boolean | null>(
+    isThisRunning ? false : null
+  );
+  const [collapseSync, setCollapseSync] = useState({ isThisRunning, autoCollapsed });
+  if (
+    collapseSync.isThisRunning !== isThisRunning ||
+    collapseSync.autoCollapsed !== autoCollapsed
+  ) {
+    setCollapseSync({ isThisRunning, autoCollapsed });
+    setCollapseOverride(isThisRunning ? false : null);
+  }
   const collapsed = collapseOverride ?? autoCollapsed;
   const setCollapsed = setCollapseOverride;
 
@@ -197,18 +227,11 @@ export function ProjectCard({
   // entry. Cleared once a task is committed.
   const pendingRevertRef = useRef<{
     projectId: string;
-    projectName?: string;
-    openingId?: string;
-    taskId?: string;
+    projectName?: string | undefined;
+    openingId?: string | undefined;
+    taskId?: string | undefined;
     wasRunning: boolean;
   } | null>(null);
-
-  // Sync descriptions when entry changes from server
-  useEffect(() => {
-    if (editingIndex === null) {
-      setDescriptions(ownLines(entry.description));
-    }
-  }, [entry.description, editingIndex, ownLines]);
 
   // Focus newly added description line
   useEffect(() => {
@@ -225,17 +248,15 @@ export function ProjectCard({
     }
   }, [editMode]);
 
-  // A running card forces itself open so its descriptions stay in view. Otherwise a changed preference drops any manual override and
-  // the card falls back to the new baseline.
-  useEffect(() => {
-    setCollapseOverride(isThisRunning ? false : null);
-  }, [isThisRunning, autoCollapsed]);
-
   // Transitions stay off for the first paint so nothing animates on mount.
   const [animated, setAnimated] = useState(false);
   useEffect(() => {
-    const id = requestAnimationFrame(() => setAnimated(true));
-    return () => cancelAnimationFrame(id);
+    const id = requestAnimationFrame(() => {
+      setAnimated(true);
+    });
+    return () => {
+      cancelAnimationFrame(id);
+    };
   }, []);
   const motion = animated
     ? "transition-all duration-200 ease-out motion-reduce:transition-none"
@@ -246,14 +267,18 @@ export function ProjectCard({
   const handleCollapse = useCallback(() => {
     setEditMode("none");
     setCollapsed(true);
-  }, []);
+  }, [setCollapsed]);
 
   // Re-render every second while running for elapsed time display
   const [, setTick] = useState(0);
   useEffect(() => {
     if (!isThisRunning) return;
-    const id = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(id);
+    const id = setInterval(() => {
+      setTick((t) => t + 1);
+    }, 1000);
+    return () => {
+      clearInterval(id);
+    };
   }, [isThisRunning]);
 
   const persistViaCreate = usePersistEntry(entry);
@@ -415,7 +440,8 @@ export function ProjectCard({
       }
 
       try {
-        const saved = await api.updateTimeEntry(state.employee!.id, entry.id, {
+        if (!state.employee) throw new Error("Not signed in");
+        const saved = await api.updateTimeEntry(state.employee.id, entry.id, {
           projectId: entry.projectId,
           openingId: entry.openingId,
           taskId: newTaskId,
@@ -470,7 +496,9 @@ export function ProjectCard({
     setEditMode("none");
   }, [dispatch, entry.id]);
 
-  const closeDeleteModal = useCallback(() => setEditMode("none"), []);
+  const closeDeleteModal = useCallback(() => {
+    setEditMode("none");
+  }, []);
 
   /** Re-send a failed save. PATCH by id when AgileDay has the entry, so a
    *  failed project/task change can't turn into a second entry. */
@@ -485,7 +513,8 @@ export function ProjectCard({
       payload: { id: entry.id, updates: { syncStatus: "pending" } },
     });
     try {
-      const saved = await api.updateTimeEntry(state.employee!.id, entry.id, {
+      if (!state.employee) throw new Error("Not signed in");
+      const saved = await api.updateTimeEntry(state.employee.id, entry.id, {
         projectId: entry.projectId,
         openingId: entry.openingId,
         taskId: entry.taskId,
@@ -554,8 +583,9 @@ export function ProjectCard({
 
   // Quick-open: from a past-day card, start a new entry today with the same
   // project + task. Blocked if that project+task is already tracked today.
+  const now = useNow();
   const todayStr = (() => {
-    const n = new Date();
+    const n = now;
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
   })();
   const showTimerButton = isToday && !isSubmitted;
@@ -624,13 +654,13 @@ export function ProjectCard({
 
   return (
     <div
-      className={`relative bg-bg-card border border-border rounded-xl shadow-[0_1px_2px_rgba(11,4,21,0.04)]`}
+      className={`relative rounded-xl border border-border bg-bg-card shadow-[0_1px_2px_rgba(11,4,21,0.04)]`}
     >
       {/* Submitted lock — the expanded card shows it in the footer, which is
           folded away when collapsed, so mirror it in the bottom-right corner. */}
       {isSubmitted && (
         <span
-          className={`absolute bottom-[10px] right-3 flex items-center pointer-events-none gap-1 text-[10px] leading-none text-text-muted/50 ${motion} ${
+          className={`pointer-events-none absolute right-3 bottom-[10px] flex items-center gap-1 text-[10px] leading-none text-text-muted/50 ${motion} ${
             collapsed ? "opacity-100" : "opacity-0"
           }`}
           aria-hidden={!collapsed}
@@ -644,13 +674,15 @@ export function ProjectCard({
       {!isSubmitted && (
         <button
           type="button"
-          onClick={() => setCollapsed(false)}
+          onClick={() => {
+            setCollapsed(false);
+          }}
           tabIndex={collapsed ? undefined : -1}
           aria-hidden={!collapsed}
           aria-label="Expand entry"
           aria-expanded={false}
-          className={`absolute bottom-3 right-4 inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-primary cursor-pointer ${motion} ${
-            collapsed ? "opacity-100" : "opacity-0 pointer-events-none"
+          className={`absolute right-4 bottom-3 inline-flex cursor-pointer items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-primary ${motion} ${
+            collapsed ? "opacity-100" : "pointer-events-none opacity-0"
           }`}
         >
           <svg
@@ -678,7 +710,7 @@ export function ProjectCard({
       >
         {/* Row 1: project name, time, play/stop */}
         <div className="flex items-center gap-3">
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             {editMode === "project" ? (
               <ProjectPicker
                 selectedId={entry.projectId}
@@ -690,11 +722,13 @@ export function ProjectCard({
             ) : (
               <button
                 type="button"
-                onClick={() => canEditMeta && setEditMode("project")}
+                onClick={() => {
+                  if (canEditMeta) setEditMode("project");
+                }}
                 disabled={!canEditMeta}
-                className={`block w-full text-left font-bold text-[17px] leading-[1.25] text-text truncate ${
+                className={`block w-full truncate text-left text-[17px] leading-[1.25] font-bold text-text ${
                   canEditMeta
-                    ? "cursor-pointer hover:text-primary transition-colors"
+                    ? "cursor-pointer transition-colors hover:text-primary"
                     : "cursor-default"
                 }`}
               >
@@ -703,13 +737,15 @@ export function ProjectCard({
             )}
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex shrink-0 items-center gap-3">
             {editMode === "time" ? (
               <input
                 ref={timeInputRef}
                 type="text"
                 value={timeInput}
-                onChange={(e) => setTimeInput(e.target.value)}
+                onChange={(e) => {
+                  setTimeInput(e.target.value);
+                }}
                 onBlur={commitTime}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -720,7 +756,7 @@ export function ProjectCard({
                     setEditMode("none");
                   }
                 }}
-                className="w-[72px] px-2 py-0.5 text-[17px] font-semibold tabular-nums text-right border border-primary rounded-md bg-bg-edit outline-none focus:ring-2 focus:ring-primary/25"
+                className="w-[72px] rounded-md border border-primary bg-bg-edit px-2 py-0.5 text-right text-[17px] font-semibold tabular-nums outline-none focus:ring-2 focus:ring-primary/25"
                 aria-label="Edit time"
               />
             ) : (
@@ -766,12 +802,12 @@ export function ProjectCard({
                   onClick={() => {
                     if (isThisRunning) {
                       void stop();
-                    } else {
-                      void startForCard(entry.projectId, entry.taskId!);
+                    } else if (entry.taskId) {
+                      void startForCard(entry.projectId, entry.taskId);
                     }
                   }}
                   disabled={!entry.taskId && !isThisRunning}
-                  className={`absolute inset-0 rounded-full flex items-center justify-center text-white transition-all duration-200 active:scale-[0.94] disabled:opacity-40 disabled:cursor-not-allowed ${
+                  className={`absolute inset-0 flex items-center justify-center rounded-full text-white transition-all duration-200 active:scale-[0.94] disabled:cursor-not-allowed disabled:opacity-40 ${
                     isThisRunning
                       ? "bg-danger hover:bg-[#d8363c]"
                       : "bg-primary hover:bg-primary-dark"
@@ -796,9 +832,9 @@ export function ProjectCard({
                   tabIndex={expandInHeader ? -1 : undefined}
                   aria-hidden={expandInHeader}
                   title={alreadyTrackedToday ? "Already tracked today" : "Start today"}
-                  className={`absolute inset-0 rounded-full flex items-center justify-center transition-all duration-200 active:scale-[0.94] border-2 border-primary text-primary hover:bg-primary hover:text-white disabled:border-border disabled:text-text-subtle disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-text-subtle ${
+                  className={`absolute inset-0 flex items-center justify-center rounded-full border-2 border-primary text-primary transition-all duration-200 hover:bg-primary hover:text-white active:scale-[0.94] disabled:cursor-not-allowed disabled:border-border disabled:text-text-subtle disabled:hover:bg-transparent disabled:hover:text-text-subtle ${
                     expandInHeader
-                      ? "opacity-0 scale-90 pointer-events-none"
+                      ? "pointer-events-none scale-90 opacity-0"
                       : "opacity-100 disabled:opacity-40"
                   }`}
                   aria-label="Start today"
@@ -810,14 +846,16 @@ export function ProjectCard({
               )}
               <button
                 type="button"
-                onClick={() => setCollapsed(false)}
+                onClick={() => {
+                  setCollapsed(false);
+                }}
                 tabIndex={expandInHeader ? undefined : -1}
                 aria-hidden={!expandInHeader}
                 aria-label="Expand entry"
                 aria-expanded={false}
                 title="Expand"
-                className={`absolute inset-0 rounded-full flex items-center justify-center text-text-subtle hover:text-primary hover:bg-bg-edit transition-all duration-200 cursor-pointer ${
-                  expandInHeader ? "opacity-100" : "opacity-0 scale-90 pointer-events-none"
+                className={`absolute inset-0 flex cursor-pointer items-center justify-center rounded-full text-text-subtle transition-all duration-200 hover:bg-bg-edit hover:text-primary ${
+                  expandInHeader ? "opacity-100" : "pointer-events-none scale-90 opacity-0"
                 }`}
               >
                 <svg
@@ -838,13 +876,15 @@ export function ProjectCard({
         </div>
 
         {/* Row 2: status dot + task selector (full width) */}
-        <div className="flex items-center gap-2 mt-1 text-[13.5px] text-text-muted">
-          <span className={`w-[9px] h-[9px] rounded-full shrink-0 ${dotColor}`} />
+        <div className="mt-1 flex items-center gap-2 text-[13.5px] text-text-muted">
+          <span className={`h-[9px] w-[9px] shrink-0 rounded-full ${dotColor}`} />
           {editMode === "task" ? (
             <TaskPicker
               projectId={entry.projectId}
               selectedId={entry.taskId ?? null}
-              onSelect={handleTaskSelect}
+              onSelect={(taskId) => {
+                void handleTaskSelect(taskId);
+              }}
               excludeIds={usedTasks}
               variant="chip"
               onClose={handleCancelEdit}
@@ -852,11 +892,13 @@ export function ProjectCard({
           ) : (
             <button
               type="button"
-              onClick={() => canEditMeta && setEditMode("task")}
+              onClick={() => {
+                if (canEditMeta) setEditMode("task");
+              }}
               disabled={!canEditMeta}
-              className={`flex items-center gap-[5px] min-w-0 ${
+              className={`flex min-w-0 items-center gap-[5px] ${
                 canEditMeta
-                  ? "cursor-pointer hover:text-primary transition-colors"
+                  ? "cursor-pointer transition-colors hover:text-primary"
                   : "cursor-default"
               }`}
             >
@@ -868,7 +910,7 @@ export function ProjectCard({
               width rather than pushing the task name on every render. */}
           <span
             aria-hidden={!collapsed}
-            className={`flex items-center gap-1.5 shrink-0 overflow-hidden whitespace-nowrap text-text-subtle ${motion} ${
+            className={`flex shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-text-subtle ${motion} ${
               collapsed ? "max-w-[80px] opacity-100" : "max-w-0 opacity-0"
             }`}
           >
@@ -900,9 +942,9 @@ export function ProjectCard({
       <Collapsible collapsed={collapsed}>
         {/* Empty description warning while running */}
         {isThisRunning && descriptions.length === 0 && (
-          <div className="flex items-center gap-2 mx-4 mb-2 px-3 py-1.5 text-xs text-amber-700 bg-amber-50 rounded-lg">
+          <div className="mx-4 mb-2 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-700">
             <svg
-              className="w-3.5 h-3.5 shrink-0"
+              className="h-3.5 w-3.5 shrink-0"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -926,7 +968,9 @@ export function ProjectCard({
               Retry
             </button>
             <button
-              onClick={() => setEditMode("discard")}
+              onClick={() => {
+                setEditMode("discard");
+              }}
               className="text-text-muted hover:underline"
             >
               Discard
@@ -935,32 +979,36 @@ export function ProjectCard({
         )}
         {entry.syncStatus === "pending" && (
           <div className="px-4 pb-2">
-            <span className="text-xs text-text-muted font-medium">Saving...</span>
+            <span className="text-xs font-medium text-text-muted">Saving...</span>
           </div>
         )}
 
         {/* Action error */}
         {actionError && (
           <div className="px-4 pb-2">
-            <span className="text-xs text-danger font-medium">{actionError}</span>
+            <span className="text-xs font-medium text-danger">{actionError}</span>
           </div>
         )}
 
         {/* Description stack */}
         <div className="px-4 pb-3">
-          <div className="border-l-2 border-border ml-1 pl-[14px] flex flex-col gap-[9px]">
+          <div className="ml-1 flex flex-col gap-[9px] border-l-2 border-border pl-[14px]">
             {descriptions.map((desc, i) => (
-              <div key={i} className="flex gap-[9px] items-start text-sm text-text leading-[1.4]">
-                <span className="w-[5px] h-[5px] rounded-full bg-primary shrink-0 mt-[7px]" />
+              <div key={i} className="flex items-start gap-[9px] text-sm leading-[1.4] text-text">
+                <span className="mt-[7px] h-[5px] w-[5px] shrink-0 rounded-full bg-primary" />
                 {isEditable ? (
                   <span
                     ref={editingIndex === i ? editRef : undefined}
                     contentEditable
                     suppressContentEditableWarning
-                    className="desc-editable flex-1 outline-none rounded-[4px] focus:bg-bg-edit focus:ring-2 focus:ring-primary/25"
+                    className="desc-editable flex-1 rounded-[4px] outline-none focus:bg-bg-edit focus:ring-2 focus:ring-primary/25"
                     data-placeholder="Describe what you worked on…"
-                    onFocus={() => setEditingIndex(i)}
-                    onBlur={(e) => handleBlur(i, e.currentTarget.textContent ?? "")}
+                    onFocus={() => {
+                      setEditingIndex(i);
+                    }}
+                    onBlur={(e) => {
+                      handleBlur(i, e.currentTarget.textContent);
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
@@ -985,7 +1033,7 @@ export function ProjectCard({
             {isEditable && (
               <button
                 onClick={handleAddDescription}
-                className="inline-flex items-center gap-[6px] text-[13px] font-semibold text-text-subtle hover:text-primary transition-colors py-1 -ml-1"
+                className="-ml-1 inline-flex items-center gap-[6px] py-1 text-[13px] font-semibold text-text-subtle transition-colors hover:text-primary"
               >
                 <svg
                   width="14"
@@ -1010,7 +1058,7 @@ export function ProjectCard({
         {/* Locked cards have no "add description" row, so the footer needs its own gap. */}
         <div className={`flex items-center gap-3 px-4 pb-3 ${isSubmitted ? "mt-0.5" : "-mt-1"}`}>
           {isSubmitted && (
-            <span className="text-[10px] leading-none text-text-muted/50 flex items-center gap-1">
+            <span className="flex items-center gap-1 text-[10px] leading-none text-text-muted/50">
               <LockIcon />
               Submitted — edit in AgileDay
             </span>
@@ -1018,7 +1066,7 @@ export function ProjectCard({
           <button
             type="button"
             onClick={handleCollapse}
-            className="ml-auto inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-primary transition-colors cursor-pointer"
+            className="ml-auto inline-flex cursor-pointer items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle transition-colors hover:text-primary"
             aria-label="Collapse entry"
             aria-expanded={true}
           >
@@ -1048,7 +1096,7 @@ export function ProjectCard({
             setActionError(null);
             setEditMode("delete");
           }}
-          className="absolute bottom-3 left-4 inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-danger transition-colors cursor-pointer"
+          className="absolute bottom-3 left-4 inline-flex cursor-pointer items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle transition-colors hover:text-danger"
           aria-label="Delete entry"
         >
           <svg

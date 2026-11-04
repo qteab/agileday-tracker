@@ -1,4 +1,5 @@
 import { load } from "@tauri-apps/plugin-store";
+
 import { splitDescriptions, joinDescriptions } from "../utils/descriptions";
 
 /**
@@ -61,8 +62,8 @@ export function clickupLine(task: ClickUpTask): string {
 }
 
 export function parseClickupLine(line: string): ClickUpTask | null {
-  const m = line.match(LINE_RE);
-  return m ? { id: m[1], name: m[2] ?? "" } : null;
+  const [, id, name = ""] = line.match(LINE_RE) ?? [];
+  return id ? { id, name } : null;
 }
 
 /** ClickUp tasks referenced by a description, in order. */
@@ -106,8 +107,8 @@ export function withoutClickupLine(description: string, taskId: string): string 
  */
 export function parseTaskRef(input: string): { id: string; custom: boolean } | null {
   let s = input.trim();
-  const url = s.match(/clickup\.com\/t\/(?:\d+\/)?([^/?#\s]+)/i);
-  if (url) s = url[1];
+  const urlId = s.match(/clickup\.com\/t\/(?:\d+\/)?([^/?#\s]+)/i)?.[1];
+  if (urlId) s = urlId;
   s = s.replace(/^#/, "").replace(/^CU-/i, "");
   if (/^[a-z0-9]+$/i.test(s)) return { id: s, custom: false };
   if (/^[a-z0-9]+-\d+$/i.test(s)) return { id: s.toUpperCase(), custom: true };
@@ -276,7 +277,7 @@ async function tauriFetch(): Promise<typeof globalThis.fetch> {
 }
 
 type RawEntry = {
-  id: string;
+  id: string | number;
   task?: { id: string; name: string } | null;
   start: string | number;
   duration: string | number;
@@ -296,10 +297,12 @@ function toEntry(r: RawEntry, teamId: string): ClickUpTimeEntry | null {
 
 /** Thrown while ClickUp rate limits a token; `retryAt` (ms) is when it accepts calls again. */
 export class ClickUpRateLimitError extends Error {
-  constructor(public retryAt: number) {
+  retryAt: number;
+  constructor(retryAt: number) {
     super(
       `ClickUp is rate limiting requests — try again in ${Math.ceil((retryAt - Date.now()) / 1000)}s`
     );
+    this.retryAt = retryAt;
   }
 }
 
@@ -350,7 +353,7 @@ export function createClickUpClient(
     return request<T>(account.token, `/team/${teamId}${path}`, init);
   }
 
-  type RawTask = { id: string; name: string; team_id: string };
+  type RawTask = { id: string; name: string; team_id: string | number };
   const task = (t: RawTask): ClickUpTask => ({ id: t.id, name: t.name, teamId: String(t.team_id) });
 
   return {
@@ -358,7 +361,7 @@ export function createClickUpClient(
     async getAccount(token: string): Promise<ClickUpAccount> {
       const [{ user }, { teams }] = await Promise.all([
         request<{ user: { email: string } }>(token, "/user"),
-        request<{ teams: { id: string; name: string }[] }>(token, "/team"),
+        request<{ teams: { id: string | number; name: string }[] }>(token, "/team"),
       ]);
       return {
         token,
