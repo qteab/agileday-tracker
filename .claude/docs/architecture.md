@@ -141,3 +141,20 @@ New cards are created via the floating + button (FAB), which opens a project/tas
 - When window is visible: app appears in Dock and Cmd+Tab.
 - When hidden: app disappears from Dock (ActivationPolicy toggle in Rust).
 - Title bar uses macOS overlay style with custom drag region.
+
+## Telemetry (PostHog)
+
+`src/posthog.ts` initialises `posthog-js` and exports `posthogClient` and `posthogLogger`. Both are `undefined` when telemetry is off, so call sites use optional chaining (`posthogClient?.capture(...)`).
+
+**When it runs.** Only when `VITE_POSTHOG_KEY` and `VITE_POSTHOG_HOST` are present at build time. Release builds get them from the GitHub repo variables `POSTHOG_KEY` / `POSTHOG_HOST`. Tests never send. Dev builds send only with `VITE_POSTHOG_ENABLE_IN_DEV=true` in `.env` (see `.env.example`).
+
+**What is sent.**
+- Product events: `timer_started`, `time_entry_saved`, `time_entry_updated`, `time_entry_deleted`, `timesheet_submitted`, `timesheet_rounded`, `clickup_connected`. Properties are counts and flags — never descriptions, project or customer names.
+- Unhandled errors and promise rejections (`$exception`).
+- Logs: `agileday_api_request_failed` / `agileday_api_network_error` from `request()` in `src/api/agileday.ts`, with method, status and duration (no URL).
+- Identity: after the employee loads, `identify(employee.id, { email, name })`. `reset()` on logout and session expiry.
+- Every event carries `app_version` (registered from Tauri `getVersion()`).
+
+**What is off.** Autocapture, session replay, heatmaps, dead clicks, surveys, product tours. `disable_external_dependency_loading` is on and the exception/logs extensions are bundled from `posthog-js/dist/*`, so the webview never loads remote scripts. CSP allows `connect-src https://*.posthog.com` only.
+
+**Not covered.** Rust panics in the Tauri shell are not reported.

@@ -1,36 +1,70 @@
-import posthog from "posthog-js";
+import posthog, { type PostHog } from "posthog-js";
+import { getVersion } from "@tauri-apps/api/app";
+// PostHog normally downloads these extensions from its CDN at runtime. We bundle
+// them instead (and set disable_external_dependency_loading) so the app never
+// runs remote scripts — the webview has access to Tauri IPC.
+import "posthog-js/dist/exception-autocapture";
+import "posthog-js/dist/logs";
 
 const posthogKey = import.meta.env.VITE_POSTHOG_KEY;
 const posthogHost = import.meta.env.VITE_POSTHOG_HOST;
+const sendFromDevBuilds = import.meta.env.VITE_POSTHOG_ENABLE_IN_DEV === "true";
 
-if (!posthogKey || !posthogHost) {
-  if (import.meta.env.DEV) {
-    const missingVariable = !posthogKey ? "VITE_POSTHOG_KEY" : "VITE_POSTHOG_HOST";
-    throw new Error(
-      `${missingVariable} variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once ${missingVariable} is configured`
-    );
+/**
+ * Telemetry runs only in release builds that were given a key at build time.
+ * Tests never send events, and dev builds only send when explicitly opted in,
+ * so developer activity doesn't pollute the analytics.
+ */
+function isTelemetryEnabled(): boolean {
+  if (!posthogKey || !posthogHost) return false;
+  if (import.meta.env.MODE === "test") return false;
+  if (import.meta.env.DEV && !sendFromDevBuilds) return false;
+  return true;
+}
+
+function initPostHog(apiKey: string, apiHost: string): PostHog {
+  return posthog.init(apiKey, {
+    api_host: apiHost,
+    defaults: "2026-08-30",
+    disable_external_dependency_loading: true,
+    // Explicit events only. Session replay would record entry descriptions,
+    // customer and project names, so it stays off even if enabled in PostHog.
+    autocapture: false,
+    disable_session_recording: true,
+    capture_heatmaps: false,
+    capture_dead_clicks: false,
+    disable_surveys: true,
+    disable_product_tours: true,
+    disable_conversations: true,
+    capture_exceptions: {
+      capture_unhandled_errors: true,
+      capture_unhandled_rejections: true,
+      capture_console_errors: false,
+    },
+    logs: {
+      serviceName: "agileday-tracker-web",
+      environment: import.meta.env.MODE,
+    },
+  });
+}
+
+async function registerAppVersion(client: PostHog) {
+  try {
+    const appVersion = await getVersion();
+    client.register({ app_version: appVersion });
+  } catch {
+    // Not running inside Tauri — events just go without a version.
   }
 }
 
-export const posthogClient =
-  posthogKey && posthogHost
-    ? posthog.init(posthogKey, {
-        api_host: posthogHost,
-        defaults: "2026-08-30",
-        capture_exceptions: {
-          capture_unhandled_errors: true,
-          capture_unhandled_rejections: true,
-          capture_console_errors: false,
-        },
-        logs: {
-          serviceName: "agileday-tracker-web",
-          environment: import.meta.env.MODE,
-        },
-      })
-    : undefined;
+function createPostHogClient(): PostHog | undefined {
+  if (!isTelemetryEnabled() || !posthogKey || !posthogHost) return undefined;
+
+  const client = initPostHog(posthogKey, posthogHost);
+  void registerAppVersion(client);
+  return client;
+}
+
+export const posthogClient = createPostHogClient();
 
 export const posthogLogger = posthogClient?.logger;
-
-posthogLogger?.info("posthog_logs_initialized", {
-  runtime: "tauri_webview",
-});
