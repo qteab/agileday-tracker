@@ -12,6 +12,7 @@ The Rust layer handles:
 - **Window lifecycle**: show/hide toggle, Dock visibility (ActivationPolicy), window close = hide (not quit)
 - **OAuth callback server**: Localhost HTTP server on `127.0.0.1:19847` captures OAuth redirect
 - **Timer status**: `set_timer_status` Tauri command updates tray menu text and button states (also carries the inactivity prefs)
+- **Tray tick**: a 1-second background task keeps the menu bar timer advancing while the window is hidden. It reads state on its own thread but hands the actual tray update (`apply_tray_state`) to `run_on_main_thread`. Tray/menu setters called off the main thread block until the main thread runs them, so calling `apply_tray_state` (which holds locks across those setters) from the tick thread deadlocks against `set_timer_status` and freezes the app. Never update the tray from a background thread.
 - **Inactivity detection**: while a timer runs and the feature is enabled, the 1-second tray tick reads system-wide idle via `CGEventSourceSecondsSinceLastEventType` (CoreGraphics FFI, no permission prompt). Past the threshold it shows a red status-dot icon (`tray-inactive.png`) + "You've been inactive for Hh Mm" title, and emits an `inactivity` event. Detection is Rust-owned because the WebView can't see input outside its own (usually hidden) window.
 - **Plugin registration**: store, shell, http (with `unsafe-headers`), deep-link, updater, process, log
 

@@ -843,8 +843,22 @@ pub fn run() {
                             );
                         }
                     }
-                    if let Err(err) = apply_tray_state(&state, snapshot.as_ref(), inactive, idle) {
-                        eprintln!("tray tick error: {}", err);
+                    // Tray updates must run on the main thread. From this
+                    // background thread, each menu/tray setter blocks until the
+                    // main thread runs it — while apply_tray_state holds its
+                    // locks. If the main thread is meanwhile in set_timer_status
+                    // waiting for one of those locks, both wait forever and the
+                    // app freezes. On the main thread the two calls just queue.
+                    let main_thread_handle = tick_handle.clone();
+                    let scheduled = tick_handle.run_on_main_thread(move || {
+                        let state = main_thread_handle.state::<TrayState>();
+                        let result = apply_tray_state(&state, snapshot.as_ref(), inactive, idle);
+                        if let Err(err) = result {
+                            eprintln!("tray tick error: {}", err);
+                        }
+                    });
+                    if let Err(err) = scheduled {
+                        eprintln!("tray tick scheduling error: {}", err);
                     }
                 }
             });
