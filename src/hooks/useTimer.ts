@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useApp, useApi } from "../store/context";
+import { posthogClient } from "../posthog";
 import type { TimerState } from "../store/reducer";
 import {
   ClickUpRateLimitError,
@@ -83,6 +84,7 @@ export function useTimer() {
         type: "SET_TIMER",
         payload: { projectId, taskId, clickupTask, isRunning: true, startTime },
       });
+      posthogClient?.capture("timer_started", { has_clickup_task: Boolean(clickupTask) });
     },
     [dispatch]
   );
@@ -94,6 +96,7 @@ export function useTimer() {
         type: "SET_TIMER",
         payload: { ...state.lastTimer, isRunning: true, startTime: new Date().toISOString() },
       });
+      posthogClient?.capture("timer_started", { has_clickup_task: false, source: "last_timer" });
       return;
     }
     // Nothing stopped this session (e.g. right after launch): resume the newest entry.
@@ -112,6 +115,7 @@ export function useTimer() {
         startTime: new Date().toISOString(),
       },
     });
+    posthogClient?.capture("timer_started", { has_clickup_task: false, source: "latest_entry" });
   }, [dispatch, state.entries, state.lastTimer, timer.isRunning]);
 
   return {
@@ -273,6 +277,11 @@ export function useAddTime() {
               syncStatus: "synced",
             },
           },
+        });
+        posthogClient?.capture("time_entry_saved", {
+          session_minutes: minutes,
+          entry_existed: Boolean(existing),
+          has_clickup_task: clickupTasks.length > 0,
         });
       } catch (err) {
         dispatch({
