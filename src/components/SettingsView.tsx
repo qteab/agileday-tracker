@@ -20,13 +20,7 @@ import { createClickUpClient } from "../api/clickup";
 import { ClickUpLogo } from "./ClickUp";
 
 export type SettingsPage =
-  | "flex"
-  | "vacation"
-  | "menubar"
-  | "appearance"
-  | "timer"
-  | "list"
-  | "clickup";
+  "flex" | "vacation" | "menubar" | "appearance" | "timer" | "list" | "clickup";
 
 interface SettingsViewProps {
   onBack: () => void;
