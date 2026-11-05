@@ -78,7 +78,7 @@ export function buildRoundingPlan(entries: TimeEntry[]): DayProjectRounding[] {
         id: e.id,
         date: e.date,
         projectId: e.projectId,
-        projectName: e.projectName,
+        ...(e.projectName !== undefined ? { projectName: e.projectName } : {}),
         description: e.description,
         currentMinutes: e.minutes,
         adjustedMinutes:
@@ -92,7 +92,7 @@ export function buildRoundingPlan(entries: TimeEntry[]): DayProjectRounding[] {
         id: e.id,
         date: e.date,
         projectId: e.projectId,
-        projectName: e.projectName,
+        ...(e.projectName !== undefined ? { projectName: e.projectName } : {}),
         description: e.description,
         currentMinutes: e.minutes,
         adjustedMinutes: e.minutes,
@@ -101,10 +101,12 @@ export function buildRoundingPlan(entries: TimeEntry[]): DayProjectRounding[] {
       })),
     ];
 
+    const [first] = groupEntries;
+    if (!first) continue;
     result.push({
-      projectId: groupEntries[0].projectId,
-      projectName: groupEntries[0]?.projectName,
-      date: groupEntries[0].date,
+      projectId: first.projectId,
+      ...(first.projectName !== undefined ? { projectName: first.projectName } : {}),
+      date: first.date,
       totalMinutes: savedTotal,
       roundedTotal,
       difference,

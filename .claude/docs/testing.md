@@ -39,6 +39,7 @@ Total: 300 tests.
 ### Mock Provider Tests (`mock-provider.test.ts`)
 
 Tests the `ApiProvider` contract using the in-memory mock. Covers:
+
 - CRUD operations (create, read, update, delete entries)
 - Entry consolidation (same project+date+description)
 - Batch updates
@@ -50,6 +51,7 @@ The mock uses an injectable `EntryStore` for controlled test state.
 ### AgileDay Provider Tests (`agileday-provider.test.ts`)
 
 Tests the real `AgileDayProvider` with mocked `fetch`. Covers:
+
 - Request formatting (headers, URL construction, body)
 - Token injection and refresh flow
 - Error handling (401, 403, 500, network errors)
@@ -61,6 +63,7 @@ Uses `vi.fn()` to mock global `fetch` and JWT decode.
 ### Utility Tests
 
 Pure function tests — no mocking needed. Test edge cases for:
+
 - Flex hour calculations across weeks with holidays
 - 15-minute rounding (ceil/floor) with override support
 - Holiday set construction and lookup
@@ -76,7 +79,7 @@ npx vitest run <file>     # Single file
 
 ## What's NOT Tested
 
-- React components (no DOM/component tests) — component *decisions* are extracted
+- React components (no DOM/component tests) — component _decisions_ are extracted
   into pure helpers instead, e.g. `describeTaskPickerState` in
   `src/utils/task-picker.ts` covers the task picker's hidden/notice/ready states
   without a renderer

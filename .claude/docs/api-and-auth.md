@@ -6,20 +6,20 @@ All requests require `Origin: https://qvik.agileday.io` header (Tauri HTTP plugi
 
 ### Endpoints Used
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/v1/time_entry/employee/id/{id}?startDate=&endDate=` | Primary entry read, filtered by **work date** (all statuses, includes descriptions). `endDate` is **exclusive** — callers pass `endDate + 1 day` |
-| GET | `/v1/time_entry/employee/id/{id}/updated` | Fallback entry read, used **only** if the primary read fails. Filters by last-update timestamp, *not* work date, so it uses a 400-day `updatedAfter` lookback |
-| GET | `/v1/timesheets/{id}/summary` | Per-month top-up read (all statuses, no descriptions). Fetched for **every** month the requested window touches |
-| POST | `/v1/time_entry/employee/id/{id}` | Create time entry |
-| PATCH | `/v1/time_entry/{id}` | Update time entry |
-| DELETE | `/v1/time_entry/{id}` | Delete time entry |
-| GET | `/v1/project?projectStage=ACTIVE` | List active projects |
-| GET | `/v1/absence` | List absence projects (vacation, sick leave, etc.) — a separate entity, NOT returned by `/v1/project` |
-| GET | `/v2/opening` | Allocated projects (with employee filter); also surfaces ABSENCE-typed projectlikes as a fallback |
-| GET | `/v1/project/id/{id}/task` | Tasks a project owns. Returns `200 []` for the ~15% of projects that own none |
-| GET | `/v2/task?limit=&offset=` | **Undocumented.** Whole-tenant task catalogue, used to discover global default tasks. Envelope `{ data, pagination }` |
-| GET | `/v1/holiday` | Public holidays by country |
+| Method | Endpoint                                              | Purpose                                                                                                                                                       |
+| ------ | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/v1/time_entry/employee/id/{id}?startDate=&endDate=` | Primary entry read, filtered by **work date** (all statuses, includes descriptions). `endDate` is **exclusive** — callers pass `endDate + 1 day`              |
+| GET    | `/v1/time_entry/employee/id/{id}/updated`             | Fallback entry read, used **only** if the primary read fails. Filters by last-update timestamp, _not_ work date, so it uses a 400-day `updatedAfter` lookback |
+| GET    | `/v1/timesheets/{id}/summary`                         | Per-month top-up read (all statuses, no descriptions). Fetched for **every** month the requested window touches                                               |
+| POST   | `/v1/time_entry/employee/id/{id}`                     | Create time entry                                                                                                                                             |
+| PATCH  | `/v1/time_entry/{id}`                                 | Update time entry                                                                                                                                             |
+| DELETE | `/v1/time_entry/{id}`                                 | Delete time entry                                                                                                                                             |
+| GET    | `/v1/project?projectStage=ACTIVE`                     | List active projects                                                                                                                                          |
+| GET    | `/v1/absence`                                         | List absence projects (vacation, sick leave, etc.) — a separate entity, NOT returned by `/v1/project`                                                         |
+| GET    | `/v2/opening`                                         | Allocated projects (with employee filter); also surfaces ABSENCE-typed projectlikes as a fallback                                                             |
+| GET    | `/v1/project/id/{id}/task`                            | Tasks a project owns. Returns `200 []` for the ~15% of projects that own none                                                                                 |
+| GET    | `/v2/task?limit=&offset=`                             | **Undocumented.** Whole-tenant task catalogue, used to discover global default tasks. Envelope `{ data, pagination }`                                         |
+| GET    | `/v1/holiday`                                         | Public holidays by country                                                                                                                                    |
 
 ### Request Headers
 
@@ -38,6 +38,7 @@ Content-Type: application/json
 **One entry per (project, task, date).** The FAB enforces this locally. The provider checks for existing entries before creating — if one exists, it PATCHes instead of POSTing.
 
 `createTimeEntry` flow:
+
 1. Query that single day by work date (`?startDate={date}&endDate={date+1}`) for an existing entry matching (projectId, taskId, EDITABLE status)
 2. If match found → PATCH with app's full state (minutes, description)
 3. If no match → POST new entry
@@ -53,14 +54,15 @@ produced a phantom -40h week in the flex balance (see
 `specs/fix-flex-missing-entries/plan.md`).
 
 The read therefore layers:
+
 1. **Primary** — date-range GET. Correct by construction.
 2. **Fallback** — `/updated` with a 400-day lookback, only if the primary throws
-   (an *empty* primary result is legitimate and does not trigger it).
+   (an _empty_ primary result is legitimate and does not trigger it).
 3. **Top-up** — per-month summary for every month in the window, merged by
    `projectId::date` and adding only the deficit. This is what guarantees no
    minutes go missing if the primary read's status coverage is incomplete.
 
-Flex depends entirely on this: `calculateFlex` never reduces *expected* hours
+Flex depends entirely on this: `calculateFlex` never reduces _expected_ hours
 for absence, it counts logged absence entries as worked minutes. A week whose
 entries fail to load therefore reads as five no-show days.
 
@@ -73,7 +75,7 @@ offering a tenant-level task labelled "(global default)".
 
 Those live in the tenant task catalogue at the undocumented **`/v2/task`**, as
 rows with `projectId: null` and `defaultTemplate: true`. Both conditions matter:
-314 rows carry `defaultTemplate: true` *while belonging to a project* — those are
+314 rows carry `defaultTemplate: true` _while belonging to a project_ — those are
 per-project instances of a template, not global defaults, and matching on
 `defaultTemplate` alone would offer hundreds of other projects' tasks everywhere.
 Project-owned tasks reference their template via `parentTaskId`.
@@ -146,7 +148,7 @@ Submitted/approved entries are locked — the app cannot edit them, only view.
 interface AuthState {
   accessToken: string;
   refreshToken: string;
-  expiresAt: number;  // Date.now() + expires_in * 1000
+  expiresAt: number; // Date.now() + expires_in * 1000
 }
 ```
 
@@ -155,7 +157,7 @@ interface AuthState {
 `context.tsx` creates the provider with closures for reading/writing auth state:
 
 ```typescript
-createAgileDayProvider(config, getAuth, setAuth, onAuthFailure)
+createAgileDayProvider(config, getAuth, setAuth, onAuthFailure);
 ```
 
 - `getAuth`: reads current AuthState from ref (avoids stale closures)
@@ -171,10 +173,16 @@ interface ApiProvider {
   getAbsenceProjects(): Promise<Project[]>; // /v1/absence, tagged projectType: "ABSENCE"; returns [] if unauthorized
   getTasks(projectId: string): Promise<Task[]>; // project's own tasks + tenant global defaults (see above)
   getTimeEntries(employeeId: string, startDate: string, endDate: string): Promise<TimeEntry[]>;
-  createTimeEntry(employeeId: string, entry: Omit<TimeEntry, "id" | "syncStatus">): Promise<TimeEntry>;
+  createTimeEntry(
+    employeeId: string,
+    entry: Omit<TimeEntry, "id" | "syncStatus">
+  ): Promise<TimeEntry>;
   updateTimeEntry(employeeId: string, id: string, updates: Partial<TimeEntry>): Promise<TimeEntry>;
   deleteTimeEntry(ids: string[]): Promise<void>;
-  batchUpdateEntries(employeeId: string, updates: Array<{ id: string } & Partial<TimeEntry>>): Promise<TimeEntry[]>;
+  batchUpdateEntries(
+    employeeId: string,
+    updates: Array<{ id: string } & Partial<TimeEntry>>
+  ): Promise<TimeEntry[]>;
   getAllocations(employeeId: string): Promise<Allocation[]>;
   getMyProjects(employeeId: string): Promise<MyProjectInfo[]>;
   getHolidays(countryCode: string, startDate: string, endDate: string): Promise<Holiday[]>;

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo } from "react";
 
 export interface DropdownOption {
   id: string;
@@ -38,11 +38,15 @@ export function Dropdown({
   onClose,
 }: DropdownProps) {
   const [open, setOpen] = useState(false);
+  // Trigger rect, measured when the panel opens.
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const [search, setSearch] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   const selected = options.find((o) => o.id === selectedId);
 
@@ -63,7 +67,9 @@ export function Dropdown({
       }
     }
     document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+    };
   }, []);
 
   useEffect(() => {
@@ -77,18 +83,21 @@ export function Dropdown({
   }
 
   return (
-    <div ref={ref} className="relative min-w-0 w-full">
+    <div ref={ref} className="relative w-full min-w-0">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-sm rounded-lg bg-bg-card border border-divider hover:border-border cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
+        onClick={() => {
+          setAnchor(ref.current?.getBoundingClientRect() ?? null);
+          setOpen(!open);
+        }}
+        className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-divider bg-bg-card px-3 py-2 text-sm transition-colors hover:border-border focus:ring-2 focus:ring-primary/20 focus:outline-none"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
         <span className="flex min-w-0 items-center gap-2">
           {selected?.color && (
             <span
-              className="w-2.5 h-2.5 rounded-full shrink-0"
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
               style={{ backgroundColor: selected.color }}
             />
           )}
@@ -97,7 +106,7 @@ export function Dropdown({
           </span>
         </span>
         <svg
-          className={`w-3 h-3 text-text-muted shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`h-3 w-3 shrink-0 text-text-muted transition-transform ${open ? "rotate-180" : ""}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -108,49 +117,53 @@ export function Dropdown({
 
       {open && (
         <div
-          className="fixed mt-1 bg-bg-card rounded-lg shadow-lg border border-divider z-50 overflow-hidden"
+          className="fixed z-50 mt-1 overflow-hidden rounded-lg border border-divider bg-bg-card shadow-lg"
           style={{
             // Anchor below the trigger, matching its width exactly.
-            top: ref.current?.getBoundingClientRect().bottom,
-            left: ref.current?.getBoundingClientRect().left,
-            width: ref.current?.getBoundingClientRect().width,
+            top: anchor?.bottom,
+            left: anchor?.left,
+            width: anchor?.width,
           }}
         >
           {searchable && (
-            <div className="p-2.5 border-b border-divider">
+            <div className="border-b border-divider p-2.5">
               <input
                 ref={inputRef}
                 type="text"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                }}
                 placeholder={searchPlaceholder}
-                className="w-full px-3 py-2 text-sm bg-bg rounded-lg outline-none placeholder:text-text-muted"
+                className="w-full rounded-lg bg-bg px-3 py-2 text-sm outline-none placeholder:text-text-muted"
               />
             </div>
           )}
 
           <div className="max-h-64 overflow-y-auto py-1">
             {visibleOptions.length === 0 && (
-              <div className="px-3 py-3 text-xs text-text-muted text-center">{emptyLabel}</div>
+              <div className="px-3 py-3 text-center text-xs text-text-muted">{emptyLabel}</div>
             )}
             {visibleOptions.map((option) => (
               <button
                 type="button"
                 key={option.id}
-                onClick={() => pick(option.id)}
-                className={`w-full text-left px-3 py-2.5 flex items-center gap-2.5 hover:bg-bg/70 cursor-pointer transition-colors text-sm ${
+                onClick={() => {
+                  pick(option.id);
+                }}
+                className={`flex w-full cursor-pointer items-center gap-2.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-bg/70 ${
                   option.id === selectedId ? "bg-primary/10" : ""
                 }`}
               >
                 {option.color && (
                   <span
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
                     style={{ backgroundColor: option.color }}
                   />
                 )}
-                <span className="truncate flex-1">{option.label}</span>
+                <span className="flex-1 truncate">{option.label}</span>
                 {option.hint && (
-                  <span className="text-text-muted text-xs shrink-0 max-w-[40%] truncate text-right">
+                  <span className="max-w-[40%] shrink-0 truncate text-right text-xs text-text-muted">
                     {option.hint}
                   </span>
                 )}

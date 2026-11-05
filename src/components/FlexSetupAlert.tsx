@@ -10,11 +10,11 @@ export function FlexSetupAlert({ onOpenSettings }: FlexSetupAlertProps) {
   if (state.flexConfig) return null;
 
   return (
-    <div className="flex items-center justify-between px-4 py-2 bg-primary/10 text-primary text-xs">
+    <div className="flex items-center justify-between bg-primary/10 px-4 py-2 text-xs text-primary">
       <span>Set up flex time tracking to monitor your overtime balance.</span>
       <button
         onClick={onOpenSettings}
-        className="font-semibold hover:underline ml-2 whitespace-nowrap"
+        className="ml-2 font-semibold whitespace-nowrap hover:underline"
       >
         Set up
       </button>

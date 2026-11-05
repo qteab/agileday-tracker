@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+
 import {
   parseDurationInput,
   formatDurationInput,
@@ -112,7 +113,7 @@ describe("usedTaskIds", () => {
   });
 
   it("skips entries without a task", () => {
-    const entries = [entry({ id: "e2", taskId: undefined }), entry({ id: "e3", taskId: "t3" })];
+    const entries = [entry({ id: "e2" }), entry({ id: "e3", taskId: "t3" })];
     expect(usedTaskIds(entries, "self", "p1", "2026-06-23")).toEqual(new Set(["t3"]));
   });
 

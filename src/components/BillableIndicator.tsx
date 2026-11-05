@@ -10,12 +10,12 @@ export function BillableIndicator({ billable, className = "" }: BillableIndicato
   return (
     <span
       aria-label={label}
-      className={`relative group inline-flex items-center justify-center w-[22px] h-[22px] rounded-[4px] font-bold text-sm shrink-0 cursor-default ${
+      className={`group relative inline-flex h-[22px] w-[22px] shrink-0 cursor-default items-center justify-center rounded-[4px] text-sm font-bold ${
         billable ? "text-primary" : "text-billable-off"
       } ${className}`}
     >
       $
-      <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 text-xs font-medium text-bg-card bg-bg-dark rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+      <span className="pointer-events-none absolute top-full left-1/2 z-50 mt-1.5 -translate-x-1/2 rounded bg-bg-dark px-2 py-1 text-xs font-medium whitespace-nowrap text-bg-card opacity-0 transition-opacity group-hover:opacity-100">
         {label}
       </span>
     </span>

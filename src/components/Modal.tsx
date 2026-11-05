@@ -40,7 +40,9 @@ export function Modal({ onClose, title, subtitle, actions, children }: ModalProp
       if (e.key === "Escape") onClose();
     }
     document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+    };
   }, [onClose]);
 
   return (
@@ -49,9 +51,9 @@ export function Modal({ onClose, title, subtitle, actions, children }: ModalProp
       <div
         role="dialog"
         aria-modal="true"
-        className="relative bg-bg-card rounded-xl shadow-xl w-full max-w-sm p-5 flex flex-col gap-4"
+        className="relative flex w-full max-w-sm flex-col gap-4 rounded-xl bg-bg-card p-5 shadow-xl"
       >
-        <div className="font-bold text-sm text-text">{title}</div>
+        <div className="text-sm font-bold text-text">{title}</div>
         {subtitle && <p className="text-xs text-text-muted">{subtitle}</p>}
         {children}
         {actions && actions.length > 0 && (
@@ -62,7 +64,7 @@ export function Modal({ onClose, title, subtitle, actions, children }: ModalProp
                 autoFocus={action.autoFocus}
                 disabled={action.disabled}
                 onClick={action.onClick}
-                className={`flex-1 py-2.5 rounded-lg font-semibold text-sm transition-all active:scale-[0.98] cursor-pointer ${actionClasses[action.variant ?? "primary"]}`}
+                className={`flex-1 cursor-pointer rounded-lg py-2.5 text-sm font-semibold transition-all active:scale-[0.98] ${actionClasses[action.variant ?? "primary"]}`}
               >
                 {action.label}
               </button>

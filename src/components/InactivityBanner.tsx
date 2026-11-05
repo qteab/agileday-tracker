@@ -1,9 +1,10 @@
 import { useEffect } from "react";
+
 import { useApp } from "../store/context";
 import { formatAway, computeDiscardStartTime } from "../utils/inactivity";
 
 const WARN_ICON = (
-  <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+  <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -40,22 +41,24 @@ export function InactivityBanner() {
       }
       dispatch({ type: "RESOLVE_RETURN" });
     };
-    const keep = () => dispatch({ type: "RESOLVE_RETURN" });
+    const keep = () => {
+      dispatch({ type: "RESOLVE_RETURN" });
+    };
 
     return (
-      <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-t border-amber-200">
-        <span className="text-xs text-amber-800 flex-1">
+      <div className="flex items-center gap-2 border-t border-amber-200 bg-amber-50 px-4 py-2">
+        <span className="flex-1 text-xs text-amber-800">
           You were away {formatAway(pending.awaySeconds)}
         </span>
         <button
           onClick={discard}
-          className="px-3 py-1 text-xs font-medium text-white bg-danger rounded-lg hover:bg-danger/90 transition-colors"
+          className="rounded-lg bg-danger px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-danger/90"
         >
           Discard
         </button>
         <button
           onClick={keep}
-          className="px-3 py-1 text-xs font-medium text-amber-800 bg-amber-100 rounded-lg hover:bg-amber-200 transition-colors"
+          className="rounded-lg bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-200"
         >
           Keep
         </button>
@@ -65,7 +68,7 @@ export function InactivityBanner() {
 
   if (inactivity.isAway) {
     return (
-      <div className="flex items-center gap-2 px-4 py-1.5 text-xs text-amber-700 bg-amber-50">
+      <div className="flex items-center gap-2 bg-amber-50 px-4 py-1.5 text-xs text-amber-700">
         {WARN_ICON}
         <span>Inactive for {formatAway(inactivity.idleSeconds)}</span>
       </div>

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+
 import { resolveEntryBillable } from "../billable";
 
 const taskBillable = { "task-billable": true, "task-internal": false };

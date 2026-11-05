@@ -1,7 +1,9 @@
 import { useState } from "react";
+
+import { createClickUpClient } from "../api/clickup";
+import bearIcon from "../assets/bear.png";
+import { useNow } from "../hooks/useNow";
 import { useApp } from "../store/context";
-import { saveFlexConfig, type FlexConfig } from "../store/flex-store";
-import { saveVacationConfig, type VacationConfig } from "../store/vacation-store";
 import {
   saveDisplayPrefs,
   clampInactivityMinutes,
@@ -13,14 +15,20 @@ import {
   type ListStickyHeadings,
   type DisplayPrefs,
 } from "../store/display-store";
+import { saveFlexConfig, type FlexConfig } from "../store/flex-store";
+import { saveVacationConfig, type VacationConfig } from "../store/vacation-store";
 import { fmtDate } from "../utils/week";
-import { Dropdown } from "./Dropdown";
-import bearIcon from "../assets/bear.png";
-import { createClickUpClient } from "../api/clickup";
 import { ClickUpLogo } from "./ClickUp";
+import { Dropdown } from "./Dropdown";
 
 export type SettingsPage =
-  "flex" | "vacation" | "menubar" | "appearance" | "timer" | "list" | "clickup";
+  | "flex"
+  | "vacation"
+  | "menubar"
+  | "appearance"
+  | "timer"
+  | "list"
+  | "clickup";
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -42,18 +50,22 @@ export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) 
   const [page, setPage] = useState<SettingsPage | null>(initialPage);
 
   // Back steps out of a sub page first, then out of settings entirely
-  const goBack = page ? () => setPage(null) : onBack;
+  const goBack = page
+    ? () => {
+        setPage(null);
+      }
+    : onBack;
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Header with back button */}
-      <div className="flex shrink-0 items-center gap-2 px-4 py-3 border-b border-border">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
         <button
           onClick={goBack}
-          className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text transition-colors rounded-lg hover:bg-bg"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-bg hover:text-text"
           title="Back"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -67,7 +79,7 @@ export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) 
         </span>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {page === null && <SettingsMenu onOpen={setPage} onSignedOut={onBack} />}
         {page === "flex" && <FlexSettings />}
         {page === "vacation" && <VacationSettings />}
@@ -138,19 +150,21 @@ function SettingsMenu({
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   return (
-    <div className="px-4 py-4 space-y-4">
-      <div className="bg-bg-card rounded-xl border border-border overflow-hidden">
+    <div className="space-y-4 px-4 py-4">
+      <div className="overflow-hidden rounded-xl border border-border bg-bg-card">
         {MENU_ITEMS.map((item, i) => (
           <button
             key={item.page}
-            onClick={() => onOpen(item.page)}
-            className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-bg transition-colors ${
+            onClick={() => {
+              onOpen(item.page);
+            }}
+            className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-bg ${
               i > 0 ? "border-t border-border" : ""
             }`}
           >
             {item.icon ? (
               <svg
-                className="w-5 h-5 shrink-0 text-text-muted"
+                className="h-5 w-5 shrink-0 text-text-muted"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -158,16 +172,16 @@ function SettingsMenu({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
               </svg>
             ) : (
-              <span className="shrink-0 flex">
+              <span className="flex shrink-0">
                 <ClickUpLogo size={20} />
               </span>
             )}
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium text-text">{item.label}</div>
-              <div className="text-xs text-text-muted mt-0.5">{item.hint}</div>
+              <div className="mt-0.5 text-xs text-text-muted">{item.hint}</div>
             </div>
             <svg
-              className="w-4 h-4 shrink-0 text-text-muted"
+              className="h-4 w-4 shrink-0 text-text-muted"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -181,7 +195,7 @@ function SettingsMenu({
       {/* Sign out */}
       <div className="px-1">
         {state.employee && (
-          <p className="text-xs text-text-muted mb-2">
+          <p className="mb-2 text-xs text-text-muted">
             Signed in as {state.employee.name} ({state.employee.email})
           </p>
         )}
@@ -190,26 +204,30 @@ function SettingsMenu({
             <span className="text-xs text-text-muted">Are you sure?</span>
             <button
               onClick={() => {
-                logout();
+                void logout();
                 onSignedOut();
               }}
-              className="px-3 py-1.5 text-xs font-medium text-white bg-danger rounded-lg hover:bg-danger/90 transition-colors"
+              className="rounded-lg bg-danger px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-danger/90"
             >
               Sign out
             </button>
             <button
-              onClick={() => setShowLogoutConfirm(false)}
-              className="px-3 py-1.5 text-xs font-medium text-text-muted bg-bg rounded-lg hover:bg-border transition-colors"
+              onClick={() => {
+                setShowLogoutConfirm(false);
+              }}
+              className="rounded-lg bg-bg px-3 py-1.5 text-xs font-medium text-text-muted transition-colors hover:bg-border"
             >
               Cancel
             </button>
           </div>
         ) : (
           <button
-            onClick={() => setShowLogoutConfirm(true)}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-danger bg-danger/10 rounded-lg hover:bg-danger/20 transition-colors"
+            onClick={() => {
+              setShowLogoutConfirm(true);
+            }}
+            className="flex items-center gap-2 rounded-lg bg-danger/10 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/20"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -251,19 +269,21 @@ function MenuBarSettings() {
   ];
 
   return (
-    <div className="px-4 py-4 space-y-4">
-      <div className="bg-bg-card rounded-xl p-4 border border-border">
+    <div className="space-y-4 px-4 py-4">
+      <div className="rounded-xl border border-border bg-bg-card p-4">
         <div className="text-sm font-medium text-text">Menu bar display</div>
-        <p className="text-xs text-text-muted mt-1 mb-3">
+        <p className="mt-1 mb-3 text-xs text-text-muted">
           How much detail to show next to the menu bar icon while a timer is running.
         </p>
-        <div className="flex rounded-full border border-border overflow-hidden">
+        <div className="flex overflow-hidden rounded-full border border-border">
           {options.map((opt) => {
             const active = displayPrefs.menuBarMode === opt.value;
             return (
               <button
                 key={opt.value}
-                onClick={() => setMode(opt.value)}
+                onClick={() => {
+                  void setMode(opt.value);
+                }}
                 className={`flex-1 py-1.5 text-xs font-medium transition-all ${
                   active
                     ? "bg-primary text-white"
@@ -275,7 +295,7 @@ function MenuBarSettings() {
             );
           })}
         </div>
-        <div className="flex mt-1.5">
+        <div className="mt-1.5 flex">
           {options.map((opt) => (
             <div
               key={opt.value}
@@ -289,13 +309,13 @@ function MenuBarSettings() {
         </div>
       </div>
 
-      <div className="bg-bg-card rounded-xl p-4 border border-border">
+      <div className="rounded-xl border border-border bg-bg-card p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img
               src={bearIcon}
               alt=""
-              className={`w-5 h-5 shrink-0 transition-opacity ${
+              className={`h-5 w-5 shrink-0 transition-opacity ${
                 displayPrefs.showTrayIcon ? "opacity-100" : "opacity-30"
               }`}
             />
@@ -305,19 +325,21 @@ function MenuBarSettings() {
             role="switch"
             aria-checked={displayPrefs.showTrayIcon}
             aria-label="Show the bear icon in the menu bar"
-            onClick={toggleTrayIcon}
-            className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${
+            onClick={() => {
+              void toggleTrayIcon();
+            }}
+            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
               displayPrefs.showTrayIcon ? "bg-primary" : "bg-border"
             }`}
           >
             <span
-              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+              className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
                 displayPrefs.showTrayIcon ? "translate-x-4" : ""
               }`}
             />
           </button>
         </div>
-        <p className="text-xs text-text-muted mt-1">
+        <p className="mt-1 text-xs text-text-muted">
           Show the bear icon in the menu bar. Turn it off for a text-only tray — the play/pause
           control and the dropdown keep working.
         </p>
@@ -344,19 +366,21 @@ function AppearanceSettings() {
   ];
 
   return (
-    <div className="px-4 py-4 space-y-4">
-      <div className="bg-bg-card rounded-xl p-4 border border-border">
+    <div className="space-y-4 px-4 py-4">
+      <div className="rounded-xl border border-border bg-bg-card p-4">
         <div className="text-sm font-medium text-text">Theme</div>
-        <p className="text-xs text-text-muted mt-1 mb-3">
+        <p className="mt-1 mb-3 text-xs text-text-muted">
           Pick a theme, or follow your macOS system setting.
         </p>
-        <div className="flex rounded-full border border-border overflow-hidden">
+        <div className="flex overflow-hidden rounded-full border border-border">
           {themeOptions.map((opt) => {
             const active = displayPrefs.theme === opt.value;
             return (
               <button
                 key={opt.value}
-                onClick={() => setTheme(opt.value)}
+                onClick={() => {
+                  void setTheme(opt.value);
+                }}
                 className={`flex-1 py-1.5 text-xs font-medium transition-all ${
                   active
                     ? "bg-primary text-white"
@@ -394,42 +418,48 @@ function TimerSettings() {
   }
 
   return (
-    <div className="px-4 py-4 space-y-4">
-      <div className="bg-bg-card rounded-xl p-4 border border-border">
+    <div className="space-y-4 px-4 py-4">
+      <div className="rounded-xl border border-border bg-bg-card p-4">
         <div className="flex items-center justify-between">
           <div className="text-sm font-medium text-text">Inactivity</div>
           <button
             role="switch"
             aria-checked={displayPrefs.inactivityEnabled}
-            onClick={toggleInactivity}
-            className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${
+            onClick={() => {
+              void toggleInactivity();
+            }}
+            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
               displayPrefs.inactivityEnabled ? "bg-primary" : "bg-border"
             }`}
           >
             <span
-              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+              className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
                 displayPrefs.inactivityEnabled ? "translate-x-4" : ""
               }`}
             />
           </button>
         </div>
-        <p className="text-xs text-text-muted mt-1">
+        <p className="mt-1 text-xs text-text-muted">
           Warn me when a timer keeps running while I'm away from the computer.
         </p>
         {displayPrefs.inactivityEnabled && (
-          <div className="flex items-center gap-2 mt-3">
+          <div className="mt-3 flex items-center gap-2">
             <span className="text-xs text-text-muted">Warn after</span>
             <input
               type="number"
               min={INACTIVITY_MIN_MINUTES}
               max={INACTIVITY_MAX_MINUTES}
               value={minutesInput}
-              onChange={(e) => setMinutesInput(e.target.value)}
-              onBlur={commitMinutes}
+              onChange={(e) => {
+                setMinutesInput(e.target.value);
+              }}
+              onBlur={() => {
+                void commitMinutes();
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               }}
-              className="w-16 px-2 py-1 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-16 rounded-lg border border-border bg-bg px-2 py-1 text-sm text-text focus:ring-2 focus:ring-primary/30 focus:outline-none"
             />
             <span className="text-xs text-text-muted">minutes of inactivity</span>
           </div>
@@ -482,20 +512,22 @@ function ListSettings() {
   ];
 
   return (
-    <div className="px-4 py-4 space-y-4">
-      <div className="bg-bg-card rounded-xl p-4 border border-border">
+    <div className="space-y-4 px-4 py-4">
+      <div className="rounded-xl border border-border bg-bg-card p-4">
         <div className="text-sm font-medium text-text">Collapse entries</div>
-        <p className="text-xs text-text-muted mt-1 mb-3">
+        <p className="mt-1 mb-3 text-xs text-text-muted">
           Which entries start collapsed to a single line. You can still expand or collapse any card
           by hand.
         </p>
-        <div className="flex rounded-full border border-border overflow-hidden">
+        <div className="flex overflow-hidden rounded-full border border-border">
           {collapseOptions.map((opt) => {
             const active = displayPrefs.listAutoCollapse === opt.value;
             return (
               <button
                 key={opt.value}
-                onClick={() => setAutoCollapse(opt.value)}
+                onClick={() => {
+                  void setAutoCollapse(opt.value);
+                }}
                 className={`flex-1 py-1.5 text-xs font-medium transition-all ${
                   active
                     ? "bg-primary text-white"
@@ -507,7 +539,7 @@ function ListSettings() {
             );
           })}
         </div>
-        <div className="flex mt-1.5">
+        <div className="mt-1.5 flex">
           {collapseOptions.map((opt) => (
             <div
               key={opt.value}
@@ -521,43 +553,47 @@ function ListSettings() {
         </div>
       </div>
 
-      <div className="bg-bg-card rounded-xl p-4 border border-border">
+      <div className="rounded-xl border border-border bg-bg-card p-4">
         <div className="flex items-center justify-between">
           <div className="text-sm font-medium text-text">Group by week</div>
           <button
             role="switch"
             aria-checked={displayPrefs.listGroupByWeek}
             aria-label="Group the day list by week"
-            onClick={toggleGroupByWeek}
-            className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${
+            onClick={() => {
+              void toggleGroupByWeek();
+            }}
+            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
               displayPrefs.listGroupByWeek ? "bg-primary" : "bg-border"
             }`}
           >
             <span
-              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+              className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
                 displayPrefs.listGroupByWeek ? "translate-x-4" : ""
               }`}
             />
           </button>
         </div>
-        <p className="text-xs text-text-muted mt-1">
+        <p className="mt-1 text-xs text-text-muted">
           Add a heading with the week's total whenever a new week starts in the list.
         </p>
       </div>
 
-      <div className="bg-bg-card rounded-xl p-4 border border-border">
+      <div className="rounded-xl border border-border bg-bg-card p-4">
         <div className="text-sm font-medium text-text">Pinned headings</div>
-        <p className="text-xs text-text-muted mt-1 mb-3">
+        <p className="mt-1 mb-3 text-xs text-text-muted">
           Keep the heading you're scrolling through at the top of the list. Week headings can only
           pin while "Group by week" is on.
         </p>
-        <div className="flex rounded-full border border-border overflow-hidden">
+        <div className="flex overflow-hidden rounded-full border border-border">
           {stickyOptions.map((opt) => {
             const active = displayPrefs.listStickyHeadings === opt.value;
             return (
               <button
                 key={opt.value}
-                onClick={() => setStickyHeadings(opt.value)}
+                onClick={() => {
+                  void setStickyHeadings(opt.value);
+                }}
                 className={`flex-1 py-1.5 text-xs font-medium transition-all ${
                   active
                     ? "bg-primary text-white"
@@ -569,7 +605,7 @@ function ListSettings() {
             );
           })}
         </div>
-        <div className="flex mt-1.5">
+        <div className="mt-1.5 flex">
           {stickyOptions.map((opt) => (
             <div
               key={opt.value}
@@ -583,26 +619,28 @@ function ListSettings() {
         </div>
       </div>
 
-      <div className="bg-bg-card rounded-xl p-4 border border-border">
+      <div className="rounded-xl border border-border bg-bg-card p-4">
         <div className="flex items-center justify-between">
           <div className="text-sm font-medium text-text">Foldable days and weeks</div>
           <button
             role="switch"
             aria-checked={displayPrefs.listCollapsibleGroups}
             aria-label="Let day and week headings fold their entries away"
-            onClick={toggleCollapsibleGroups}
-            className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${
+            onClick={() => {
+              void toggleCollapsibleGroups();
+            }}
+            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
               displayPrefs.listCollapsibleGroups ? "bg-primary" : "bg-border"
             }`}
           >
             <span
-              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+              className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
                 displayPrefs.listCollapsibleGroups ? "translate-x-4" : ""
               }`}
             />
           </button>
         </div>
-        <p className="text-xs text-text-muted mt-1">
+        <p className="mt-1 text-xs text-text-muted">
           Click a day or week heading to fold every entry under it away, leaving just the heading
           and its total.
         </p>
@@ -623,7 +661,7 @@ function getDefaultMonth(): string {
   return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
 }
 function monthToLastDay(monthStr: string): string {
-  const [year, month] = monthStr.split("-").map(Number);
+  const [year = 0, month = 0] = monthStr.split("-").map(Number);
   const lastDay = new Date(year, month, 0); // day 0 of next month = last day of this month
   return fmtDate(lastDay);
 }
@@ -631,11 +669,12 @@ function monthToLastDay(monthStr: string): string {
 function FlexSettings() {
   const { state, dispatch, resync } = useApp();
   const { flexConfig } = state;
+  const now = useNow();
 
   const [paycheckMonth, setPaycheckMonth] = useState(
     flexConfig?.startDate ? dateToMonth(flexConfig.startDate) : getDefaultMonth()
   );
-  const [initialHours, setInitialHours] = useState(flexConfig?.initialHours?.toString() ?? "0");
+  const [initialHours, setInitialHours] = useState(flexConfig?.initialHours.toString() ?? "0");
   const [resetMonths, setResetMonths] = useState<string[]>(flexConfig?.resetMonths ?? []);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -644,9 +683,9 @@ function FlexSettings() {
   // through the current month
   function resetMonthOptions(): string[] {
     if (!paycheckMonth) return [];
-    const [y, m] = paycheckMonth.split("-").map(Number);
+    const [y = 0, m = 0] = paycheckMonth.split("-").map(Number);
     const cursor = new Date(y, m, 1); // month after paycheck month
-    const current = new Date();
+    const current = now;
     const currentKey = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}`;
     const options: string[] = [];
     for (let i = 0; i < 48; i++) {
@@ -680,7 +719,9 @@ function FlexSettings() {
       // date — reload so an earlier start date gets its entries
       resync();
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setTimeout(() => {
+        setSaved(false);
+      }, 2000);
     } catch {
       dispatch({ type: "SET_ERROR", payload: "Failed to save flex config" });
     } finally {
@@ -689,39 +730,43 @@ function FlexSettings() {
   }
 
   return (
-    <div className="px-4 py-4 space-y-4">
+    <div className="space-y-4 px-4 py-4">
       {/* Balance config */}
-      <div className="bg-bg-card rounded-xl p-4 border border-border space-y-3">
+      <div className="space-y-3 rounded-xl border border-border bg-bg-card p-4">
         <h3 className="text-sm font-semibold text-text">Flex balance</h3>
         <div>
-          <label className="block text-xs text-text-muted mb-1">Latest paycheck month</label>
+          <label className="mb-1 block text-xs text-text-muted">Latest paycheck month</label>
           <input
             type="month"
             value={paycheckMonth}
-            onChange={(e) => setPaycheckMonth(e.target.value)}
-            className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+            onChange={(e) => {
+              setPaycheckMonth(e.target.value);
+            }}
+            className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text focus:ring-2 focus:ring-primary/30 focus:outline-none"
           />
         </div>
         <div>
-          <label className="block text-xs text-text-muted mb-1">Initial flex balance (hours)</label>
-          <p className="text-[10px] text-text-muted mb-1.5">
+          <label className="mb-1 block text-xs text-text-muted">Initial flex balance (hours)</label>
+          <p className="mb-1.5 text-[10px] text-text-muted">
             Check your latest Fortnox paycheck for the current flex value.
           </p>
           <input
             type="number"
             step="0.5"
             value={initialHours}
-            onChange={(e) => setInitialHours(e.target.value)}
-            className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+            onChange={(e) => {
+              setInitialHours(e.target.value);
+            }}
+            className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text focus:ring-2 focus:ring-primary/30 focus:outline-none"
           />
         </div>
       </div>
 
       {/* Reset config */}
-      <div className="bg-bg-card rounded-xl p-4 border border-border space-y-3">
+      <div className="space-y-3 rounded-xl border border-border bg-bg-card p-4">
         <h3 className="text-sm font-semibold text-text">Flex resets</h3>
         <div>
-          <p className="text-[10px] text-text-muted mb-1.5">
+          <p className="mb-1.5 text-[10px] text-text-muted">
             At the end of a reset month, flex above 50h is paid out and the balance is floored to
             50h. Usually quarterly (Mar, Jun, Sep, Dec).
           </p>
@@ -735,11 +780,13 @@ function FlexSettings() {
               return (
                 <button
                   key={key}
-                  onClick={() => toggleResetMonth(key)}
-                  className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                  onClick={() => {
+                    toggleResetMonth(key);
+                  }}
+                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
                     active
-                      ? "bg-primary text-white border-primary"
-                      : "bg-transparent text-text-muted border-border hover:text-text"
+                      ? "border-primary bg-primary text-white"
+                      : "border-border bg-transparent text-text-muted hover:text-text"
                   }`}
                 >
                   {label}
@@ -751,9 +798,11 @@ function FlexSettings() {
       </div>
 
       <button
-        onClick={handleSave}
+        onClick={() => {
+          void handleSave();
+        }}
         disabled={saving || !paycheckMonth}
-        className="w-full py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        className="w-full rounded-lg bg-primary py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
       >
         {saved ? "Saved!" : saving ? "Saving..." : "Save"}
       </button>
@@ -768,7 +817,7 @@ function VacationSettings() {
   const [payslipMonth, setPayslipMonth] = useState(
     vacationConfig?.startDate ? dateToMonth(vacationConfig.startDate) : getDefaultMonth()
   );
-  const [initialDays, setInitialDays] = useState(vacationConfig?.initialDays?.toString() ?? "");
+  const [initialDays, setInitialDays] = useState(vacationConfig?.initialDays.toString() ?? "");
   const [projectId, setProjectId] = useState(vacationConfig?.projectId ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -794,7 +843,9 @@ function VacationSettings() {
       // earlier start date gets its vacation entries
       resync();
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setTimeout(() => {
+        setSaved(false);
+      }, 2000);
     } catch {
       dispatch({ type: "SET_ERROR", payload: "Failed to save vacation config" });
     } finally {
@@ -803,37 +854,41 @@ function VacationSettings() {
   }
 
   return (
-    <div className="px-4 py-4 space-y-4">
-      <div className="bg-bg-card rounded-xl p-4 border border-border space-y-3">
+    <div className="space-y-4 px-4 py-4">
+      <div className="space-y-3 rounded-xl border border-border bg-bg-card p-4">
         <h3 className="text-sm font-semibold text-text">Vacation day balance</h3>
         <div>
-          <label className="block text-xs text-text-muted mb-1">Latest payslip month</label>
+          <label className="mb-1 block text-xs text-text-muted">Latest payslip month</label>
           <input
             type="month"
             value={payslipMonth}
-            onChange={(e) => setPayslipMonth(e.target.value)}
-            className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+            onChange={(e) => {
+              setPayslipMonth(e.target.value);
+            }}
+            className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text focus:ring-2 focus:ring-primary/30 focus:outline-none"
           />
         </div>
         <div>
-          <label className="block text-xs text-text-muted mb-1">Vacation days remaining</label>
-          <p className="text-[10px] text-text-muted mb-1.5">
+          <label className="mb-1 block text-xs text-text-muted">Vacation days remaining</label>
+          <p className="mb-1.5 text-[10px] text-text-muted">
             Check your latest Fortnox payslip for your remaining vacation days.
           </p>
           <input
             type="number"
             step="0.5"
             value={initialDays}
-            onChange={(e) => setInitialDays(e.target.value)}
-            className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+            onChange={(e) => {
+              setInitialDays(e.target.value);
+            }}
+            className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text focus:ring-2 focus:ring-primary/30 focus:outline-none"
           />
         </div>
       </div>
 
-      <div className="bg-bg-card rounded-xl p-4 border border-border space-y-3">
+      <div className="space-y-3 rounded-xl border border-border bg-bg-card p-4">
         <h3 className="text-sm font-semibold text-text">Vacation project</h3>
         <div>
-          <p className="text-[10px] text-text-muted mb-1.5">
+          <p className="mb-1.5 text-[10px] text-text-muted">
             Days logged on this AgileDay project after the payslip month count down your balance (8h
             = 1 day).
           </p>
@@ -848,9 +903,11 @@ function VacationSettings() {
       </div>
 
       <button
-        onClick={handleSave}
+        onClick={() => {
+          void handleSave();
+        }}
         disabled={saving || !payslipMonth || !projectId || initialDays.trim() === ""}
-        className="w-full py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        className="w-full rounded-lg bg-primary py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
       >
         {saved ? "Saved!" : saving ? "Saving..." : "Save"}
       </button>
@@ -897,27 +954,27 @@ function ClickUpSettings() {
   }
 
   return (
-    <div className="px-4 py-4 space-y-4">
+    <div className="space-y-4 px-4 py-4">
       {accounts.length > 0 && (
-        <div className="bg-bg-card rounded-xl border border-border overflow-hidden">
+        <div className="overflow-hidden rounded-xl border border-border bg-bg-card">
           {accounts.map((a, i) => (
             <div
               key={a.token}
               className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? "border-t border-border" : ""}`}
             >
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-text truncate">
+                <div className="truncate text-sm font-medium text-text">
                   {a.email || "ClickUp account"}
                 </div>
-                <div className="text-xs text-text-muted mt-0.5 truncate">
+                <div className="mt-0.5 truncate text-xs text-text-muted">
                   {a.teams.map((t) => t.name).join(", ")}
                 </div>
               </div>
               <button
-                onClick={() =>
-                  dispatch({ type: "REMOVE_CLICKUP_ACCOUNT", payload: { token: a.token } })
-                }
-                className="px-3 py-1.5 text-xs font-medium text-danger bg-danger/10 rounded-lg hover:bg-danger/20 transition-colors"
+                onClick={() => {
+                  dispatch({ type: "REMOVE_CLICKUP_ACCOUNT", payload: { token: a.token } });
+                }}
+                className="rounded-lg bg-danger/10 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/20"
               >
                 Remove
               </button>
@@ -927,18 +984,18 @@ function ClickUpSettings() {
       )}
 
       {showForm ? (
-        <div className="bg-bg-card rounded-xl p-4 border border-border space-y-3">
+        <div className="space-y-3 rounded-xl border border-border bg-bg-card p-4">
           <h3 className="text-sm font-semibold text-text">
             {accounts.length > 0 ? "Add another ClickUp account" : "Connect ClickUp"}
           </h3>
           <div>
-            <label className="block text-xs text-text-muted mb-1">Personal API token</label>
-            <ol className="text-[11px] text-text-muted mb-2 space-y-0.5 list-decimal pl-4">
+            <label className="mb-1 block text-xs text-text-muted">Personal API token</label>
+            <ol className="mb-2 list-decimal space-y-0.5 pl-4 text-[11px] text-text-muted">
               <li>
                 <button
                   type="button"
                   onClick={() => void openClickUpTokenPage()}
-                  className="font-semibold text-primary hover:underline cursor-pointer"
+                  className="cursor-pointer font-semibold text-primary hover:underline"
                 >
                   Open ClickUp → Settings → Apps
                 </button>
@@ -955,10 +1012,12 @@ function ClickUpSettings() {
             <input
               type="password"
               value={token}
-              onChange={(e) => setToken(e.target.value)}
+              onChange={(e) => {
+                setToken(e.target.value);
+              }}
               onKeyDown={(e) => e.key === "Enter" && token.trim() && !busy && void addAccount()}
               placeholder="pk_…"
-              className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text focus:ring-2 focus:ring-primary/30 focus:outline-none"
             />
           </div>
           {error && <p className="text-xs text-danger">{error}</p>}
@@ -970,7 +1029,7 @@ function ClickUpSettings() {
                   setToken("");
                   setError(null);
                 }}
-                className="px-4 py-2 text-sm font-medium text-text-muted bg-bg rounded-lg hover:text-text transition-colors"
+                className="rounded-lg bg-bg px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:text-text"
               >
                 Cancel
               </button>
@@ -978,7 +1037,7 @@ function ClickUpSettings() {
             <button
               onClick={() => void addAccount()}
               disabled={busy || !token.trim()}
-              className="flex-1 py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              className="flex-1 rounded-lg bg-primary py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               {busy ? "Checking…" : "Connect"}
             </button>
@@ -986,8 +1045,10 @@ function ClickUpSettings() {
         </div>
       ) : (
         <button
-          onClick={() => setAdding(true)}
-          className="w-full py-2 text-sm font-medium text-primary bg-bg-card border border-border rounded-lg hover:bg-bg transition-colors"
+          onClick={() => {
+            setAdding(true);
+          }}
+          className="w-full rounded-lg border border-border bg-bg-card py-2 text-sm font-medium text-primary transition-colors hover:bg-bg"
         >
           + Add another ClickUp account
         </button>

@@ -10,13 +10,14 @@ npm run tauri dev        # Start full Tauri app in dev mode (Rust + Vite)
 npm run check            # Run all checks: typecheck → lint → format:check → test
 npm run test             # Vitest (single run)
 npm run test:watch       # Vitest watch mode
-npm run lint             # ESLint (src/ only)
+npm run lint             # oxlint, type-aware strict (src/ only)
 npm run typecheck        # tsc --noEmit
-npm run format           # Prettier write
-npm run format:check     # Prettier check (CI uses this)
+npm run format           # oxfmt write (sorts imports + Tailwind classes)
+npm run format:check     # oxfmt check (CI uses this)
 ```
 
 Building the app:
+
 ```bash
 source "$HOME/.cargo/env"    # Rust must be in PATH
 npx tauri build --bundles app   # Build .app only (faster)
@@ -71,6 +72,7 @@ AgileDay requires `Origin: https://qvik.agileday.io` header on all requests (Tau
 ## Testing
 
 Tests live mostly in `src/api/__tests__/` (plus `src/utils/__tests__/` and `src/store/__tests__/`):
+
 - `mock-provider.test.ts` — 45 tests for the ApiProvider contract via mock implementation
 - `agileday-provider.test.ts` — 42 tests for the AgileDay client (mocked fetch, JWT decode, auth flow, global default tasks)
 - `entry-sync.test.ts` — 15 tests for the create/update/delete/read sync journey
@@ -108,6 +110,6 @@ Comprehensive specs for AI agents and contributors in `.claude/docs/`:
 - [Architecture](.claude/docs/architecture.md) — Three-layer design (Tauri shell, React frontend, API abstraction), state management, data flow, timer logic, entry consolidation
 - [API & Auth](.claude/docs/api-and-auth.md) — AgileDay REST endpoints, OAuth 2.1 PKCE flow, token management, ApiProvider interface
 - [UI Components](.claude/docs/ui-components.md) — All components, layout structure, hooks, styling (Tailwind theme)
-- [Conventions](.claude/docs/conventions.md) — TypeScript strict mode, Prettier/ESLint config, React patterns, naming, file organization
+- [Conventions](.claude/docs/conventions.md) — TypeScript strict mode, oxfmt/oxlint config, React patterns, naming, file organization
 - [Testing](.claude/docs/testing.md) — Vitest setup, 300 tests, test patterns, coverage scope
 - [Domain Glossary](.claude/docs/domain.md) — AgileDay concepts, entry status lifecycle, app-specific terms

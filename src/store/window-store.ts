@@ -23,7 +23,7 @@ async function getStore() {
 export async function loadWindowLayout(): Promise<WindowLayout> {
   const store = await getStore();
   const saved = await store.get<Partial<WindowLayout>>(WINDOW_KEY);
-  return { ...DEFAULT_LAYOUT, ...(saved ?? {}) };
+  return { ...DEFAULT_LAYOUT, ...saved };
 }
 
 export async function saveWindowLayout(layout: WindowLayout): Promise<void> {

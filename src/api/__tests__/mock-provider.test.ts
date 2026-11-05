@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { assert, describe, it, expect, beforeEach } from "vitest";
+
 import {
   createMockProvider,
   MOCK_PROJECTS,
@@ -14,11 +15,12 @@ import type { TimeEntry } from "../types";
 function createInMemoryStore(): EntryStore {
   let entries: TimeEntry[] = [];
   return {
-    async getEntries() {
-      return [...entries];
+    getEntries() {
+      return Promise.resolve([...entries]);
     },
-    async setEntries(newEntries: TimeEntry[]) {
+    setEntries(newEntries: TimeEntry[]) {
       entries = [...newEntries];
+      return Promise.resolve();
     },
   };
 }
@@ -238,7 +240,7 @@ describe("getTimeEntries", () => {
   it("returns entries for exact single-day range", async () => {
     const entries = await provider.getTimeEntries("emp1", "2026-04-24", "2026-04-24");
     expect(entries).toHaveLength(1);
-    expect(entries[0].date).toBe("2026-04-24");
+    expect(entries[0]?.date).toBe("2026-04-24");
   });
 });
 
@@ -366,8 +368,8 @@ describe("deleteTimeEntry", () => {
 
     const entries = await store.getEntries();
     expect(entries).toHaveLength(1);
-    expect(entries[0].id).toBe(a.id);
-    expect(entries[0].description).toBe("keep");
+    expect(entries[0]?.id).toBe(a.id);
+    expect(entries[0]?.description).toBe("keep");
   });
 
   it("deletes multiple entries by IDs", async () => {
@@ -388,7 +390,7 @@ describe("deleteTimeEntry", () => {
 
     const entries = await store.getEntries();
     expect(entries).toHaveLength(1);
-    expect(entries[0].id).toBe(b.id);
+    expect(entries[0]?.id).toBe(b.id);
   });
 
   it("does not delete entries with non-matching IDs", async () => {
@@ -435,7 +437,9 @@ describe("data isolation", () => {
 
 describe("error handling", () => {
   it("updateTimeEntry throws on missing entry", async () => {
-    await expect(provider.updateTimeEntry("emp1", "bad-id", {})).rejects.toThrow();
+    await expect(provider.updateTimeEntry("emp1", "bad-id", {})).rejects.toThrow(
+      "Entry bad-id not found"
+    );
   });
 
   it("updateTimeEntry error does not corrupt store", async () => {
@@ -449,17 +453,17 @@ describe("error handling", () => {
 
     const entries = await store.getEntries();
     expect(entries).toHaveLength(1);
-    expect(entries[0].id).toBe(created.id);
-    expect(entries[0].description).toBe("test work");
+    expect(entries[0]?.id).toBe(created.id);
+    expect(entries[0]?.description).toBe("test work");
   });
 
   it("createTimeEntry with store failure propagates error", async () => {
     const failingStore: EntryStore = {
-      async getEntries() {
-        return [];
+      getEntries() {
+        return Promise.resolve([]);
       },
-      async setEntries() {
-        throw new Error("Store write failed");
+      setEntries() {
+        return Promise.reject(new Error("Store write failed"));
       },
     };
     const failProvider = createMockProvider(failingStore, MOCK_PROJECTS, MOCK_TASKS, MOCK_EMPLOYEE);
@@ -471,11 +475,11 @@ describe("error handling", () => {
 
   it("deleteTimeEntry with store failure propagates error", async () => {
     const failingStore: EntryStore = {
-      async getEntries() {
-        return [];
+      getEntries() {
+        return Promise.resolve([]);
       },
-      async setEntries() {
-        throw new Error("Store write failed");
+      setEntries() {
+        return Promise.reject(new Error("Store write failed"));
       },
     };
     const failProvider = createMockProvider(failingStore, MOCK_PROJECTS, MOCK_TASKS, MOCK_EMPLOYEE);
@@ -545,8 +549,8 @@ describe("batchUpdateEntries", () => {
     ]);
 
     expect(results).toHaveLength(2);
-    expect(results[0].minutes).toBe(120);
-    expect(results[1].minutes).toBe(90);
+    expect(results[0]?.minutes).toBe(120);
+    expect(results[1]?.minutes).toBe(90);
 
     const entries = await store.getEntries();
     expect(entries.find((e) => e.id === a.id)?.minutes).toBe(120);
@@ -571,6 +575,7 @@ describe("batchUpdateEntries", () => {
     );
 
     const [result] = await provider.batchUpdateEntries("emp1", [{ id: entry.id, minutes: 60 }]);
+    assert(result);
 
     expect(result.minutes).toBe(60);
     expect(result.description).toBe("original");

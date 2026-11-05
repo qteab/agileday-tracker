@@ -24,7 +24,9 @@ export interface TaskPickerRow {
 }
 
 export type TaskPickerState =
-  { kind: "hidden" } | { kind: "notice"; label: string } | { kind: "ready"; rows: TaskPickerRow[] };
+  | { kind: "hidden" }
+  | { kind: "notice"; label: string }
+  | { kind: "ready"; rows: TaskPickerRow[] };
 
 export function describeTaskPickerState(input: {
   projectId: string | null;

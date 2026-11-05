@@ -131,6 +131,7 @@ npx tauri signer generate -w ~/.tauri/mykey.key --ci
 ```
 
 Then build with:
+
 ```bash
 TAURI_SIGNING_PRIVATE_KEY=$(cat ~/.tauri/mykey.key) \
 TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
@@ -142,6 +143,7 @@ npx tauri build --bundles app
 ### Code quality
 
 Before pushing, run the full check suite:
+
 ```bash
 npm run check    # typecheck → lint → format → test
 ```
@@ -150,14 +152,14 @@ This is the same check CI runs on every push. PRs that fail checks won't be merg
 
 ### Key commands
 
-| Command | What it does |
-|---------|-------------|
-| `npm run dev` | Vite dev server (port 1420) |
-| `npm run tauri dev` | Full app in dev mode |
-| `npm run test` | Run all tests (131 tests) |
-| `npm run lint` | ESLint |
-| `npm run format` | Prettier (auto-fix) |
-| `npm run check` | All of the above |
+| Command             | What it does                |
+| ------------------- | --------------------------- |
+| `npm run dev`       | Vite dev server (port 1420) |
+| `npm run tauri dev` | Full app in dev mode        |
+| `npm run test`      | Run all tests (131 tests)   |
+| `npm run lint`      | oxlint (type-aware)         |
+| `npm run format`    | oxfmt (auto-fix)            |
+| `npm run check`     | All of the above            |
 
 ### Documentation for AI assistance
 

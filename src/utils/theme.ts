@@ -30,5 +30,7 @@ export function applyTheme(mode: ThemeMode): void {
 export function watchSystemTheme(onChange: () => void): () => void {
   const mql = window.matchMedia(DARK_QUERY);
   mql.addEventListener("change", onChange);
-  return () => mql.removeEventListener("change", onChange);
+  return () => {
+    mql.removeEventListener("change", onChange);
+  };
 }

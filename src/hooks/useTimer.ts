@@ -1,38 +1,40 @@
-import { useState, useEffect, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { useApp, useApi } from "../store/context";
-import type { TimerState } from "../store/reducer";
+import { useState, useEffect, useCallback, useLayoutEffect, useRef } from "react";
+
 import {
   ClickUpRateLimitError,
   sessionMinutes,
   withClickupLine,
   type ClickUpTask,
 } from "../api/clickup";
+import { useApp, useApi } from "../store/context";
+import type { TimerState } from "../store/reducer";
 
 export function useTimer() {
   const { state, dispatch } = useApp();
   const addTime = useAddTime();
   const logClickUp = useLogClickUp();
   const { timer, employee } = state;
-  const [elapsed, setElapsed] = useState(0); // seconds
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Seconds, tagged with the run they belong to so a stopped or newly started
+  // timer reads 0 instead of the previous run's count.
+  const [tick, setTick] = useState<{ startTime: string; seconds: number } | null>(null);
+  const runStart = timer.isRunning ? timer.startTime : null;
+  const elapsed = runStart && tick?.startTime === runStart ? tick.seconds : 0;
 
   // Local counter for the in-app timer view. The tray clock is driven by Rust
   // because WebKit throttles setInterval when the window is hidden.
   useEffect(() => {
-    if (timer.isRunning && timer.startTime) {
-      const updateElapsed = () => {
-        const start = new Date(timer.startTime!).getTime();
-        setElapsed(Math.floor((Date.now() - start) / 1000));
-      };
-      updateElapsed();
-      intervalRef.current = setInterval(updateElapsed, 1000);
-      return () => {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-      };
-    }
-    setElapsed(0);
-  }, [timer.isRunning, timer.startTime]);
+    if (!runStart) return;
+    const updateElapsed = () => {
+      const start = new Date(runStart).getTime();
+      setTick({ startTime: runStart, seconds: Math.floor((Date.now() - start) / 1000) });
+    };
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [runStart]);
 
   /** Stop the running timer and save elapsed minutes to the entry. */
   const stop = useCallback(async () => {
@@ -54,8 +56,10 @@ export function useTimer() {
     // ClickUp logging runs in the background: starting the next timer waits on
     // stop(), and must never hang on a slow or rate-limited ClickUp.
     if (clickupTask) void logClickUp(clickupTask, startMs, minutes);
+    // A timer can't start without a project, so this only narrows the type.
+    if (!projectId) return;
     await addTime({
-      projectId: projectId!,
+      projectId,
       taskId,
       date,
       minutes,
@@ -67,7 +71,9 @@ export function useTimer() {
 
   // Use a ref so startForCard always invokes the latest stop closure
   const stopRef = useRef(stop);
-  stopRef.current = stop;
+  useLayoutEffect(() => {
+    stopRef.current = stop;
+  });
 
   /** Start the timer for a specific card (projectId + taskId). Stops any running timer first. */
   const startForCard = useCallback(
@@ -134,9 +140,11 @@ export function useTimer() {
 export function useTrayTimerListeners() {
   const { stop, continueLastTask } = useTimer();
   const stopRef = useRef(stop);
-  stopRef.current = stop;
   const continueLastRef = useRef(continueLastTask);
-  continueLastRef.current = continueLastTask;
+  useLayoutEffect(() => {
+    stopRef.current = stop;
+    continueLastRef.current = continueLastTask;
+  });
 
   useEffect(() => {
     const unlistenStop = listen("tray-stop-timer", () => {
@@ -146,8 +154,16 @@ export function useTrayTimerListeners() {
       continueLastRef.current();
     });
     return () => {
-      unlistenStop.then((fn) => fn()).catch(() => {});
-      unlistenContinue.then((fn) => fn()).catch(() => {});
+      unlistenStop
+        .then((fn) => {
+          fn();
+        })
+        .catch(() => {});
+      unlistenContinue
+        .then((fn) => {
+          fn();
+        })
+        .catch(() => {});
     };
   }, []);
 }
@@ -210,6 +226,19 @@ export function useAddTime() {
       const description = clickupTasks.reduce(withClickupLine, existing?.description ?? "");
       // Total minutes = existing entry + this session (app is source of truth)
       const totalMinutes = (existing?.minutes ?? 0) + minutes;
+      // Full state for AgileDay: total minutes + current description
+      const fields = {
+        description,
+        projectId,
+        ...(project ? { projectName: project.name } : {}),
+        ...(openingId !== undefined ? { openingId } : {}),
+        ...(taskId != null ? { taskId } : {}),
+        date,
+        startTime,
+        ...(endTime !== undefined ? { endTime } : {}),
+        minutes: totalMinutes,
+        status: "SAVED" as const,
+      };
 
       if (existing) {
         workingId = existing.id;
@@ -230,37 +259,12 @@ export function useAddTime() {
         workingId = `local-${crypto.randomUUID()}`;
         dispatch({
           type: "ADD_ENTRY",
-          payload: {
-            id: workingId,
-            description,
-            projectId,
-            projectName: project?.name,
-            openingId,
-            taskId: taskId ?? undefined,
-            date,
-            startTime,
-            endTime,
-            minutes: totalMinutes,
-            status: "SAVED",
-            syncStatus: "pending",
-          },
+          payload: { id: workingId, ...fields, syncStatus: "pending" },
         });
       }
 
       try {
-        // Send full state to API: total minutes + current description
-        const created = await api.createTimeEntry(employee.id, {
-          description,
-          projectId,
-          projectName: project?.name,
-          openingId,
-          taskId: taskId ?? undefined,
-          date,
-          startTime,
-          endTime,
-          minutes: totalMinutes,
-          status: "SAVED",
-        });
+        const created = await api.createTimeEntry(employee.id, fields);
         dispatch({
           type: "UPDATE_ENTRY",
           payload: {
@@ -313,7 +317,8 @@ export function useLogClickUp() {
         try {
           // Tasks started from a `CU-` line don't know their workspace yet.
           const teamId =
-            task.teamId ?? (await clickupClient.getTask({ id: task.id, custom: false })).teamId!;
+            task.teamId ?? (await clickupClient.getTask({ id: task.id, custom: false })).teamId;
+          if (!teamId) throw new Error(`no workspace found for task ${task.id}`);
           let id = task.timerId;
           if (id) {
             // Only stop ClickUp's timer if it is still this one — it may have been

@@ -26,15 +26,23 @@ export function Collapsible({ collapsed, children, className = "" }: Collapsible
     const el = innerRef.current;
     if (!el) return;
     setHeight(el.offsetHeight);
-    const ro = new ResizeObserver(() => setHeight(el.offsetHeight));
+    const ro = new ResizeObserver(() => {
+      setHeight(el.offsetHeight);
+    });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+    };
   }, []);
 
   const [animated, setAnimated] = useState(false);
   useEffect(() => {
-    const id = requestAnimationFrame(() => setAnimated(true));
-    return () => cancelAnimationFrame(id);
+    const id = requestAnimationFrame(() => {
+      setAnimated(true);
+    });
+    return () => {
+      cancelAnimationFrame(id);
+    };
   }, []);
 
   return (

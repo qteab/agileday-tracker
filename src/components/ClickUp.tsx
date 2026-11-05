@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { useApp, useApi } from "../store/context";
-import { useAddTime, useTimer, formatTime, formatMinutes } from "../hooks/useTimer";
-import { usePersistEntry, projectDotColor, TaskIcon, LockIcon } from "./ProjectCard";
-import { ProjectPicker } from "./ProjectPicker";
-import { TaskPicker } from "./TaskPicker";
-import { Modal } from "./Modal";
-import { Collapsible } from "./Collapsible";
-import { isLocalOnlyEntry } from "./entry-edit";
+
 import {
   ClickUpRateLimitError,
   clickupTasksIn,
@@ -20,6 +13,15 @@ import {
   type ClickUpTask,
 } from "../api/clickup";
 import type { TimeEntry } from "../api/types";
+import { useNow } from "../hooks/useNow";
+import { useAddTime, useTimer, formatTime, formatMinutes } from "../hooks/useTimer";
+import { useApp, useApi } from "../store/context";
+import { Collapsible } from "./Collapsible";
+import { isLocalOnlyEntry } from "./entry-edit";
+import { Modal } from "./Modal";
+import { usePersistEntry, projectDotColor, TaskIcon, LockIcon } from "./ProjectCard";
+import { ProjectPicker } from "./ProjectPicker";
+import { TaskPicker } from "./TaskPicker";
 
 function localDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -170,13 +172,15 @@ export function ClickUpDialog({
       actions={[
         {
           label: actionLabel,
-          onClick: () => task && projectId && taskId && onConfirm(projectId, taskId, task),
+          onClick: () => {
+            if (task && projectId && taskId) onConfirm(projectId, taskId, task);
+          },
           disabled: !task || !projectId || !taskId,
         },
       ]}
     >
       {presetTask ? (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-bg text-sm text-text">
+        <div className="flex items-center gap-2 rounded-lg bg-bg px-3 py-2 text-sm text-text">
           <ClickUpLogo />
           <span className="truncate">{presetTask.name}</span>
         </div>
@@ -185,21 +189,23 @@ export function ClickUpDialog({
           <input
             autoFocus
             value={ref}
-            onChange={(e) => setRef(e.target.value)}
+            onChange={(e) => {
+              setRef(e.target.value);
+            }}
             onBlur={() => void resolve(ref)}
             onPaste={(e) => void resolve(e.clipboardData.getData("text"))}
             onKeyDown={(e) => e.key === "Enter" && void resolve(ref)}
             placeholder="Paste ClickUp task link or ID"
-            className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text focus:ring-2 focus:ring-primary/30 focus:outline-none"
             aria-label="ClickUp task link or ID"
           />
-          <div className="flex items-center gap-1.5 mt-1.5 min-h-[18px] text-xs">
+          <div className="mt-1.5 flex min-h-[18px] items-center gap-1.5 text-xs">
             {lookup.busy && <span className="text-text-muted">Looking up…</span>}
             {lookup.error && <span className="text-danger">{lookup.error}</span>}
             {task && (
               <>
                 <ClickUpLogo size={13} />
-                <span className="text-text truncate">{task.name}</span>
+                <span className="truncate text-text">{task.name}</span>
               </>
             )}
           </div>
@@ -286,8 +292,12 @@ export function ClickUpCard({
   const [, setTick] = useState(0);
   useEffect(() => {
     if (!isThisRunning) return;
-    const id = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(id);
+    const id = setInterval(() => {
+      setTick((t) => t + 1);
+    }, 1000);
+    return () => {
+      clearInterval(id);
+    };
   }, [isThisRunning]);
 
   const displayTime = isThisRunning ? formatTime(minutes * 60 + elapsed) : formatMinutes(minutes);
@@ -365,18 +375,18 @@ export function ClickUpCard({
 
   return (
     <div
-      className={`relative bg-bg-card border border-border rounded-xl shadow-[0_1px_2px_rgba(11,4,21,0.04)] px-4 pt-[14px] ${motion} ${
+      className={`relative rounded-xl border border-border bg-bg-card px-4 pt-[14px] shadow-[0_1px_2px_rgba(11,4,21,0.04)] ${motion} ${
         collapsed ? (isSubmitted ? "pb-[26px]" : "pb-[33px]") : "pb-3"
       }`}
     >
       {/* Same row geometry as a project card: 36px button slot even when empty. */}
-      <div className="flex items-center gap-3 min-h-[36px]">
-        <div className="flex-1 min-w-0">
+      <div className="flex min-h-[36px] items-center gap-3">
+        <div className="min-w-0 flex-1">
           <button
             type="button"
             onClick={() => void openTask(task.id)}
             title="Open in ClickUp"
-            className="flex items-center gap-2 w-full text-left font-bold text-[17px] leading-[1.25] text-text hover:text-primary transition-colors cursor-pointer"
+            className="flex w-full cursor-pointer items-center gap-2 text-left text-[17px] leading-[1.25] font-bold text-text transition-colors hover:text-primary"
           >
             <ClickUpLogo size={20} />
             <span className="truncate">{task.name || `CU-${task.id}`}</span>
@@ -396,12 +406,11 @@ export function ClickUpCard({
         >
           {showTimerButton && (
             <button
-              onClick={() =>
-                isThisRunning
-                  ? void stop()
-                  : void startForCard(entry.projectId, entry.taskId!, task)
-              }
-              className={`absolute inset-0 rounded-full flex items-center justify-center text-white transition-all duration-200 active:scale-[0.94] ${
+              onClick={() => {
+                if (isThisRunning) void stop();
+                else if (entry.taskId) void startForCard(entry.projectId, entry.taskId, task);
+              }}
+              className={`absolute inset-0 flex items-center justify-center rounded-full text-white transition-all duration-200 active:scale-[0.94] ${
                 isThisRunning ? "bg-danger hover:bg-[#d8363c]" : "bg-primary hover:bg-primary-dark"
               }`}
               aria-label={isThisRunning ? "Stop timer" : "Start timer"}
@@ -420,15 +429,17 @@ export function ClickUpCard({
           {canQuickOpen && (
             <button
               onClick={() => {
+                const taskId = entry.taskId;
+                if (!taskId) return;
                 const today = localDate(new Date());
-                ensureLine(entry.projectId, entry.taskId!, today, task);
-                void startForCard(entry.projectId, entry.taskId!, task);
+                ensureLine(entry.projectId, taskId, today, task);
+                void startForCard(entry.projectId, taskId, task);
               }}
               tabIndex={expandInHeader ? -1 : undefined}
               aria-hidden={expandInHeader}
               title="Start today"
-              className={`absolute inset-0 rounded-full flex items-center justify-center transition-all duration-200 active:scale-[0.94] border-2 border-primary text-primary hover:bg-primary hover:text-white ${
-                expandInHeader ? "opacity-0 scale-90 pointer-events-none" : "opacity-100"
+              className={`absolute inset-0 flex items-center justify-center rounded-full border-2 border-primary text-primary transition-all duration-200 hover:bg-primary hover:text-white active:scale-[0.94] ${
+                expandInHeader ? "pointer-events-none scale-90 opacity-0" : "opacity-100"
               }`}
               aria-label="Start today"
             >
@@ -440,14 +451,16 @@ export function ClickUpCard({
           {isSubmitted && (
             <button
               type="button"
-              onClick={() => setCollapsed(false)}
+              onClick={() => {
+                setCollapsed(false);
+              }}
               tabIndex={expandInHeader ? undefined : -1}
               aria-hidden={!expandInHeader}
               aria-label="Expand entry"
               aria-expanded={false}
               title="Expand"
-              className={`absolute inset-0 rounded-full flex items-center justify-center text-text-subtle hover:text-primary hover:bg-bg-edit transition-all duration-200 cursor-pointer ${
-                expandInHeader ? "opacity-100" : "opacity-0 scale-90 pointer-events-none"
+              className={`absolute inset-0 flex cursor-pointer items-center justify-center rounded-full text-text-subtle transition-all duration-200 hover:bg-bg-edit hover:text-primary ${
+                expandInHeader ? "opacity-100" : "pointer-events-none scale-90 opacity-0"
               }`}
             >
               <svg
@@ -467,9 +480,9 @@ export function ClickUpCard({
         </div>
       </div>
       {/* AgileDay project + task, styled like a project card's task row. */}
-      <div className="flex items-center gap-2 mt-1 text-[13.5px] text-text-muted min-w-0">
+      <div className="mt-1 flex min-w-0 items-center gap-2 text-[13.5px] text-text-muted">
         <span
-          className={`w-[9px] h-[9px] rounded-full shrink-0 ${projectDotColor(
+          className={`h-[9px] w-[9px] shrink-0 rounded-full ${projectDotColor(
             entry.projectType ?? project?.projectType
           )}`}
         />
@@ -496,17 +509,21 @@ export function ClickUpCard({
           <>
             <button
               type="button"
-              onClick={() => isEditable && setEdit("project")}
+              onClick={() => {
+                if (isEditable) setEdit("project");
+              }}
               disabled={!isEditable}
-              className={`truncate min-w-0 ${metaButton}`}
+              className={`min-w-0 truncate ${metaButton}`}
             >
               {project?.name ?? entry.projectName ?? "Unknown project"}
             </button>
             <button
               type="button"
-              onClick={() => isEditable && setEdit("task")}
+              onClick={() => {
+                if (isEditable) setEdit("task");
+              }}
               disabled={!isEditable}
-              className={`flex items-center gap-[5px] min-w-0 shrink-0 max-w-[50%] ${metaButton}`}
+              className={`flex max-w-[50%] min-w-0 shrink-0 items-center gap-[5px] ${metaButton}`}
             >
               <TaskIcon />
               <span className="truncate">{taskName ?? "Select task"}</span>
@@ -518,7 +535,7 @@ export function ClickUpCard({
           an "Expand" link. Expanded: the day's ClickUp time slots for this task. */}
       {isSubmitted && (
         <span
-          className={`absolute bottom-[10px] right-3 flex items-center pointer-events-none gap-1 text-[10px] leading-none text-text-muted/50 ${motion} ${
+          className={`pointer-events-none absolute right-3 bottom-[10px] flex items-center gap-1 text-[10px] leading-none text-text-muted/50 ${motion} ${
             collapsed ? "opacity-100" : "opacity-0"
           }`}
           aria-hidden={!collapsed}
@@ -530,13 +547,15 @@ export function ClickUpCard({
       {!isSubmitted && (
         <button
           type="button"
-          onClick={() => setCollapsed(false)}
+          onClick={() => {
+            setCollapsed(false);
+          }}
           tabIndex={collapsed ? undefined : -1}
           aria-hidden={!collapsed}
           aria-label="Expand entry"
           aria-expanded={false}
-          className={`absolute bottom-3 right-4 inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-primary cursor-pointer ${motion} ${
-            collapsed ? "opacity-100" : "opacity-0 pointer-events-none"
+          className={`absolute right-4 bottom-3 inline-flex cursor-pointer items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-primary ${motion} ${
+            collapsed ? "opacity-100" : "pointer-events-none opacity-0"
           }`}
         >
           <svg
@@ -559,8 +578,10 @@ export function ClickUpCard({
           the footer row, which keeps its height via "Collapse". */}
       {isEditable && (
         <button
-          onClick={() => setConfirmDelete(true)}
-          className="absolute bottom-3 left-4 inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-danger transition-colors cursor-pointer"
+          onClick={() => {
+            setConfirmDelete(true);
+          }}
+          className="absolute bottom-3 left-4 inline-flex cursor-pointer items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle transition-colors hover:text-danger"
           aria-label="Delete ClickUp time"
         >
           <svg
@@ -585,17 +606,17 @@ export function ClickUpCard({
       {error && <p className="mt-2 text-xs text-danger">{error}</p>}
       <Collapsible collapsed={collapsed}>
         <div className="pt-3 pb-3">
-          <div className="border-l-2 border-border ml-1 pl-[14px] flex flex-col gap-[9px]">
+          <div className="ml-1 flex flex-col gap-[9px] border-l-2 border-border pl-[14px]">
             {sessions.map((e) => (
               <div
                 key={e.id}
-                className="flex items-center gap-[9px] text-sm text-text leading-[1.4]"
+                className="flex items-center gap-[9px] text-sm leading-[1.4] text-text"
               >
-                <span className="w-[5px] h-[5px] rounded-full bg-primary shrink-0" />
+                <span className="h-[5px] w-[5px] shrink-0 rounded-full bg-primary" />
                 <span className="flex-1 tabular-nums">
                   {clockTime(e.start)}–{clockTime(e.start + e.duration)}
                 </span>
-                <span className="tabular-nums text-text-muted">
+                <span className="text-text-muted tabular-nums">
                   {formatMinutes(sessionMinutes(e.duration))}
                 </span>
               </div>
@@ -605,9 +626,9 @@ export function ClickUpCard({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3 mt-0.5">
+        <div className="mt-0.5 flex items-center gap-3">
           {isSubmitted && (
-            <span className="text-[10px] leading-none text-text-muted/50 flex items-center gap-1">
+            <span className="flex items-center gap-1 text-[10px] leading-none text-text-muted/50">
               <LockIcon />
               Submitted — edit in AgileDay
             </span>
@@ -618,7 +639,7 @@ export function ClickUpCard({
               cancelEdit();
               setCollapsed(true);
             }}
-            className="ml-auto inline-flex items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle hover:text-primary transition-colors cursor-pointer"
+            className="ml-auto inline-flex cursor-pointer items-center gap-1.5 text-[12px] leading-[13px] text-text-subtle transition-colors hover:text-primary"
             aria-label="Collapse entry"
             aria-expanded={true}
           >
@@ -641,11 +662,19 @@ export function ClickUpCard({
       </Collapsible>
       {confirmDelete && (
         <Modal
-          onClose={() => setConfirmDelete(false)}
+          onClose={() => {
+            setConfirmDelete(false);
+          }}
           title="Delete this ClickUp time?"
           subtitle={`${task.name} · ${displayTime} is removed from both ClickUp and AgileDay.`}
           actions={[
-            { label: "Cancel", variant: "secondary", onClick: () => setConfirmDelete(false) },
+            {
+              label: "Cancel",
+              variant: "secondary",
+              onClick: () => {
+                setConfirmDelete(false);
+              },
+            },
             { label: "Delete", variant: "danger", onClick: () => void handleDelete() },
           ]}
         />
@@ -666,6 +695,7 @@ export function ClickUpBanner() {
   const addTime = useAddTime();
   const ensureLine = useEnsureClickUpLine();
   const { startForCard } = useTimer();
+  const today = localDate(useNow());
   const [dialog, setDialog] = useState<"adopt" | ReturnType<typeof unsyncedGroups>[number] | null>(
     null
   );
@@ -703,7 +733,8 @@ export function ClickUpBanner() {
     if (busy.current || state.loading) return;
     const group = groups.find((g) => linkedEntry(g.date, g.task.id));
     const target = group && linkedEntry(group.date, group.task.id);
-    if (!group || !target) return;
+    const first = group?.entries[0];
+    if (!group || !target || !first) return;
     busy.current = true;
     dispatch({ type: "MARK_CLICKUP_SYNCED", payload: group.entries });
     void addTime({
@@ -711,7 +742,7 @@ export function ClickUpBanner() {
       taskId: target.taskId ?? null,
       date: group.date,
       minutes: group.minutes,
-      startTime: new Date(group.entries[0].start).toISOString(),
+      startTime: new Date(first.start).toISOString(),
     }).finally(() => {
       busy.current = false;
       setRound((r) => r + 1);
@@ -727,16 +758,18 @@ export function ClickUpBanner() {
     : null;
 
   return (
-    <div className="flex flex-col gap-1.5 px-4 py-2 bg-bg-card border-b border-border text-xs max-h-40 overflow-y-auto">
+    <div className="flex max-h-40 flex-col gap-1.5 overflow-y-auto border-b border-border bg-bg-card px-4 py-2 text-xs">
       {showRunning && runningTask && (
         <div className="flex items-center gap-2">
           <ClickUpLogo size={14} />
-          <span className="flex-1 min-w-0 truncate text-text">
+          <span className="min-w-0 flex-1 truncate text-text">
             Timer running in ClickUp · <b>{runningTask.name}</b>
           </span>
           <button
-            onClick={() => setDialog("adopt")}
-            className="px-2.5 py-1 font-semibold text-white bg-primary rounded-md hover:bg-primary-dark"
+            onClick={() => {
+              setDialog("adopt");
+            }}
+            className="rounded-md bg-primary px-2.5 py-1 font-semibold text-white hover:bg-primary-dark"
           >
             Track here
           </button>
@@ -745,19 +778,22 @@ export function ClickUpBanner() {
       {pending.map((g) => (
         <div key={`${g.date}|${g.task.id}`} className="flex items-center gap-2">
           <ClickUpLogo size={14} />
-          <span className="flex-1 min-w-0 truncate text-text">
+          <span className="min-w-0 flex-1 truncate text-text">
             <b>{g.task.name}</b> · {formatMinutes(g.minutes).slice(0, -3)}
-            {g.date !== localDate(new Date()) && ` on ${g.date.slice(5)}`} in ClickUp, not in
-            AgileDay
+            {g.date !== today && ` on ${g.date.slice(5)}`} in ClickUp, not in AgileDay
           </span>
           <button
-            onClick={() => setDialog(g)}
-            className="px-2.5 py-1 font-semibold text-white bg-primary rounded-md hover:bg-primary-dark"
+            onClick={() => {
+              setDialog(g);
+            }}
+            className="rounded-md bg-primary px-2.5 py-1 font-semibold text-white hover:bg-primary-dark"
           >
             Add
           </button>
           <button
-            onClick={() => dispatch({ type: "MARK_CLICKUP_SYNCED", payload: g.entries })}
+            onClick={() => {
+              dispatch({ type: "MARK_CLICKUP_SYNCED", payload: g.entries });
+            }}
             className="px-2 py-1 font-medium text-text-muted hover:text-text"
           >
             Ignore
@@ -771,7 +807,9 @@ export function ClickUpBanner() {
           actionLabel="Track here"
           task={runningTask}
           usageDate={localDate(new Date(clickupRunning.start))}
-          onClose={() => setDialog(null)}
+          onClose={() => {
+            setDialog(null);
+          }}
           onConfirm={(projectId, taskId, task) => {
             setDialog(null);
             const start = new Date(clickupRunning.start);
@@ -791,16 +829,20 @@ export function ClickUpBanner() {
           actionLabel={`Add ${formatMinutes(dialog.minutes).slice(0, -3)}`}
           task={dialog.task}
           usageDate={dialog.date}
-          onClose={() => setDialog(null)}
+          onClose={() => {
+            setDialog(null);
+          }}
           onConfirm={(projectId, taskId, task) => {
             setDialog(null);
+            const first = dialog.entries[0];
+            if (!first) return;
             dispatch({ type: "MARK_CLICKUP_SYNCED", payload: dialog.entries });
             void addTime({
               projectId,
               taskId,
               date: dialog.date,
               minutes: dialog.minutes,
-              startTime: new Date(dialog.entries[0].start).toISOString(),
+              startTime: new Date(first.start).toISOString(),
               clickupTasks: [task],
             });
           }}

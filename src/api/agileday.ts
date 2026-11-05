@@ -1,10 +1,10 @@
-import type { ApiProvider } from "./provider";
-import type { Allocation, Employee, Holiday, Project, ProjectType, Task, TimeEntry } from "./types";
+import { normalizeAllocationPeriods, type RawAllocationPeriod } from "../utils/allocation";
+import { addDays, monthsInRange } from "../utils/date-range";
 import type { AuthConfig, AuthState } from "./auth";
 import { isTokenExpired, refreshAuthState } from "./auth";
-import { addDays, monthsInRange } from "../utils/date-range";
 import { createGlobalDefaultTaskLoader } from "./global-tasks";
-import { normalizeAllocationPeriods, type RawAllocationPeriod } from "../utils/allocation";
+import type { ApiProvider, MyProjectInfo } from "./provider";
+import type { Allocation, Employee, Holiday, Project, ProjectType, Task, TimeEntry } from "./types";
 
 /**
  * Lookback for the /updated fallback read. That endpoint filters by last-update
@@ -33,7 +33,7 @@ const PROJECT_COLORS = [
 ];
 
 function assignProjectColor(index: number): string {
-  return PROJECT_COLORS[index % PROJECT_COLORS.length];
+  return PROJECT_COLORS[index % PROJECT_COLORS.length] ?? "#AEA7FF";
 }
 
 export interface AgileDayConfig {
@@ -123,7 +123,7 @@ export function createAgileDayProvider(
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
           Origin: new URL(config.apiBaseUrl).origin,
-          ...options.headers,
+          ...(options.headers as Record<string, string> | undefined),
         },
       });
     } catch (err) {
@@ -145,7 +145,7 @@ export function createAgileDayProvider(
     }
 
     if (response.status === 204) return undefined as T;
-    return response.json();
+    return (await response.json()) as T;
   }
 
   // Memoised per provider instance: discovered on first getTasks call, reused for
@@ -166,8 +166,15 @@ export function createAgileDayProvider(
       let jwtEmail: string;
       try {
         const payload = JSON.parse(
-          atob(auth.accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))
-        );
+          atob((auth.accessToken.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/"))
+        ) as {
+          sub?: string;
+          employee_id?: string;
+          uid?: string;
+          email?: string;
+          name?: string;
+          preferred_username?: string;
+        };
         employeeId = payload.sub || payload.employee_id || payload.uid;
         jwtEmail = payload.email || "";
         jwtName = payload.name || payload.preferred_username || jwtEmail || "User";
@@ -203,7 +210,7 @@ export function createAgileDayProvider(
       return projects.map((p, i) => ({
         id: p.id,
         name: p.name,
-        customerName: p.customer?.name,
+        ...(p.customer ? { customerName: p.customer.name } : {}),
         color: assignProjectColor(i),
       }));
     },
@@ -223,7 +230,7 @@ export function createAgileDayProvider(
       return absences.map((a, i) => ({
         id: a.id,
         name: a.name,
-        customerName: a.customer?.name,
+        ...(a.customer ? { customerName: a.customer.name } : {}),
         color: assignProjectColor(i),
         projectType: "ABSENCE" as const,
       }));
@@ -275,7 +282,7 @@ export function createAgileDayProvider(
     ): Promise<TimeEntry[]> {
       type RawEntry = {
         id: string;
-        description: string;
+        description?: string;
         projectId: string;
         projectName: string;
         taskId?: string;
@@ -336,19 +343,22 @@ export function createAgileDayProvider(
       // 3. Build result: use detailed entries as primary (they have descriptions + IDs)
       const result: TimeEntry[] = detailedEntries
         .filter((e) => e.date >= startDate && e.date <= endDate)
-        .map((e) => ({
-          id: e.id,
-          description: e.description ?? "",
-          projectId: e.projectId,
-          projectName: e.projectName,
-          projectType: projectTypeById.get(e.projectId),
-          taskId: e.taskId,
-          date: e.date,
-          startTime: `${e.date}T09:00:00.000Z`,
-          minutes: e.minutes,
-          status: e.status as TimeEntry["status"],
-          syncStatus: "synced" as const,
-        }));
+        .map((e) => {
+          const projectType = projectTypeById.get(e.projectId);
+          return {
+            id: e.id,
+            description: e.description ?? "",
+            projectId: e.projectId,
+            projectName: e.projectName,
+            ...(projectType ? { projectType } : {}),
+            ...(e.taskId !== undefined ? { taskId: e.taskId } : {}),
+            date: e.date,
+            startTime: `${e.date}T09:00:00.000Z`,
+            minutes: e.minutes,
+            status: e.status as TimeEntry["status"],
+            syncStatus: "synced" as const,
+          };
+        });
 
       // 4. Add entries from summary that aren't covered by detailed entries
       //    (e.g. entries in SAVED/NEW status that time_entry endpoint doesn't return)
@@ -369,7 +379,7 @@ export function createAgileDayProvider(
             description: "",
             projectId: s.projectId,
             projectName: s.project,
-            projectType: s.projectType,
+            ...(s.projectType ? { projectType: s.projectType } : {}),
             date: s.date,
             startTime: `${s.date}T09:00:00.000Z`,
             minutes: s.minutes - detailedMinutes,
@@ -396,7 +406,7 @@ export function createAgileDayProvider(
         taskId?: string;
       };
 
-      const desc = entry.description ?? "";
+      const desc = entry.description;
 
       // App is source of truth when saving. Check if an entry already exists
       // on AgileDay for this (project, task, date) — if so, PATCH it with
@@ -425,8 +435,9 @@ export function createAgileDayProvider(
           method: "PATCH",
           body: JSON.stringify([{ id: match.id, minutes: entry.minutes, description: desc }]),
         });
-        if (results.length === 0) throw new Error("No entry returned from API");
-        created = results[0];
+        const [first] = results;
+        if (!first) throw new Error("No entry returned from API");
+        created = first;
       } else {
         // POST new entry
         const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
@@ -443,19 +454,20 @@ export function createAgileDayProvider(
             },
           ]),
         });
-        if (results.length === 0) throw new Error("No entry returned from API");
-        created = results[0];
+        const [first] = results;
+        if (!first) throw new Error("No entry returned from API");
+        created = first;
       }
 
       return {
         id: created.id,
         description: created.description ?? desc,
         projectId: created.projectId,
-        projectName: entry.projectName,
-        taskId: created.taskId,
+        ...(entry.projectName !== undefined ? { projectName: entry.projectName } : {}),
+        ...(created.taskId !== undefined ? { taskId: created.taskId } : {}),
         date: created.date,
         startTime: entry.startTime,
-        endTime: entry.endTime,
+        ...(entry.endTime !== undefined ? { endTime: entry.endTime } : {}),
         minutes: created.minutes,
         status: created.status as TimeEntry["status"],
         syncStatus: "synced",
@@ -495,18 +507,18 @@ export function createAgileDayProvider(
         body: JSON.stringify(body),
       });
 
-      if (results.length === 0) throw new Error("No entry returned from API");
-      const updated = results[0];
+      const [updated] = results;
+      if (!updated) throw new Error("No entry returned from API");
 
       return {
         id: updated.id,
         description: updated.description ?? "",
         projectId: updated.projectId,
-        projectName: updates.projectName,
-        taskId: updated.taskId,
+        ...(updates.projectName !== undefined ? { projectName: updates.projectName } : {}),
+        ...(updated.taskId !== undefined ? { taskId: updated.taskId } : {}),
         date: updated.date,
         startTime: updates.startTime ?? "",
-        endTime: updates.endTime,
+        ...(updates.endTime !== undefined ? { endTime: updates.endTime } : {}),
         minutes: updated.minutes,
         status: updated.status as TimeEntry["status"],
         syncStatus: "synced",
@@ -526,7 +538,7 @@ export function createAgileDayProvider(
       if (updates.length === 0) return [];
 
       const body = updates.map((u) => {
-        const patch: Record<string, unknown> = { id: u.id };
+        const patch: { id: string } & Partial<TimeEntry> = { id: u.id };
         if (u.minutes !== undefined) patch.minutes = u.minutes;
         if (u.description !== undefined) patch.description = u.description;
         if (u.projectId) patch.projectId = u.projectId;
@@ -555,7 +567,7 @@ export function createAgileDayProvider(
         id: r.id,
         description: r.description ?? "",
         projectId: r.projectId,
-        taskId: r.taskId,
+        ...(r.taskId !== undefined ? { taskId: r.taskId } : {}),
         date: r.date,
         startTime: "",
         minutes: r.minutes,
@@ -622,7 +634,7 @@ export function createAgileDayProvider(
       }));
     },
 
-    async getMyProjects(employeeId: string) {
+    async getMyProjects(employeeId: string): Promise<MyProjectInfo[]> {
       const filter = JSON.stringify({ candidate: { in: [employeeId] } });
       const data = await apiFetch<{
         openings: Array<{
@@ -634,16 +646,13 @@ export function createAgileDayProvider(
         }>;
       }>(`/v2/opening?limit=100&filter=${encodeURIComponent(filter)}`);
 
-      const byId = new Map<
-        string,
-        { name?: string; projectType?: ProjectType; openingId: string }
-      >();
+      const byId = new Map<string, Omit<MyProjectInfo, "id">>();
       for (const o of data.openings) {
         const prev = byId.get(o.projectlikeId);
         if (!prev) {
           byId.set(o.projectlikeId, {
-            name: o.projectlikeName,
-            projectType: o.projectlikeType ?? undefined,
+            ...(o.projectlikeName !== undefined ? { name: o.projectlikeName } : {}),
+            ...(o.projectlikeType ? { projectType: o.projectlikeType } : {}),
             openingId: o.id,
           });
         } else if (!prev.projectType && o.projectlikeType) {
@@ -651,12 +660,7 @@ export function createAgileDayProvider(
           prev.projectType = o.projectlikeType;
         }
       }
-      return [...byId.entries()].map(([id, info]) => ({
-        id,
-        name: info.name,
-        projectType: info.projectType,
-        openingId: info.openingId,
-      }));
+      return [...byId.entries()].map(([id, info]) => ({ id, ...info }));
     },
 
     async getHolidays(countryCode: string, startDate: string, endDate: string): Promise<Holiday[]> {
