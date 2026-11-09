@@ -94,6 +94,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          # PostHog project token (public by design) and host, from repo variables.
+          # Unset = the app is built with telemetry off.
+          VITE_POSTHOG_KEY: ${{ vars.POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
         with:
           tagName: ${{ steps.version.outputs.tag }}
           releaseName: "QTE Time Tracker ${{ steps.version.outputs.tag }}"

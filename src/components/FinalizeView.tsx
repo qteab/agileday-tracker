@@ -10,6 +10,7 @@ import {
 } from "../api/rounding";
 import type { TimeEntry } from "../api/types";
 import { useNow } from "../hooks/useNow";
+import { posthogClient } from "../posthog";
 import { useApp, useApi } from "../store/context";
 import type { AppAction } from "../store/reducer";
 import { fmtDate, getTimesheetPeriod, syncedOnly, type TimesheetPeriod } from "../utils/week";
@@ -375,6 +376,7 @@ function SubmitButton({ week }: { week: WeekSummary }) {
     setError("");
     try {
       await api.submitTimesheet(state.employee.id, week.weekStart, week.month);
+      posthogClient?.capture("timesheet_submitted", { entry_count: week.entryCount });
       await reloadEntries(api, state.employee.id, dispatch);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit timesheet");
@@ -497,6 +499,10 @@ function WeekDetail({
         minutes: e.adjustedMinutes,
       }));
       await api.batchUpdateEntries(state.employee.id, updates);
+      posthogClient?.capture("timesheet_rounded", {
+        adjusted_entry_count: adjustedEntries.length,
+        rounded_group_count: groupsToRound.length,
+      });
       await reloadEntries(api, state.employee.id, dispatch);
 
       onRounded();

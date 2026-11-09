@@ -56,6 +56,10 @@ macOS menu bar time tracker that syncs to AgileDay. Tauri v2 (Rust) shell + Reac
 
 `src/api/clickup.ts` + `src/components/ClickUp.tsx`. Users connect one or more ClickUp accounts (Settings → ClickUp), each with its own personal API token; no OAuth since there is no backend to hold a client secret. Time entries and tasks carry their workspace (`teamId`), and the client picks the token of the account that workspace belongs to. Tracking a ClickUp task still writes to the day's single AgileDay entry for the chosen project+task — the task appears as one `- CU-<id> <name>` comment line and its minutes are added to the total. Each session is also logged as a ClickUp time entry (start + duration). The list renders each `CU-` line as its own card, with minutes taken from ClickUp time entries; the project card shows the remainder. Which ClickUp entries are already counted in AgileDay is kept locally in `clickup.json` (`sync.synced`, plus `sync.since[teamId]` = start of the day each workspace was connected). Unsynced ClickUp time on a task already linked that day is added automatically; other unsynced time and timers running in ClickUp are offered in `ClickUpBanner`.
 
+### Telemetry (PostHog)
+
+`src/posthog.ts` — product events, unhandled JS errors and AgileDay API error logs, EU host. Only active in builds that get `VITE_POSTHOG_KEY`/`VITE_POSTHOG_HOST` (release CI reads repo variables `POSTHOG_KEY`/`POSTHOG_HOST`); never in tests, and in dev only with `VITE_POSTHOG_ENABLE_IN_DEV=true`. Anonymous: no `identify()`, no person profiles, no GeoIP, exception messages scrubbed (`src/utils/telemetry-scrub.ts`). Explicit events only — no autocapture, no session replay, no remote scripts. Never put employee ID, email, name, entry descriptions, project or customer names in events. See `.claude/docs/architecture.md` → Telemetry.
+
 ## API endpoints used
 
 AgileDay requires `Origin: https://qvik.agileday.io` header on all requests (Tauri HTTP plugin with `unsafe-headers` feature).

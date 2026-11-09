@@ -3,6 +3,7 @@ import { useState } from "react";
 import { createClickUpClient } from "../api/clickup";
 import bearIcon from "../assets/bear.png";
 import { useNow } from "../hooks/useNow";
+import { posthogClient } from "../posthog";
 import { useApp } from "../store/context";
 import {
   saveDisplayPrefs,
@@ -944,6 +945,7 @@ function ClickUpSettings() {
       // ClickUp time from today on is offered for AgileDay; older time is
       // assumed to be logged already.
       dispatch({ type: "SET_CLICKUP_ACCOUNT", payload: account });
+      posthogClient?.capture("clickup_connected", { workspace_count: account.teams.length });
       setToken("");
       setAdding(false);
     } catch (err) {

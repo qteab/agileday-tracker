@@ -1,3 +1,4 @@
+import { posthogLogger } from "../posthog";
 import { normalizeAllocationPeriods, type RawAllocationPeriod } from "../utils/allocation";
 import { addDays, monthsInRange } from "../utils/date-range";
 import type { AuthConfig, AuthState } from "./auth";
@@ -129,10 +130,22 @@ export function createAgileDayProvider(
     } catch (err) {
       const elapsed = Math.round(performance.now() - startedAt);
       console.log(`[AgileDay] ${method} ${url} → network error (${elapsed}ms)`);
+      posthogLogger?.warn("agileday_api_network_error", {
+        http_method: method,
+        duration_ms: elapsed,
+      });
       throw err;
     }
     const elapsed = Math.round(performance.now() - startedAt);
     console.log(`[AgileDay] ${method} ${url} → ${response.status} (${elapsed}ms)`);
+
+    if (!response.ok) {
+      posthogLogger?.error("agileday_api_request_failed", {
+        http_method: method,
+        http_status_code: response.status,
+        duration_ms: elapsed,
+      });
+    }
 
     if (response.status === 401) {
       const body = await response.text().catch(() => "");
