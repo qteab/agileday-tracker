@@ -1,167 +1,18 @@
-name: Release
-
-on:
-  workflow_dispatch:
-    inputs:
-      bump:
-        description: "Version bump type"
-        required: true
-        default: "patch"
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-
-jobs:
-  release:
-    runs-on: macos-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run checks
-        run: npm run check
-
-      - name: Calculate next version
-        id: version
-        run: |
-          CURRENT=$(node -p "require('./package.json').version")
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-          case "${{ inputs.bump }}" in
-            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-            patch) PATCH=$((PATCH + 1)) ;;
-          esac
-          NEXT="${MAJOR}.${MINOR}.${PATCH}"
-          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
-          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
-          echo "tag=v${NEXT}" >> "$GITHUB_OUTPUT"
-          echo "Bumping $CURRENT → $NEXT (${{ inputs.bump }})"
-
-      - name: Bump version in files
-        run: |
-          VERSION=${{ steps.version.outputs.next }}
-          # package.json + package-lock.json (npm keeps both in sync)
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
-          # tauri.conf.json
-          node -e "
-            const conf = require('./src-tauri/tauri.conf.json');
-            conf.version = '$VERSION';
-            require('fs').writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(conf, null, 2) + '\n');
-          "
-          # Cargo.toml
-          sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
-          # Cargo.lock — refresh the workspace member entry only, leave deps pinned
-          cargo update --workspace --manifest-path src-tauri/Cargo.toml
-
-          # Fail early if any target still carries the old version
-          git diff --stat
-          grep -q "\"version\": \"$VERSION\"" package.json
-          grep -q "\"version\": \"$VERSION\"" package-lock.json
-          grep -q "\"version\": \"$VERSION\"" src-tauri/tauri.conf.json
-          grep -q "^version = \"$VERSION\"" src-tauri/Cargo.toml
-          grep -A1 '^name = "qte-time-tracker"' src-tauri/Cargo.lock | grep -q "^version = \"$VERSION\""
-
-      - name: Commit version bump
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
-          git commit -m "release: v${{ steps.version.outputs.next }}"
-          git tag ${{ steps.version.outputs.tag }}
-          git push origin main --tags
-
-      - name: Build and release
-        uses: tauri-apps/tauri-action@v1
+      # tauri-action signs the updater tarball, uploads it together with its
+      # .sig, and generates latest.json itself. Verify that latest.json points
+      # at an asset that actually exists on the release, so a broken updater
+      # feed fails the workflow instead of 404ing for every user.
+      - name: Verify updater feed
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-          # PostHog project token (public by design) and host, from repo variables.
-          # Unset = the app is built with telemetry off.
-          VITE_POSTHOG_KEY: ${{ vars.POSTHOG_KEY }}
-          VITE_POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
-        with:
-          tagName: ${{ steps.version.outputs.tag }}
-          releaseName: "QTE Time Tracker ${{ steps.version.outputs.tag }}"
-          releaseBody: |
-            ## QTE Time Tracker ${{ steps.version.outputs.tag }}
-
-            Download the `.dmg` file below and drag to Applications.
-
-            **First install:** Right-click the app → Open → confirm (one time only).
-            **Updates:** The app checks for updates automatically.
-          generateReleaseNotes: true
-          releaseDraft: false
-          prerelease: false
-
-      - name: Upload updater files
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         run: |
           TAG=${{ steps.version.outputs.tag }}
-          VERSION=${{ steps.version.outputs.next }}
-          REPO=${{ github.repository }}
-          BUNDLE_DIR="src-tauri/target/release/bundle/macos"
-
-          # The tauri-action creates the .tar.gz but doesn't sign it.
-          # We sign it ourselves and generate latest.json.
-          TAR_FILE="$BUNDLE_DIR/QTE Time Tracker.app.tar.gz"
-
-          if [ ! -f "$TAR_FILE" ]; then
-            echo "No tar.gz found — updater artifacts are required, failing the release"
-            ls -la "$BUNDLE_DIR/" || true
+          gh release download "$TAG" --pattern latest.json --output latest.json
+          FEED_URL=$(jq -r '.platforms["darwin-aarch64"].url' latest.json)
+          FEED_ASSET=$(basename "$FEED_URL")
+          echo "latest.json points at: $FEED_ASSET"
+          if ! gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qxF "$FEED_ASSET"; then
+            echo "latest.json points at an asset that is not on the release:"
+            gh release view "$TAG" --json assets --jq '.assets[].name'
             exit 1
           fi
-
-          # Sign the tar.gz
-          npx tauri signer sign "$TAR_FILE"
-          SIG_FILE="${TAR_FILE}.sig"
-
-          if [ ! -f "$SIG_FILE" ]; then
-            echo "Signing failed — no .sig file produced"
-            exit 1
-          fi
-
-          SIGNATURE=$(cat "$SIG_FILE")
-          TAR_NAME="QTE.Time.Tracker_aarch64.app.tar.gz"
-
-          # Upload .sig file
-          gh release upload "$TAG" "$SIG_FILE" --clobber
-
-          # Generate and upload latest.json
-          cat > /tmp/latest.json << ENDJSON
-          {
-            "version": "$VERSION",
-            "notes": "QTE Time Tracker $TAG",
-            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "platforms": {
-              "darwin-aarch64": {
-                "signature": "$SIGNATURE",
-                "url": "https://github.com/$REPO/releases/download/$TAG/$TAR_NAME"
-              }
-            }
-          }
-          ENDJSON
-
-          gh release upload "$TAG" /tmp/latest.json --clobber
-          echo "Uploaded latest.json and .sig file"
