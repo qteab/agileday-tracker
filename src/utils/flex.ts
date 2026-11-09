@@ -1,7 +1,7 @@
 import type { TimeEntry } from "../api/types";
 import type { Holiday } from "../api/types";
-import { getWeekStart, fmtDate, formatWeekLabel } from "./week";
 import { holidaySet } from "./holidays";
+import { getWeekStart, fmtDate, formatWeekLabel } from "./week";
 
 export interface FlexWeek {
   weekLabel: string;

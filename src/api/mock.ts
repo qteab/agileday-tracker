@@ -1,9 +1,10 @@
 import { load } from "@tauri-apps/plugin-store";
+
 import { createMockProvider, MOCK_EMPLOYEE, MOCK_PROJECTS, MOCK_TASKS } from "./mock-core";
 import type { TimeEntry } from "./types";
 
 async function getStore() {
-  return await load("mock-data.json", { autoSave: true, defaults: {} });
+  return load("mock-data.json", { autoSave: true, defaults: {} });
 }
 
 async function getEntries(): Promise<TimeEntry[]> {

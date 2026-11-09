@@ -36,7 +36,7 @@ interface ExceptionListItem {
 export function scrubExceptionEvent(event: CaptureResult | null): CaptureResult | null {
   if (!event || event.event !== "$exception") return event;
 
-  const exceptionList: unknown = event.properties.$exception_list;
+  const exceptionList: unknown = event.properties["$exception_list"];
   if (!Array.isArray(exceptionList)) return event;
 
   for (const exception of exceptionList as ExceptionListItem[]) {

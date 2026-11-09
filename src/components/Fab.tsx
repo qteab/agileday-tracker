@@ -1,12 +1,14 @@
 import { useState, useMemo } from "react";
+
+import { isClickupOnly } from "../api/clickup";
+import { useNow } from "../hooks/useNow";
+import { useTimer } from "../hooks/useTimer";
 import { useApp } from "../store/context";
+import { ClickUpDialog, ClickUpLogo, useEnsureClickUpLine } from "./ClickUp";
+import { usedTaskIds } from "./entry-edit";
+import { Modal } from "./Modal";
 import { ProjectPicker } from "./ProjectPicker";
 import { TaskPicker } from "./TaskPicker";
-import { Modal } from "./Modal";
-import { usedTaskIds } from "./entry-edit";
-import { useTimer } from "../hooks/useTimer";
-import { ClickUpDialog, ClickUpLogo, useEnsureClickUpLine } from "./ClickUp";
-import { isClickupOnly } from "../api/clickup";
 
 export function Fab() {
   const { state, dispatch, clickupClient } = useApp();
@@ -19,7 +21,7 @@ export function Fab() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
 
-  const now = new Date();
+  const now = useNow();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   // Tasks already tracked today for the selected project — hidden so the FAB
@@ -39,7 +41,7 @@ export function Fab() {
     [projectId, state.entries, today]
   );
 
-  const handleCreate = async () => {
+  const handleCreate = () => {
     if (!projectId || !taskId || !state.employee) return;
 
     const now = new Date();
@@ -64,7 +66,7 @@ export function Fab() {
           projectId,
           projectName: project?.name,
           openingId,
-          taskId: taskId ?? undefined,
+          taskId,
           date,
           startTime: now.toISOString(),
           minutes: 0,
@@ -95,7 +97,9 @@ export function Fab() {
         title="Track a ClickUp task"
         actionLabel="Start tracking"
         usageDate={today}
-        onClose={() => setShowClickUp(false)}
+        onClose={() => {
+          setShowClickUp(false);
+        }}
         onConfirm={(pid, tid, task) => {
           setShowClickUp(false);
           ensureClickUpLine(pid, tid, today, task);
@@ -113,7 +117,7 @@ export function Fab() {
         actions={[
           {
             label: "Start tracking",
-            onClick: () => void handleCreate(),
+            onClick: handleCreate,
             disabled: !projectId || !taskId,
           },
         ]}
@@ -146,11 +150,13 @@ export function Fab() {
       {menuOpen && (
         <div
           className="fixed inset-0 z-20 bg-black/20 backdrop-blur-[2px]"
-          onClick={() => setMenuOpen(false)}
+          onClick={() => {
+            setMenuOpen(false);
+          }}
         />
       )}
       {menuOpen && (
-        <div className="absolute right-4 bottom-[80px] flex flex-col items-end gap-2 z-30">
+        <div className="absolute right-4 bottom-[80px] z-30 flex flex-col items-end gap-2">
           <button
             className={menuButton}
             onClick={() => {
@@ -185,7 +191,10 @@ export function Fab() {
       )}
       <FabButton
         open={menuOpen}
-        onClick={() => (clickupClient ? setMenuOpen((o) => !o) : setShowDialog(true))}
+        onClick={() => {
+          if (clickupClient) setMenuOpen((o) => !o);
+          else setShowDialog(true);
+        }}
       />
     </>
   );
@@ -196,7 +205,7 @@ function FabButton({ open, onClick }: { open: boolean; onClick: () => void }) {
     <button
       onClick={onClick}
       aria-expanded={open}
-      className="absolute right-4 bottom-4 w-[52px] h-[52px] rounded-full bg-primary text-white flex items-center justify-center shadow-[0_8px_22px_rgba(85,25,213,0.42)] hover:bg-primary-dark active:scale-[0.95] transition-all z-30"
+      className="absolute right-4 bottom-4 z-30 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-primary text-white shadow-[0_8px_22px_rgba(85,25,213,0.42)] transition-all hover:bg-primary-dark active:scale-[0.95]"
       aria-label="New project"
     >
       <svg

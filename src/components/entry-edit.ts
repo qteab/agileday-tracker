@@ -14,7 +14,7 @@ export function parseDurationInput(raw: string): number | null {
     if (parts.length < 2 || parts.length > 3) return null;
     const nums = parts.map((p) => (p.trim() === "" ? NaN : Number(p)));
     if (nums.some((n) => !Number.isFinite(n) || n < 0)) return null;
-    const [h, m] = nums;
+    const [h = NaN, m = NaN] = nums;
     if (!Number.isInteger(h) || !Number.isInteger(m) || m > 59) return null;
     return h * 60 + m;
   }

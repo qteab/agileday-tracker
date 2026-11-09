@@ -1,3 +1,5 @@
+import { useLiveFlex } from "../hooks/useLiveFlex";
+import { useVacation } from "../hooks/useVacation";
 import { useApp } from "../store/context";
 import {
   formatFlexMinutes,
@@ -6,8 +8,6 @@ import {
   type MonthSummary,
 } from "../utils/flex";
 import { formatVacationDays, type VacationResult } from "../utils/vacation";
-import { useLiveFlex } from "../hooks/useLiveFlex";
-import { useVacation } from "../hooks/useVacation";
 import { MonthProgressCard } from "./MonthProgressCard";
 import type { SettingsPage } from "./SettingsView";
 
@@ -45,14 +45,21 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
 
   const vacationSection =
     vacationConfig && vacation ? (
-      <VacationCard vacation={vacation} onConfigure={() => onOpenSettings("vacation")} />
+      <VacationCard
+        vacation={vacation}
+        onConfigure={() => {
+          onOpenSettings("vacation");
+        }}
+      />
     ) : (
       <button
-        onClick={() => onOpenSettings("vacation")}
-        className="w-full text-left bg-bg-card rounded-xl p-4 border border-dashed border-border hover:bg-bg transition-colors"
+        onClick={() => {
+          onOpenSettings("vacation");
+        }}
+        className="w-full rounded-xl border border-dashed border-border bg-bg-card p-4 text-left transition-colors hover:bg-bg"
       >
         <span className="text-sm font-medium text-text">Track vacation days</span>
-        <p className="text-xs text-text-muted mt-1">
+        <p className="mt-1 text-xs text-text-muted">
           Enter the balance from your latest payslip and pick the vacation project to count down
           your remaining days.
         </p>
@@ -60,15 +67,15 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
     );
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Header with back button and settings link */}
-      <div className="flex shrink-0 items-center gap-2 px-4 py-3 border-b border-border">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
         <button
           onClick={onBack}
-          className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text transition-colors rounded-lg hover:bg-bg"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-bg hover:text-text"
           title="Back"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -79,56 +86,60 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
         </button>
         <span className="flex-1 text-sm font-semibold text-text">Flex</span>
         <button
-          onClick={() => onOpenSettings("flex")}
-          className="px-2.5 py-1 text-xs font-medium text-text-muted border border-border rounded-lg hover:text-text hover:bg-bg transition-colors"
+          onClick={() => {
+            onOpenSettings("flex");
+          }}
+          className="rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-text-muted transition-colors hover:bg-bg hover:text-text"
         >
           Configure flex settings
         </button>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
         {!flexConfig && (
-          <div className="text-center py-8 space-y-3">
+          <div className="space-y-3 py-8 text-center">
             <p className="text-sm text-text-muted">
               Set your paycheck month and initial balance to start tracking flex.
             </p>
             <button
-              onClick={() => onOpenSettings("flex")}
-              className="px-4 py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+              onClick={() => {
+                onOpenSettings("flex");
+              }}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
             >
               Open flex settings
             </button>
-            <div className="text-left pt-4">{vacationSection}</div>
+            <div className="pt-4 text-left">{vacationSection}</div>
           </div>
         )}
         {flexConfig && (
           <>
             {/* Live balance: big number left, today/yesterday detail right */}
             {flex && (
-              <div className="bg-bg-card rounded-xl p-4 border border-border">
+              <div className="rounded-xl border border-border bg-bg-card p-4">
                 <div className="flex items-center gap-4">
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="text-xs text-text-muted">Flex balance</div>
                     <div
-                      className={`text-3xl font-bold tabular-nums mt-1 ${
+                      className={`mt-1 text-3xl font-bold tabular-nums ${
                         flex.totalMinutes >= 0 ? "text-emerald-600" : "text-danger"
                       }`}
                     >
                       {formatFlexMinutes(flex.totalMinutes)}
                     </div>
                   </div>
-                  <div className="flex-1 space-y-1 text-sm border-l border-border pl-4">
+                  <div className="flex-1 space-y-1 border-l border-border pl-4 text-sm">
                     {flex.countsToday ? (
                       <>
                         <div className="flex items-center justify-between">
                           <span className="text-text-muted">Today</span>
-                          <span className="font-semibold tabular-nums text-text">
+                          <span className="font-semibold text-text tabular-nums">
                             {formatHM(flex.todayWorkedMinutes)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-text-muted">Expected</span>
-                          <span className="tabular-nums text-text">
+                          <span className="text-text tabular-nums">
                             {formatHM(flex.todayExpectedMinutes)}
                           </span>
                         </div>
@@ -166,7 +177,7 @@ export function FlexView({ onBack, onOpenSettings }: FlexViewProps) {
             {/* Weekly breakdown */}
             {flex && flex.weeks.length > 0 && (
               <div className="space-y-2">
-                <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide">
+                <h3 className="text-xs font-semibold tracking-wide text-text-muted uppercase">
                   Weekly breakdown
                 </h3>
                 {[...flex.weeks].reverse().map((week) => (
@@ -189,34 +200,34 @@ function VacationCard({
   onConfigure: () => void;
 }) {
   return (
-    <div className="bg-bg-card rounded-xl p-4 border border-border">
+    <div className="rounded-xl border border-border bg-bg-card p-4">
       <div className="flex items-center gap-4">
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-xs text-text-muted">Vacation days</span>
             <button
               onClick={onConfigure}
-              className="text-[10px] text-text-muted underline hover:text-text transition-colors"
+              className="text-[10px] text-text-muted underline transition-colors hover:text-text"
             >
               configure
             </button>
           </div>
           <div
-            className={`text-3xl font-bold tabular-nums mt-1 ${
+            className={`mt-1 text-3xl font-bold tabular-nums ${
               vacation.remainingDays >= 0 ? "text-emerald-600" : "text-danger"
             }`}
           >
             {formatVacationDays(vacation.remainingDays)}
           </div>
         </div>
-        <div className="flex-1 space-y-1 text-sm border-l border-border pl-4">
+        <div className="flex-1 space-y-1 border-l border-border pl-4 text-sm">
           <div className="flex items-center justify-between">
             <span className="text-text-muted">Used</span>
-            <span className="tabular-nums text-text">{formatVacationDays(vacation.usedDays)}</span>
+            <span className="text-text tabular-nums">{formatVacationDays(vacation.usedDays)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-text-muted">Planned</span>
-            <span className="tabular-nums text-text">
+            <span className="text-text tabular-nums">
               {formatVacationDays(vacation.plannedDays)}
             </span>
           </div>
@@ -233,15 +244,15 @@ function VacationCard({
         </div>
       </div>
       {vacation.plannedEntries.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-border">
-          <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mb-1">
+        <div className="mt-3 border-t border-border pt-3">
+          <div className="mb-1 text-[10px] font-semibold tracking-wide text-text-muted uppercase">
             Upcoming
           </div>
           <div className="flex flex-wrap gap-1">
             {vacation.plannedEntries.map((u) => (
               <span
                 key={u.date}
-                className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary tabular-nums"
+                className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary tabular-nums"
               >
                 {new Date(u.date + "T12:00:00").toLocaleDateString("en-US", {
                   month: "short",
@@ -268,10 +279,10 @@ function LastMonthCard({ summary }: { summary: MonthSummary }) {
   const signColor = (m: number) => (m >= 0 ? "text-emerald-600" : "text-danger");
 
   return (
-    <div className="bg-bg-card rounded-xl p-4 border border-border">
-      <div className="flex items-baseline justify-between mb-3">
+    <div className="rounded-xl border border-border bg-bg-card p-4">
+      <div className="mb-3 flex items-baseline justify-between">
         <h3 className="text-sm font-semibold text-text">Last month — {monthLabel}</h3>
-        <span className="text-xs tabular-nums text-text-muted">
+        <span className="text-xs text-text-muted tabular-nums">
           {formatHM(summary.workedMinutes)} / {formatHM(summary.expectedMinutes)} ·{" "}
           {summary.workdays} days
         </span>
@@ -279,7 +290,7 @@ function LastMonthCard({ summary }: { summary: MonthSummary }) {
       <div className="space-y-1 text-sm">
         <div className="flex items-center justify-between">
           <span className="text-text-muted">Opening balance</span>
-          <span className="tabular-nums text-text">{formatFlexMinutes(summary.flexInMinutes)}</span>
+          <span className="text-text tabular-nums">{formatFlexMinutes(summary.flexInMinutes)}</span>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-text-muted">Worked vs target</span>
@@ -291,13 +302,13 @@ function LastMonthCard({ summary }: { summary: MonthSummary }) {
           <>
             <div className="flex items-center justify-between border-t border-border pt-1">
               <span className="text-text-muted">Before reset</span>
-              <span className="tabular-nums text-text">
+              <span className="text-text tabular-nums">
                 {formatFlexMinutes(beforeResetMinutes)}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-text-muted">Reset payout</span>
-              <span className="font-semibold tabular-nums text-amber-500">
+              <span className="font-semibold text-amber-500 tabular-nums">
                 {formatFlexMinutes(summary.resetPayoutMinutes)}
               </span>
             </div>
@@ -316,17 +327,17 @@ function LastMonthCard({ summary }: { summary: MonthSummary }) {
 
 function WeekRow({ week }: { week: FlexWeek }) {
   return (
-    <div className="bg-bg-card rounded-xl p-3 border border-border">
-      <div className="flex items-center justify-between mb-1">
+    <div className="rounded-xl border border-border bg-bg-card p-3">
+      <div className="mb-1 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-text">{week.weekLabel}</span>
           {week.isPartial && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
               partial
             </span>
           )}
           {week.isOngoing && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
               open
             </span>
           )}
@@ -349,7 +360,7 @@ function WeekRow({ week }: { week: FlexWeek }) {
           {week.holidays.map((h) => (
             <span
               key={h.date}
-              className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700"
+              className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700"
             >
               {h.name}
             </span>

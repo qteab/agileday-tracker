@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+
 import {
   calculateFlex,
   calculateLastMonthSummary,
@@ -58,10 +59,10 @@ describe("calculateFlex", () => {
     );
 
     expect(result.weeks).toHaveLength(1);
-    expect(result.weeks[0].workdays).toBe(5);
-    expect(result.weeks[0].expectedMinutes).toBe(2400);
-    expect(result.weeks[0].workedMinutes).toBe(2400);
-    expect(result.weeks[0].deltaMinutes).toBe(0);
+    expect(result.weeks[0]?.workdays).toBe(5);
+    expect(result.weeks[0]?.expectedMinutes).toBe(2400);
+    expect(result.weeks[0]?.workedMinutes).toBe(2400);
+    expect(result.weeks[0]?.deltaMinutes).toBe(0);
     expect(result.totalMinutes).toBe(0);
   });
 
@@ -81,8 +82,8 @@ describe("calculateFlex", () => {
       new Date("2026-01-12T12:00:00")
     );
 
-    expect(result.weeks[0].workedMinutes).toBe(2700); // 45h
-    expect(result.weeks[0].deltaMinutes).toBe(300); // +5h
+    expect(result.weeks[0]?.workedMinutes).toBe(2700); // 45h
+    expect(result.weeks[0]?.deltaMinutes).toBe(300); // +5h
     expect(result.totalMinutes).toBe(300);
   });
 
@@ -102,8 +103,8 @@ describe("calculateFlex", () => {
       new Date("2026-01-12T12:00:00")
     );
 
-    expect(result.weeks[0].workedMinutes).toBe(1800); // 30h
-    expect(result.weeks[0].deltaMinutes).toBe(-600); // -10h
+    expect(result.weeks[0]?.workedMinutes).toBe(1800); // 30h
+    expect(result.weeks[0]?.deltaMinutes).toBe(-600); // -10h
     expect(result.totalMinutes).toBe(-600);
   });
 
@@ -125,9 +126,9 @@ describe("calculateFlex", () => {
       new Date("2026-01-12T12:00:00")
     );
 
-    expect(result.weeks[0].workedMinutes).toBe(2400); // 40h
-    expect(result.weeks[0].expectedMinutes).toBe(2400); // 5 workdays × 8h
-    expect(result.weeks[0].deltaMinutes).toBe(0);
+    expect(result.weeks[0]?.workedMinutes).toBe(2400); // 40h
+    expect(result.weeks[0]?.expectedMinutes).toBe(2400); // 5 workdays × 8h
+    expect(result.weeks[0]?.deltaMinutes).toBe(0);
     expect(result.totalMinutes).toBe(0);
   });
 
@@ -149,8 +150,8 @@ describe("calculateFlex", () => {
       new Date("2026-01-12T12:00:00")
     );
 
-    expect(result.weeks[0].workedMinutes).toBe(2640); // 44h
-    expect(result.weeks[0].deltaMinutes).toBe(240); // +4h
+    expect(result.weeks[0]?.workedMinutes).toBe(2640); // 44h
+    expect(result.weeks[0]?.deltaMinutes).toBe(240); // +4h
     expect(result.totalMinutes).toBe(240);
   });
 
@@ -172,11 +173,11 @@ describe("calculateFlex", () => {
       new Date("2026-01-12T12:00:00")
     );
 
-    expect(result.weeks[0].workdays).toBe(4);
-    expect(result.weeks[0].expectedMinutes).toBe(1920); // 32h
-    expect(result.weeks[0].workedMinutes).toBe(1920); // 32h
-    expect(result.weeks[0].deltaMinutes).toBe(0);
-    expect(result.weeks[0].holidays).toEqual([{ date: "2026-01-06", name: "Epiphany" }]);
+    expect(result.weeks[0]?.workdays).toBe(4);
+    expect(result.weeks[0]?.expectedMinutes).toBe(1920); // 32h
+    expect(result.weeks[0]?.workedMinutes).toBe(1920); // 32h
+    expect(result.weeks[0]?.deltaMinutes).toBe(0);
+    expect(result.weeks[0]?.holidays).toEqual([{ date: "2026-01-06", name: "Epiphany" }]);
   });
 
   it("holiday week: 32h worked + 8h weekend = 0 flex (not +8)", () => {
@@ -197,9 +198,9 @@ describe("calculateFlex", () => {
       new Date("2026-01-12T12:00:00")
     );
 
-    expect(result.weeks[0].expectedMinutes).toBe(1920); // 32h (4 workdays)
-    expect(result.weeks[0].workedMinutes).toBe(2400); // 40h
-    expect(result.weeks[0].deltaMinutes).toBe(480); // +8h flex
+    expect(result.weeks[0]?.expectedMinutes).toBe(1920); // 32h (4 workdays)
+    expect(result.weeks[0]?.workedMinutes).toBe(2400); // 40h
+    expect(result.weeks[0]?.deltaMinutes).toBe(480); // +8h flex
     // This IS +8h flex because they worked 40h when only 32h was expected
   });
 
@@ -245,9 +246,9 @@ describe("calculateFlex", () => {
   it("zero-entry week = -40h", () => {
     const result = calculateFlex([], "2026-01-04", 0, NO_HOLIDAYS, new Date("2026-01-12T12:00:00"));
 
-    expect(result.weeks[0].workedMinutes).toBe(0);
-    expect(result.weeks[0].expectedMinutes).toBe(2400);
-    expect(result.weeks[0].deltaMinutes).toBe(-2400); // -40h
+    expect(result.weeks[0]?.workedMinutes).toBe(0);
+    expect(result.weeks[0]?.expectedMinutes).toBe(2400);
+    expect(result.weeks[0]?.deltaMinutes).toBe(-2400); // -40h
     expect(result.totalMinutes).toBe(-2400);
   });
 
@@ -255,9 +256,9 @@ describe("calculateFlex", () => {
     const holidays: Holiday[] = [{ date: "2026-01-06", name: "Epiphany" }];
     const result = calculateFlex([], "2026-01-04", 0, holidays, new Date("2026-01-12T12:00:00"));
 
-    expect(result.weeks[0].workdays).toBe(4);
-    expect(result.weeks[0].expectedMinutes).toBe(1920); // 32h
-    expect(result.weeks[0].deltaMinutes).toBe(-1920);
+    expect(result.weeks[0]?.workdays).toBe(4);
+    expect(result.weeks[0]?.expectedMinutes).toBe(1920); // 32h
+    expect(result.weeks[0]?.deltaMinutes).toBe(-1920);
     expect(result.totalMinutes).toBe(-1920);
   });
 
@@ -277,12 +278,12 @@ describe("calculateFlex", () => {
     );
 
     expect(result.weeks).toHaveLength(1);
-    expect(result.weeks[0].workdays).toBe(2); // Mon + Tue only
-    expect(result.weeks[0].expectedMinutes).toBe(960); // 16h
-    expect(result.weeks[0].workedMinutes).toBe(960); // 16h
-    expect(result.weeks[0].deltaMinutes).toBe(0);
-    expect(result.weeks[0].isPartial).toBe(false);
-    expect(result.weeks[0].isOngoing).toBe(true);
+    expect(result.weeks[0]?.workdays).toBe(2); // Mon + Tue only
+    expect(result.weeks[0]?.expectedMinutes).toBe(960); // 16h
+    expect(result.weeks[0]?.workedMinutes).toBe(960); // 16h
+    expect(result.weeks[0]?.deltaMinutes).toBe(0);
+    expect(result.weeks[0]?.isPartial).toBe(false);
+    expect(result.weeks[0]?.isOngoing).toBe(true);
   });
 
   it("excludes unsaved entries from calculation", () => {
@@ -301,8 +302,8 @@ describe("calculateFlex", () => {
       new Date("2026-01-12T12:00:00")
     );
 
-    expect(result.weeks[0].workedMinutes).toBe(1920); // 32h (unsaved excluded)
-    expect(result.weeks[0].deltaMinutes).toBe(-480); // -8h
+    expect(result.weeks[0]?.workedMinutes).toBe(1920); // 32h (unsaved excluded)
+    expect(result.weeks[0]?.deltaMinutes).toBe(-480); // -8h
   });
 
   it("handles multiple entries on the same day", () => {
@@ -322,8 +323,8 @@ describe("calculateFlex", () => {
       new Date("2026-01-12T12:00:00")
     );
 
-    expect(result.weeks[0].workedMinutes).toBe(2400); // 40h
-    expect(result.weeks[0].deltaMinutes).toBe(0);
+    expect(result.weeks[0]?.workedMinutes).toBe(2400); // 40h
+    expect(result.weeks[0]?.deltaMinutes).toBe(0);
   });
 });
 
@@ -365,25 +366,25 @@ describe("calculateFlex — multi-week integration", () => {
     expect(result.weeks).toHaveLength(3);
 
     // Week 1: 42h - 40h = +2h (120m)
-    expect(result.weeks[0].workedMinutes).toBe(2520);
-    expect(result.weeks[0].expectedMinutes).toBe(2400);
-    expect(result.weeks[0].deltaMinutes).toBe(120);
-    expect(result.weeks[0].isPartial).toBe(false);
-    expect(result.weeks[0].isOngoing).toBe(false);
+    expect(result.weeks[0]?.workedMinutes).toBe(2520);
+    expect(result.weeks[0]?.expectedMinutes).toBe(2400);
+    expect(result.weeks[0]?.deltaMinutes).toBe(120);
+    expect(result.weeks[0]?.isPartial).toBe(false);
+    expect(result.weeks[0]?.isOngoing).toBe(false);
 
     // Week 2: 36h - 32h = +4h (240m), has holiday
-    expect(result.weeks[1].workedMinutes).toBe(2160);
-    expect(result.weeks[1].expectedMinutes).toBe(1920);
-    expect(result.weeks[1].deltaMinutes).toBe(240);
-    expect(result.weeks[1].holidays).toEqual([{ date: "2026-01-14", name: "Test Holiday" }]);
+    expect(result.weeks[1]?.workedMinutes).toBe(2160);
+    expect(result.weeks[1]?.expectedMinutes).toBe(1920);
+    expect(result.weeks[1]?.deltaMinutes).toBe(240);
+    expect(result.weeks[1]?.holidays).toEqual([{ date: "2026-01-14", name: "Test Holiday" }]);
 
     // Week 3: partial, 20h - 24h = -4h (-240m)
-    expect(result.weeks[2].workedMinutes).toBe(1200);
-    expect(result.weeks[2].expectedMinutes).toBe(1440);
-    expect(result.weeks[2].deltaMinutes).toBe(-240);
-    expect(result.weeks[2].isPartial).toBe(false);
-    expect(result.weeks[2].isOngoing).toBe(true);
-    expect(result.weeks[2].workdays).toBe(3); // Mon, Tue, Wed
+    expect(result.weeks[2]?.workedMinutes).toBe(1200);
+    expect(result.weeks[2]?.expectedMinutes).toBe(1440);
+    expect(result.weeks[2]?.deltaMinutes).toBe(-240);
+    expect(result.weeks[2]?.isPartial).toBe(false);
+    expect(result.weeks[2]?.isOngoing).toBe(true);
+    expect(result.weeks[2]?.workdays).toBe(3); // Mon, Tue, Wed
 
     // Total: 5h initial + 2h + 4h - 4h = 7h (420m)
     expect(result.totalMinutes).toBe(420);
@@ -405,12 +406,12 @@ describe("calculateFlex — multi-week integration", () => {
     );
 
     expect(result.weeks).toHaveLength(1);
-    expect(result.weeks[0].workdays).toBe(2); // Thu + Fri
-    expect(result.weeks[0].expectedMinutes).toBe(960); // 16h
-    expect(result.weeks[0].workedMinutes).toBe(960);
-    expect(result.weeks[0].deltaMinutes).toBe(0);
-    expect(result.weeks[0].isPartial).toBe(true); // first week partial
-    expect(result.weeks[0].isOngoing).toBe(false);
+    expect(result.weeks[0]?.workdays).toBe(2); // Thu + Fri
+    expect(result.weeks[0]?.expectedMinutes).toBe(960); // 16h
+    expect(result.weeks[0]?.workedMinutes).toBe(960);
+    expect(result.weeks[0]?.deltaMinutes).toBe(0);
+    expect(result.weeks[0]?.isPartial).toBe(true); // first week partial
+    expect(result.weeks[0]?.isOngoing).toBe(false);
   });
 });
 
@@ -644,15 +645,15 @@ describe("calculateLastMonthSummary", () => {
       new Date("2026-02-10T12:00:00")
     );
     expect(result).not.toBeNull();
-    expect(result!.monthStart).toBe("2026-01-01");
-    expect(result!.workdays).toBe(22);
-    expect(result!.expectedMinutes).toBe(22 * 480);
-    expect(result!.workedMinutes).toBe(5 * 480);
+    expect(result?.monthStart).toBe("2026-01-01");
+    expect(result?.workdays).toBe(22);
+    expect(result?.expectedMinutes).toBe(22 * 480);
+    expect(result?.workedMinutes).toBe(5 * 480);
     // Flex in: balance through Dec 31 = initial only
-    expect(result!.flexInMinutes).toBe(300);
+    expect(result?.flexInMinutes).toBe(300);
     // Change = worked - expected = -17 workdays
-    expect(result!.deltaMinutes).toBe(-17 * 480);
-    expect(result!.flexOutMinutes).toBe(300 - 17 * 480);
+    expect(result?.deltaMinutes).toBe(-17 * 480);
+    expect(result?.flexOutMinutes).toBe(300 - 17 * 480);
   });
 
   it("returns null when the month isn't fully inside the flex period", () => {
@@ -676,8 +677,8 @@ describe("calculateLastMonthSummary", () => {
       holidays,
       new Date("2026-02-10T12:00:00")
     );
-    expect(result!.workdays).toBe(21);
-    expect(result!.expectedMinutes).toBe(21 * 480);
+    expect(result?.workdays).toBe(21);
+    expect(result?.expectedMinutes).toBe(21 * 480);
   });
 });
 
@@ -745,9 +746,9 @@ describe("flex resets", () => {
       new Date("2026-02-10T12:00:00"),
       ["2026-01"]
     );
-    expect(summary!.flexInMinutes).toBe(6000); // 100h entering January
-    expect(summary!.flexOutMinutes).toBe(3000); // floored to 50h leaving
-    expect(summary!.resetPayoutMinutes).toBe(3000); // 50h paid out
-    expect(summary!.deltaMinutes).toBe(-3000);
+    expect(summary?.flexInMinutes).toBe(6000); // 100h entering January
+    expect(summary?.flexOutMinutes).toBe(3000); // floored to 50h leaving
+    expect(summary?.resetPayoutMinutes).toBe(3000); // 50h paid out
+    expect(summary?.deltaMinutes).toBe(-3000);
   });
 });

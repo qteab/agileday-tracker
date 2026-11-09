@@ -1,10 +1,11 @@
-import posthog, { type PostHog } from "posthog-js";
 import { getVersion } from "@tauri-apps/api/app";
+import posthog, { type PostHog } from "posthog-js";
 // PostHog normally downloads these extensions from its CDN at runtime. We bundle
 // them instead (and set disable_external_dependency_loading) so the app never
 // runs remote scripts — the webview has access to Tauri IPC.
 import "posthog-js/dist/exception-autocapture";
 import "posthog-js/dist/logs";
+
 import { scrubExceptionEvent } from "./utils/telemetry-scrub";
 
 const posthogKey = import.meta.env.VITE_POSTHOG_KEY;

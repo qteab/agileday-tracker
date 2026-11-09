@@ -1,4 +1,5 @@
 import { load } from "@tauri-apps/plugin-store";
+
 import type { TimeEntry } from "../api/types";
 
 // Entries whose save to AgileDay failed. Kept on disk so a sync or restart

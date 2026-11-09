@@ -1,29 +1,30 @@
-import { useEffect, useState } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
-import { TabSwitcher } from "./components/TabSwitcher";
-import { ProjectCardList } from "./components/ProjectCardList";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useEffect, useState } from "react";
+
 import { AllocationView } from "./components/AllocationView";
-import { LoginScreen } from "./components/LoginScreen";
-import { UpdateChecker } from "./components/UpdateChecker";
-import { SettingsView, type SettingsPage } from "./components/SettingsView";
-import { FinalizeView } from "./components/FinalizeView";
-import { SubmissionAlert } from "./components/SubmissionAlert";
-import { FlexBadge } from "./components/FlexBadge";
-import { FlexView } from "./components/FlexView";
-import { FlexSetupAlert } from "./components/FlexSetupAlert";
-import { Fab } from "./components/Fab";
-import { InactivityBanner } from "./components/InactivityBanner";
 import { ClickUpBanner } from "./components/ClickUp";
-import { useApp } from "./store/context";
+import { Fab } from "./components/Fab";
+import { FinalizeView } from "./components/FinalizeView";
+import { FlexBadge } from "./components/FlexBadge";
+import { FlexSetupAlert } from "./components/FlexSetupAlert";
+import { FlexView } from "./components/FlexView";
+import { InactivityBanner } from "./components/InactivityBanner";
+import { LoginScreen } from "./components/LoginScreen";
+import { ProjectCardList } from "./components/ProjectCardList";
+import { SettingsView, type SettingsPage } from "./components/SettingsView";
+import { SubmissionAlert } from "./components/SubmissionAlert";
+import { TabSwitcher } from "./components/TabSwitcher";
+import { UpdateChecker } from "./components/UpdateChecker";
 import { useTrayTimerListeners } from "./hooks/useTimer";
+import { useApp } from "./store/context";
 
 export function App() {
   const { isConnected, isAuthLoading, onLogin } = useApp();
 
   if (isAuthLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-bg">
+      <div className="flex h-screen items-center justify-center bg-bg">
         <span className="text-sm text-text-muted">Loading...</span>
       </div>
     );
@@ -72,29 +73,39 @@ function AuthenticatedApp() {
       setShowFinalize(true);
     });
     return () => {
-      unlistenSettings.then((fn) => fn()).catch(() => {});
-      unlistenFinalize.then((fn) => fn()).catch(() => {});
+      unlistenSettings
+        .then((fn) => {
+          fn();
+        })
+        .catch(() => {});
+      unlistenFinalize
+        .then((fn) => {
+          fn();
+        })
+        .catch(() => {});
     };
   }, []);
 
   const showMainContent = !showSettings && !showFinalize && !showFlex;
 
   return (
-    <div className="flex flex-col h-screen bg-bg relative">
+    <div className="relative flex h-screen flex-col bg-bg">
       {/* Draggable title bar */}
       <div
         onMouseDown={(e) => {
           if (e.button === 0 && e.detail === 1) {
             e.preventDefault();
-            getCurrentWindow().startDragging();
+            getCurrentWindow()
+              .startDragging()
+              .catch(() => {});
           }
         }}
-        className="grid grid-cols-[1fr_auto_1fr] items-center px-4 pt-7 pb-0.5 bg-bg-card border-b border-border cursor-default"
+        className="grid cursor-default grid-cols-[1fr_auto_1fr] items-center border-b border-border bg-bg-card px-4 pt-7 pb-0.5"
       >
         {/* Left cell: flex badge, left-aligned on the same row as the right-side
             buttons. The equal 1fr side columns keep the title centered no matter
             what either side contains. */}
-        <div className="flex items-center justify-start min-w-0">
+        <div className="flex min-w-0 items-center justify-start">
           <FlexBadge
             onClick={() => {
               setShowFinalize(false);
@@ -109,7 +120,7 @@ function AuthenticatedApp() {
             setShowFinalize(false);
             setShowFlex(false);
           }}
-          className="h-8 text-xs font-semibold tracking-wide text-primary uppercase hover:opacity-70 transition-opacity"
+          className="h-8 text-xs font-semibold tracking-wide text-primary uppercase transition-opacity hover:opacity-70"
           title="Home"
         >
           QTE Time Tracker
@@ -121,10 +132,10 @@ function AuthenticatedApp() {
               setShowFlex(false);
               setShowFinalize(true);
             }}
-            className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text transition-colors rounded-lg hover:bg-bg"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-bg hover:text-text"
             title="Finalize Timesheet"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -134,11 +145,13 @@ function AuthenticatedApp() {
             </svg>
           </button>
           <button
-            onClick={() => openSettings()}
-            className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text transition-colors rounded-lg hover:bg-bg"
+            onClick={() => {
+              openSettings();
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-bg hover:text-text"
             title="Settings"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -169,17 +182,23 @@ function AuthenticatedApp() {
       />
 
       {/* Flex setup prompt */}
-      <FlexSetupAlert onOpenSettings={() => openSettings("flex")} />
+      <FlexSetupAlert
+        onOpenSettings={() => {
+          openSettings("flex");
+        }}
+      />
 
       {/* Error banner */}
       {state.error && (
-        <div className="flex items-center justify-between px-4 py-2 bg-danger/10 text-danger text-xs">
+        <div className="flex items-center justify-between bg-danger/10 px-4 py-2 text-xs text-danger">
           <span>{state.error}</span>
           <button
-            onClick={() => dispatch({ type: "SET_ERROR", payload: null })}
+            onClick={() => {
+              dispatch({ type: "SET_ERROR", payload: null });
+            }}
             className="hover:text-danger/70"
           >
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -198,9 +217,20 @@ function AuthenticatedApp() {
           initialPage={settingsPage}
         />
       ) : showFlex ? (
-        <FlexView onBack={() => setShowFlex(false)} onOpenSettings={(page) => openSettings(page)} />
+        <FlexView
+          onBack={() => {
+            setShowFlex(false);
+          }}
+          onOpenSettings={(page) => {
+            openSettings(page);
+          }}
+        />
       ) : showFinalize ? (
-        <FinalizeView onBack={() => setShowFinalize(false)} />
+        <FinalizeView
+          onBack={() => {
+            setShowFinalize(false);
+          }}
+        />
       ) : (
         <>
           {/* Tab switcher */}

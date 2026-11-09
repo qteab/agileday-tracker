@@ -55,7 +55,9 @@ export function calculateVacation(
 
   const usedEntries: VacationDayUsage[] = [];
   const plannedEntries: VacationDayUsage[] = [];
-  for (const [date, minutes] of [...minutesByDate.entries()].sort()) {
+  for (const [date, minutes] of [...minutesByDate.entries()].sort(([a], [b]) =>
+    a.localeCompare(b)
+  )) {
     const usage = { date, minutes, days: minutes / VACATION_DAY_MINUTES };
     (date <= todayStr ? usedEntries : plannedEntries).push(usage);
   }

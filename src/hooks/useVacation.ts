@@ -1,7 +1,8 @@
 import { useMemo } from "react";
+
 import { useApp } from "../store/context";
-import { useNow } from "./useNow";
 import { calculateVacation, type VacationResult } from "../utils/vacation";
+import { useNow } from "./useNow";
 
 /**
  * Vacation day balance from entries on the configured vacation project.

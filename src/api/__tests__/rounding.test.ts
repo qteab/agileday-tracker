@@ -1,32 +1,67 @@
-import { describe, it, expect } from "vitest";
+import { assert, describe, it, expect } from "vitest";
+
 import { ceilTo15, floorTo15, buildRoundingPlan, applyOverrides } from "../rounding";
 import type { TimeEntry } from "../types";
 
 // --- ceilTo15 ---
 
 describe("ceilTo15", () => {
-  it("returns 0 for 0", () => expect(ceilTo15(0)).toBe(0));
-  it("returns 0 for negative", () => expect(ceilTo15(-5)).toBe(0));
-  it("rounds 1 up to 15", () => expect(ceilTo15(1)).toBe(15));
-  it("rounds 14 up to 15", () => expect(ceilTo15(14)).toBe(15));
-  it("keeps 15 as 15", () => expect(ceilTo15(15)).toBe(15));
-  it("rounds 16 up to 30", () => expect(ceilTo15(16)).toBe(30));
-  it("rounds 59 up to 60", () => expect(ceilTo15(59)).toBe(60));
-  it("keeps 60 as 60", () => expect(ceilTo15(60)).toBe(60));
-  it("rounds 61 up to 75", () => expect(ceilTo15(61)).toBe(75));
-  it("keeps 480 as 480", () => expect(ceilTo15(480)).toBe(480));
+  it("returns 0 for 0", () => {
+    expect(ceilTo15(0)).toBe(0);
+  });
+  it("returns 0 for negative", () => {
+    expect(ceilTo15(-5)).toBe(0);
+  });
+  it("rounds 1 up to 15", () => {
+    expect(ceilTo15(1)).toBe(15);
+  });
+  it("rounds 14 up to 15", () => {
+    expect(ceilTo15(14)).toBe(15);
+  });
+  it("keeps 15 as 15", () => {
+    expect(ceilTo15(15)).toBe(15);
+  });
+  it("rounds 16 up to 30", () => {
+    expect(ceilTo15(16)).toBe(30);
+  });
+  it("rounds 59 up to 60", () => {
+    expect(ceilTo15(59)).toBe(60);
+  });
+  it("keeps 60 as 60", () => {
+    expect(ceilTo15(60)).toBe(60);
+  });
+  it("rounds 61 up to 75", () => {
+    expect(ceilTo15(61)).toBe(75);
+  });
+  it("keeps 480 as 480", () => {
+    expect(ceilTo15(480)).toBe(480);
+  });
 });
 
 // --- floorTo15 ---
 
 describe("floorTo15", () => {
-  it("returns 0 for 0", () => expect(floorTo15(0)).toBe(0));
-  it("returns 0 for negative", () => expect(floorTo15(-5)).toBe(0));
-  it("floors 14 to 0", () => expect(floorTo15(14)).toBe(0));
-  it("keeps 15 as 15", () => expect(floorTo15(15)).toBe(15));
-  it("floors 16 to 15", () => expect(floorTo15(16)).toBe(15));
-  it("floors 61 to 60", () => expect(floorTo15(61)).toBe(60));
-  it("keeps 60 as 60", () => expect(floorTo15(60)).toBe(60));
+  it("returns 0 for 0", () => {
+    expect(floorTo15(0)).toBe(0);
+  });
+  it("returns 0 for negative", () => {
+    expect(floorTo15(-5)).toBe(0);
+  });
+  it("floors 14 to 0", () => {
+    expect(floorTo15(14)).toBe(0);
+  });
+  it("keeps 15 as 15", () => {
+    expect(floorTo15(15)).toBe(15);
+  });
+  it("floors 16 to 15", () => {
+    expect(floorTo15(16)).toBe(15);
+  });
+  it("floors 61 to 60", () => {
+    expect(floorTo15(61)).toBe(60);
+  });
+  it("keeps 60 as 60", () => {
+    expect(floorTo15(60)).toBe(60);
+  });
 });
 
 // --- buildRoundingPlan ---
@@ -59,11 +94,11 @@ describe("buildRoundingPlan", () => {
     const plan = buildRoundingPlan(entries);
 
     expect(plan).toHaveLength(1);
-    expect(plan[0].projectId).toBe("p1");
-    expect(plan[0].date).toBe("2026-05-05");
-    expect(plan[0].totalMinutes).toBe(80); // 47 + 33
-    expect(plan[0].roundedTotal).toBe(90); // ceil(80/15)*15
-    expect(plan[0].difference).toBe(10);
+    expect(plan[0]?.projectId).toBe("p1");
+    expect(plan[0]?.date).toBe("2026-05-05");
+    expect(plan[0]?.totalMinutes).toBe(80); // 47 + 33
+    expect(plan[0]?.roundedTotal).toBe(90); // ceil(80/15)*15
+    expect(plan[0]?.difference).toBe(10);
   });
 
   it("same project on different days produces separate groups", () => {
@@ -75,8 +110,11 @@ describe("buildRoundingPlan", () => {
 
     expect(plan).toHaveLength(2);
 
-    const mon = plan.find((p) => p.date === "2026-05-05")!;
-    const tue = plan.find((p) => p.date === "2026-05-06")!;
+    const mon = plan.find((p) => p.date === "2026-05-05");
+
+    assert(mon);
+    const tue = plan.find((p) => p.date === "2026-05-06");
+    assert(tue);
 
     expect(mon.totalMinutes).toBe(47);
     expect(mon.roundedTotal).toBe(60); // ceil(47/15)*15
@@ -90,8 +128,8 @@ describe("buildRoundingPlan", () => {
       makeEntry({ id: "e2", projectId: "p1", date: "2026-05-05", minutes: 33 }),
     ];
     const plan = buildRoundingPlan(entries);
-    const adjusted = plan[0].entries.find((e) => e.isAdjusted);
-    const unchanged = plan[0].entries.find((e) => !e.isAdjusted);
+    const adjusted = plan[0]?.entries.find((e) => e.isAdjusted);
+    const unchanged = plan[0]?.entries.find((e) => !e.isAdjusted);
 
     expect(adjusted?.id).toBe("e1"); // largest gets adjusted
     expect(adjusted?.currentMinutes).toBe(47);
@@ -107,22 +145,22 @@ describe("buildRoundingPlan", () => {
     ];
     const plan = buildRoundingPlan(entries);
 
-    expect(plan[0].totalMinutes).toBe(75);
-    expect(plan[0].roundedTotal).toBe(75);
-    expect(plan[0].difference).toBe(0);
-    expect(plan[0].entries.every((e) => !e.isAdjusted)).toBe(true);
-    expect(plan[0].entries.every((e) => e.adjustedMinutes === e.currentMinutes)).toBe(true);
+    expect(plan[0]?.totalMinutes).toBe(75);
+    expect(plan[0]?.roundedTotal).toBe(75);
+    expect(plan[0]?.difference).toBe(0);
+    expect(plan[0]?.entries.every((e) => !e.isAdjusted)).toBe(true);
+    expect(plan[0]?.entries.every((e) => e.adjustedMinutes === e.currentMinutes)).toBe(true);
   });
 
   it("handles single entry per project-day", () => {
     const entries = [makeEntry({ id: "e1", projectId: "p1", minutes: 47 })];
     const plan = buildRoundingPlan(entries);
 
-    expect(plan[0].totalMinutes).toBe(47);
-    expect(plan[0].roundedTotal).toBe(60);
-    expect(plan[0].difference).toBe(13);
-    expect(plan[0].entries[0].adjustedMinutes).toBe(60);
-    expect(plan[0].entries[0].isAdjusted).toBe(true);
+    expect(plan[0]?.totalMinutes).toBe(47);
+    expect(plan[0]?.roundedTotal).toBe(60);
+    expect(plan[0]?.difference).toBe(13);
+    expect(plan[0]?.entries[0]?.adjustedMinutes).toBe(60);
+    expect(plan[0]?.entries[0]?.isAdjusted).toBe(true);
   });
 
   it("handles multiple projects on same day separately", () => {
@@ -133,8 +171,10 @@ describe("buildRoundingPlan", () => {
     const plan = buildRoundingPlan(entries);
 
     expect(plan).toHaveLength(2);
-    const p1 = plan.find((p) => p.projectId === "p1")!;
-    const p2 = plan.find((p) => p.projectId === "p2")!;
+    const p1 = plan.find((p) => p.projectId === "p1");
+    assert(p1);
+    const p2 = plan.find((p) => p.projectId === "p2");
+    assert(p2);
 
     expect(p1.totalMinutes).toBe(47);
     expect(p1.roundedTotal).toBe(60);
@@ -156,10 +196,10 @@ describe("buildRoundingPlan", () => {
     const plan = buildRoundingPlan(entries);
 
     // Only SAVED entry counted in total
-    expect(plan[0].totalMinutes).toBe(47);
-    expect(plan[0].roundedTotal).toBe(60);
+    expect(plan[0]?.totalMinutes).toBe(47);
+    expect(plan[0]?.roundedTotal).toBe(60);
 
-    const submitted = plan[0].entries.find((e) => e.id === "e2");
+    const submitted = plan[0]?.entries.find((e) => e.id === "e2");
     expect(submitted?.isAdjusted).toBe(false);
     expect(submitted?.adjustedMinutes).toBe(30); // unchanged
   });
@@ -170,19 +210,19 @@ describe("buildRoundingPlan", () => {
     ];
     const plan = buildRoundingPlan(entries);
 
-    expect(plan[0].totalMinutes).toBe(0); // no SAVED entries
-    expect(plan[0].roundedTotal).toBe(0);
-    expect(plan[0].difference).toBe(0);
-    expect(plan[0].entries[0].isAdjusted).toBe(false);
+    expect(plan[0]?.totalMinutes).toBe(0); // no SAVED entries
+    expect(plan[0]?.roundedTotal).toBe(0);
+    expect(plan[0]?.difference).toBe(0);
+    expect(plan[0]?.entries[0]?.isAdjusted).toBe(false);
   });
 
   it("handles zero-minute project-day total", () => {
     const entries = [makeEntry({ id: "e1", projectId: "p1", minutes: 0 })];
     const plan = buildRoundingPlan(entries);
 
-    expect(plan[0].totalMinutes).toBe(0);
-    expect(plan[0].roundedTotal).toBe(0);
-    expect(plan[0].difference).toBe(0);
+    expect(plan[0]?.totalMinutes).toBe(0);
+    expect(plan[0]?.roundedTotal).toBe(0);
+    expect(plan[0]?.difference).toBe(0);
   });
 
   it("real-world: entries across multiple days for one project", () => {
@@ -196,9 +236,13 @@ describe("buildRoundingPlan", () => {
     // Each day is a separate group
     expect(plan).toHaveLength(3);
 
-    const mon = plan.find((p) => p.date === "2026-05-05")!;
-    const tue = plan.find((p) => p.date === "2026-05-06")!;
-    const wed = plan.find((p) => p.date === "2026-05-07")!;
+    const mon = plan.find((p) => p.date === "2026-05-05");
+
+    assert(mon);
+    const tue = plan.find((p) => p.date === "2026-05-06");
+    assert(tue);
+    const wed = plan.find((p) => p.date === "2026-05-07");
+    assert(wed);
 
     // Monday: 480 is already multiple of 15 → no rounding
     expect(mon.totalMinutes).toBe(480);
@@ -228,7 +272,8 @@ describe("buildRoundingPlan", () => {
       }),
     ];
     const plan = buildRoundingPlan(entries);
-    const entry = plan[0].entries[0];
+    const entry = plan[0]?.entries[0];
+    assert(entry);
 
     expect(entry.id).toBe("e1");
     expect(entry.date).toBe("2026-05-07");
@@ -256,10 +301,10 @@ describe("applyOverrides", () => {
     const overrides = new Map([["p1:2026-05-05", 60]]);
     const result = applyOverrides(plan, overrides);
 
-    expect(result[0].roundedTotal).toBe(60);
-    expect(result[0].difference).toBe(-1); // 60 - 61
-    expect(result[0].entries[0].adjustedMinutes).toBe(60);
-    expect(result[0].entries[0].isAdjusted).toBe(true);
+    expect(result[0]?.roundedTotal).toBe(60);
+    expect(result[0]?.difference).toBe(-1); // 60 - 61
+    expect(result[0]?.entries[0]?.adjustedMinutes).toBe(60);
+    expect(result[0]?.entries[0]?.isAdjusted).toBe(true);
   });
 
   it("sets difference to 0 when override equals total", () => {
@@ -270,9 +315,9 @@ describe("applyOverrides", () => {
     const overrides = new Map([["p1:2026-05-05", 60]]);
     const result = applyOverrides(plan, overrides);
 
-    expect(result[0].roundedTotal).toBe(60);
-    expect(result[0].difference).toBe(0);
-    expect(result[0].entries[0].isAdjusted).toBe(false);
+    expect(result[0]?.roundedTotal).toBe(60);
+    expect(result[0]?.difference).toBe(0);
+    expect(result[0]?.entries[0]?.isAdjusted).toBe(false);
   });
 
   it("adjusts the largest entry when override changes difference", () => {
@@ -286,14 +331,18 @@ describe("applyOverrides", () => {
     const overrides = new Map([["p1:2026-05-05", 75]]);
     const result = applyOverrides(plan, overrides);
 
-    expect(result[0].roundedTotal).toBe(75);
-    expect(result[0].difference).toBe(-5);
+    expect(result[0]?.roundedTotal).toBe(75);
+    expect(result[0]?.difference).toBe(-5);
 
-    const adjusted = result[0].entries.find((e) => e.id === "e1")!;
+    const adjusted = result[0]?.entries.find((e) => e.id === "e1");
+
+    assert(adjusted);
     expect(adjusted.adjustedMinutes).toBe(42); // 47 - 5
     expect(adjusted.isAdjusted).toBe(true);
 
-    const unchanged = result[0].entries.find((e) => e.id === "e2")!;
+    const unchanged = result[0]?.entries.find((e) => e.id === "e2");
+
+    assert(unchanged);
     expect(unchanged.adjustedMinutes).toBe(33);
     expect(unchanged.isAdjusted).toBe(false);
   });
@@ -307,8 +356,11 @@ describe("applyOverrides", () => {
     const overrides = new Map([["p1:2026-05-05", 45]]);
     const result = applyOverrides(plan, overrides);
 
-    const p1 = result.find((p) => p.projectId === "p1")!;
-    const p2 = result.find((p) => p.projectId === "p2")!;
+    const p1 = result.find((p) => p.projectId === "p1");
+
+    assert(p1);
+    const p2 = result.find((p) => p.projectId === "p2");
+    assert(p2);
 
     expect(p1.roundedTotal).toBe(45); // overridden
     expect(p2.roundedTotal).toBe(30); // unchanged auto-round
@@ -322,7 +374,7 @@ describe("applyOverrides", () => {
     const overrides = new Map([["p1:2026-05-05", 30]]);
     const result = applyOverrides(plan, overrides);
 
-    expect(result[0].roundedTotal).toBe(45); // clamped to floor
-    expect(result[0].difference).toBe(-2);
+    expect(result[0]?.roundedTotal).toBe(45); // clamped to floor
+    expect(result[0]?.difference).toBe(-2);
   });
 });

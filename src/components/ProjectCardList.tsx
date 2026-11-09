@@ -1,12 +1,13 @@
 import { useMemo, useEffect, useState } from "react";
-import { useApp } from "../store/context";
-import { ProjectCard } from "./ProjectCard";
-import { Collapsible } from "./Collapsible";
-import { formatMinutes } from "../hooks/useTimer";
-import { shouldAutoCollapse, weekStartOf, formatWeekHeading } from "../utils/entry-list";
-import type { TimeEntry } from "../api/types";
-import { ClickUpCard } from "./ClickUp";
+
 import { accountedMinutes, clickupTasksIn, nonClickupLines } from "../api/clickup";
+import type { TimeEntry } from "../api/types";
+import { formatMinutes } from "../hooks/useTimer";
+import { useApp } from "../store/context";
+import { shouldAutoCollapse, weekStartOf, formatWeekHeading } from "../utils/entry-list";
+import { ClickUpCard } from "./ClickUp";
+import { Collapsible } from "./Collapsible";
+import { ProjectCard } from "./ProjectCard";
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00");
@@ -58,7 +59,7 @@ function GroupChevron({ folded }: { folded: boolean }) {
 
 export function ProjectCardList() {
   const { state } = useApp();
-  const { timer, displayPrefs } = state;
+  const { timer, displayPrefs, clickup, clickupEntries } = state;
   const today = todayDate();
   const { listAutoCollapse, listGroupByWeek, listCollapsibleGroups, listStickyHeadings } =
     displayPrefs;
@@ -72,12 +73,13 @@ export function ProjectCardList() {
   // Day and week groups the user has folded away. Keyed "day:<date>" /
   // "week:<monday>", and only reachable when collapsible groups are enabled.
   const [foldedGroups, setFoldedGroups] = useState<Set<string>>(new Set());
-  const toggleGroup = (key: string) =>
+  const toggleGroup = (key: string) => {
     setFoldedGroups((prev) => {
       const next = new Set(prev);
       if (!next.delete(key)) next.add(key);
       return next;
     });
+  };
 
   const groupedByDay = useMemo(() => {
     const groups = new Map<string, TimeEntry[]>();
@@ -123,16 +125,20 @@ export function ProjectCardList() {
   // Tick every second while timer is running so day totals stay current
   const timerOnToday =
     timer.isRunning && timer.startTime !== null && localDate(timer.startTime) === today;
-  const [, setTick] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     if (!timerOnToday) return;
-    const id = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(id);
+    const id = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => {
+      clearInterval(id);
+    };
   }, [timerOnToday]);
 
   if (state.loading) {
     return (
-      <div className="flex items-center justify-center py-12 text-text-muted text-sm">
+      <div className="flex items-center justify-center py-12 text-sm text-text-muted">
         Loading...
       </div>
     );
@@ -140,13 +146,14 @@ export function ProjectCardList() {
 
   // Minutes elapsed on the running timer — counted into today's total and,
   // when weeks are grouped, into the current week's total.
-  const runningMinutes = timerOnToday
-    ? Math.max(1, Math.round((Date.now() - new Date(timer.startTime!).getTime()) / 60000))
-    : 0;
+  const runningMinutes =
+    timerOnToday && timer.startTime !== null
+      ? Math.max(1, Math.round((nowMs - new Date(timer.startTime).getTime()) / 60000))
+      : 0;
 
   if (groupedByDay.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-text-muted text-sm gap-1">
+      <div className="flex flex-col items-center justify-center gap-1 py-12 text-sm text-text-muted">
         <span>No time entries yet</span>
         <span className="text-xs">Tap + to start tracking</span>
       </div>
@@ -178,9 +185,8 @@ export function ProjectCardList() {
                 const autoCollapsed = shouldAutoCollapse(listAutoCollapse, date, today);
                 // ClickUp lines get their own cards once ClickUp time is loaded;
                 // otherwise they show as plain description lines.
-                const cuTasks =
-                  state.clickup && state.clickupEntries ? clickupTasksIn(entry.description) : [];
-                if (cuTasks.length === 0) {
+                const cuTasks = clickup && clickupEntries ? clickupTasksIn(entry.description) : [];
+                if (!clickup || !clickupEntries || cuTasks.length === 0) {
                   return [
                     <ProjectCard
                       key={entry.id}
@@ -192,12 +198,7 @@ export function ProjectCardList() {
                 }
                 const splits = cuTasks.map((task) => ({
                   task,
-                  minutes: accountedMinutes(
-                    state.clickupEntries!,
-                    state.clickup!.sync,
-                    task.id,
-                    entry.date
-                  ),
+                  minutes: accountedMinutes(clickupEntries, clickup.sync, task.id, entry.date),
                 }));
                 const cuMinutes = splits.reduce((sum, sp) => sum + sp.minutes, 0);
                 const ownRunning =
@@ -246,22 +247,24 @@ export function ProjectCardList() {
                   labelled. Sits below the week heading when weeks are grouped.
                   Full-bleed (-mx-4) so nothing shows through in the gutters. */}
               <div
-                className={`bg-bg flex items-baseline justify-between py-2 -mx-4 px-5 ${dayStickyClass}`}
+                className={`-mx-4 flex items-baseline justify-between bg-bg px-5 py-2 ${dayStickyClass}`}
               >
                 {listCollapsibleGroups ? (
                   <button
                     type="button"
-                    onClick={() => toggleGroup(dayKey)}
+                    onClick={() => {
+                      toggleGroup(dayKey);
+                    }}
                     aria-expanded={!dayFolded}
-                    className="flex items-baseline gap-1.5 font-bold text-[19px] text-text hover:text-primary transition-colors cursor-pointer"
+                    className="flex cursor-pointer items-baseline gap-1.5 text-[19px] font-bold text-text transition-colors hover:text-primary"
                   >
                     <GroupChevron folded={dayFolded} />
                     <span>{formatDate(date)}</span>
                   </button>
                 ) : (
-                  <span className="font-bold text-[19px] text-text">{formatDate(date)}</span>
+                  <span className="text-[19px] font-bold text-text">{formatDate(date)}</span>
                 )}
-                <span className="font-bold text-[18px] text-text tabular-nums">
+                <span className="text-[18px] font-bold text-text tabular-nums">
                   {formatMinutes(totalMinutes)}
                 </span>
               </div>
@@ -281,26 +284,28 @@ export function ProjectCardList() {
             {/* Week heading */}
             {weekStart !== null && (
               <div
-                className={`flex items-baseline justify-between bg-bg border-b border-border -mx-4 px-5 py-[6px] ${
+                className={`-mx-4 flex items-baseline justify-between border-b border-border bg-bg px-5 py-[6px] ${
                   stickyWeek ? "sticky top-0 z-20" : ""
                 }`}
               >
                 {listCollapsibleGroups ? (
                   <button
                     type="button"
-                    onClick={() => toggleGroup(weekKey)}
+                    onClick={() => {
+                      toggleGroup(weekKey);
+                    }}
                     aria-expanded={!weekFolded}
-                    className="flex items-baseline gap-1 text-[11px] font-bold uppercase tracking-[0.07em] text-text-muted hover:text-primary transition-colors cursor-pointer"
+                    className="flex cursor-pointer items-baseline gap-1 text-[11px] font-bold tracking-[0.07em] text-text-muted uppercase transition-colors hover:text-primary"
                   >
                     <GroupChevron folded={weekFolded} />
                     <span>{formatWeekHeading(weekStart, today)}</span>
                   </button>
                 ) : (
-                  <span className="text-[11px] font-bold uppercase tracking-[0.07em] text-text-muted">
+                  <span className="text-[11px] font-bold tracking-[0.07em] text-text-muted uppercase">
                     {formatWeekHeading(weekStart, today)}
                   </span>
                 )}
-                <span className="text-[11px] font-semibold tabular-nums text-text-muted">
+                <span className="text-[11px] font-semibold text-text-muted tabular-nums">
                   {formatMinutes(weekTotal)}
                 </span>
               </div>

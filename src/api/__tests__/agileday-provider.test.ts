@@ -1,11 +1,27 @@
-import { describe, it, expect, beforeEach, vi, type Mock } from "vitest";
+import { assert, describe, it, expect, beforeEach, vi, type Mock } from "vitest";
+
 import { createAgileDayProvider, type AgileDayConfig } from "../agileday";
-import type { ApiProvider } from "../provider";
 import type { AuthState } from "../auth";
+import type { ApiProvider } from "../provider";
 
 // Mock global fetch — used by both apiFetch and auth token exchange
-const mockFetch = vi.fn() as Mock;
+const mockFetch = vi.fn<typeof globalThis.fetch>();
 vi.stubGlobal("fetch", mockFetch);
+
+/** What the client sends as fetch init: a plain object with a JSON string body. */
+interface SentInit {
+  method?: string;
+  headers: { Authorization?: string; "Content-Type"?: string };
+  body: string;
+}
+
+/** The nth fetch call as [url, init]. */
+function fetchCall(n: number): [url: string, init: SentInit] {
+  const call = mockFetch.mock.calls[n];
+  assert(call, `expected fetch call #${n}`);
+  const [url, init] = call;
+  return [url as string, init as SentInit];
+}
 
 // Mock Tauri HTTP plugin to use our mockFetch
 vi.mock("@tauri-apps/plugin-http", () => ({
@@ -62,16 +78,16 @@ function errorResponse(status: number, body = "Error"): Response {
 
 let provider: ApiProvider;
 let authState: AuthState | null;
-let setAuthState: Mock;
-let clearAuthState: Mock;
+let setAuthState: Mock<(s: AuthState) => void>;
+let clearAuthState: Mock<() => void>;
 
 beforeEach(() => {
   mockFetch.mockReset();
   authState = { ...VALID_AUTH };
-  setAuthState = vi.fn((s: AuthState) => {
+  setAuthState = vi.fn<(s: AuthState) => void>((s) => {
     authState = s;
   });
-  clearAuthState = vi.fn(() => {
+  clearAuthState = vi.fn<() => void>(() => {
     authState = null;
   });
   provider = createAgileDayProvider(
@@ -79,7 +95,7 @@ beforeEach(() => {
     () => authState,
     setAuthState,
     clearAuthState,
-    mockFetch as typeof globalThis.fetch
+    mockFetch
   );
 });
 
@@ -93,7 +109,7 @@ describe("getCurrentEmployee", () => {
 
     const emp = await provider.getCurrentEmployee();
 
-    const [url] = mockFetch.mock.calls[0];
+    const [url] = fetchCall(0);
     expect(url).toBe("https://qvik.agileday.io/api/v1/employee/id/emp-1");
     expect(emp).toEqual({ id: "emp-1", name: "Axel Jonsson", email: "axel@qte.se" });
   });
@@ -118,7 +134,7 @@ describe("getCurrentEmployee", () => {
       () => authState,
       setAuthState,
       clearAuthState,
-      mockFetch as typeof globalThis.fetch
+      mockFetch
     );
 
     await expect(provider.getCurrentEmployee()).rejects.toThrow("employee ID");
@@ -141,14 +157,14 @@ describe("getProjects", () => {
 
     const projects = await provider.getProjects();
 
-    const [url] = mockFetch.mock.calls[0];
+    const [url] = fetchCall(0);
     expect(url).toBe(
       "https://qvik.agileday.io/api/v1/project?projectStage=ACTIVE&sortBy=name&sortDirection=asc"
     );
     expect(projects).toHaveLength(2);
-    expect(projects[0].name).toBe("Fokus");
-    expect(projects[0].customerName).toBe("QTE");
-    expect(projects[1].customerName).toBeUndefined();
+    expect(projects[0]?.name).toBe("Fokus");
+    expect(projects[0]?.customerName).toBe("QTE");
+    expect(projects[1]?.customerName).toBeUndefined();
   });
 
   it("assigns colors to projects", async () => {
@@ -160,9 +176,9 @@ describe("getProjects", () => {
     );
 
     const projects = await provider.getProjects();
-    expect(projects[0].color).toBeTruthy();
-    expect(projects[1].color).toBeTruthy();
-    expect(projects[0].color).not.toBe(projects[1].color);
+    expect(projects[0]?.color).toBeTruthy();
+    expect(projects[1]?.color).toBeTruthy();
+    expect(projects[0]?.color).not.toBe(projects[1]?.color);
   });
 });
 
@@ -177,7 +193,7 @@ describe("getAbsenceProjects", () => {
 
     const absences = await provider.getAbsenceProjects();
 
-    const [url] = mockFetch.mock.calls[0];
+    const [url] = fetchCall(0);
     expect(url).toBe(
       "https://qvik.agileday.io/api/v1/absence?sortBy=name&sortDirection=asc&limit=1000"
     );
@@ -188,9 +204,9 @@ describe("getAbsenceProjects", () => {
       customerName: "Internal",
       projectType: "ABSENCE",
     });
-    expect(absences[0].color).toBeTruthy();
-    expect(absences[1].customerName).toBeUndefined();
-    expect(absences[1].projectType).toBe("ABSENCE");
+    expect(absences[0]?.color).toBeTruthy();
+    expect(absences[1]?.customerName).toBeUndefined();
+    expect(absences[1]?.projectType).toBe("ABSENCE");
   });
 
   it("returns [] when the endpoint errors (e.g. unauthorized)", async () => {
@@ -213,10 +229,10 @@ describe("getTasks", () => {
 
     const tasks = await provider.getTasks("p1");
 
-    const [url] = mockFetch.mock.calls[0];
+    const [url] = fetchCall(0);
     expect(url).toBe("https://qvik.agileday.io/api/v1/project/id/p1/task");
     expect(tasks).toHaveLength(2);
-    expect(tasks[0].name).toBe("Dev");
+    expect(tasks[0]?.name).toBe("Dev");
   });
 
   it("keeps inactive tasks so already-logged entries can resolve them", async () => {
@@ -254,7 +270,8 @@ describe("getTasks + global default tasks", () => {
     globalPage?: unknown;
     globalFails?: boolean;
   }) {
-    mockFetch.mockImplementation((url: string) => {
+    mockFetch.mockImplementation((input) => {
+      const url = input as string;
       if (url.includes("/v2/task")) {
         if (options.globalFails) return Promise.resolve(errorResponse(500, "boom"));
         return Promise.resolve(
@@ -296,6 +313,8 @@ describe("getTasks + global default tasks", () => {
 
     const [task] = await provider.getTasks("p1");
 
+    assert(task);
+
     // Task.projectId is a non-null string; globals arrive with none of their own.
     expect(task.projectId).toBe("p1");
   });
@@ -304,6 +323,8 @@ describe("getTasks + global default tasks", () => {
     routeFetch({ projectTasks: [] });
 
     const [task] = await provider.getTasks("p1");
+
+    assert(task);
 
     expect(task.active).toBe(true);
   });
@@ -376,7 +397,7 @@ describe("getTasks + global default tasks", () => {
 
     expect(tasks).toHaveLength(1);
     // The project's own copy wins — it carries the real project scoping.
-    expect(tasks[0].defaultTemplate).toBeUndefined();
+    expect(tasks[0]?.defaultTemplate).toBeUndefined();
   });
 
   it("returns the project's own tasks unaffected when /v2/task fails", async () => {
@@ -404,7 +425,7 @@ describe("getTasks + global default tasks", () => {
   it("still propagates a failure of the project's own task read", async () => {
     routeFetch({ projectTasksStatus: 500 });
 
-    await expect(provider.getTasks("p1")).rejects.toThrow();
+    await expect(provider.getTasks("p1")).rejects.toThrow("API error 500");
   });
 });
 
@@ -429,11 +450,11 @@ describe("getTimeEntries", () => {
 
     const entries = await provider.getTimeEntries("emp-1", "2026-04-01", "2026-04-30");
 
-    const [url] = mockFetch.mock.calls[0];
+    const [url] = fetchCall(0);
     expect(url).toContain("/v1/time_entry/employee/id/emp-1?startDate=2026-04-01");
     expect(entries).toHaveLength(1);
-    expect(entries[0].syncStatus).toBe("synced");
-    expect(entries[0].description).toBe("work");
+    expect(entries[0]?.syncStatus).toBe("synced");
+    expect(entries[0]?.description).toBe("work");
   });
 
   it("handles null description", async () => {
@@ -453,7 +474,7 @@ describe("getTimeEntries", () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({ entries: [] }));
 
     const entries = await provider.getTimeEntries("emp-1", "2026-04-24", "2026-04-24");
-    expect(entries[0].description).toBe("");
+    expect(entries[0]?.description).toBe("");
   });
 });
 
@@ -486,9 +507,9 @@ describe("createTimeEntry", () => {
     });
 
     // First call was the same-day existence lookup (by work date)
-    expect(mockFetch.mock.calls[0][0]).toContain("startDate=2026-04-24&endDate=2026-04-25");
+    expect(fetchCall(0)[0]).toContain("startDate=2026-04-24&endDate=2026-04-25");
     // Second call was POST
-    const [url, opts] = mockFetch.mock.calls[1];
+    const [url, opts] = fetchCall(1);
     expect(url).toContain("/v1/time_entry/employee/id/emp-1");
     expect(opts.method).toBe("POST");
     expect(entry.id).toBe("new-1");
@@ -532,12 +553,12 @@ describe("createTimeEntry", () => {
       status: "SAVED",
     });
 
-    const [, opts] = mockFetch.mock.calls[1];
+    const [, opts] = fetchCall(1);
     expect(opts.method).toBe("PATCH");
     // App sends full state — minutes and description are overwritten, not merged
-    const body = JSON.parse(opts.body);
-    expect(body[0].minutes).toBe(90);
-    expect(body[0].description).toBe("- task 1\n- task 2");
+    const body = JSON.parse(opts.body) as { id: string; minutes: number; description: string }[];
+    expect(body[0]?.minutes).toBe(90);
+    expect(body[0]?.description).toBe("- task 1\n- task 2");
     expect(entry.minutes).toBe(90);
   });
 
@@ -577,15 +598,15 @@ describe("updateTimeEntry", () => {
       minutes: 120,
     });
 
-    const [url, opts] = mockFetch.mock.calls[0];
+    const [url, opts] = fetchCall(0);
     expect(url).toBe("https://qvik.agileday.io/api/v1/time_entry/employee/id/emp-1");
     expect(opts.method).toBe("PATCH");
 
-    const body = JSON.parse(opts.body);
+    const body = JSON.parse(opts.body) as { id: string; minutes: number; description: string }[];
     expect(body).toHaveLength(1);
-    expect(body[0].id).toBe("e1");
-    expect(body[0].description).toBe("updated");
-    expect(body[0].minutes).toBe(120);
+    expect(body[0]?.id).toBe("e1");
+    expect(body[0]?.description).toBe("updated");
+    expect(body[0]?.minutes).toBe(120);
     // Fields not in updates should not be in the body
     expect(body[0]).not.toHaveProperty("date");
     expect(body[0]).not.toHaveProperty("projectId");
@@ -598,7 +619,7 @@ describe("deleteTimeEntry", () => {
 
     await provider.deleteTimeEntry(["e1", "e2"]);
 
-    const [url, opts] = mockFetch.mock.calls[0];
+    const [url, opts] = fetchCall(0);
     expect(url).toBe("https://qvik.agileday.io/api/v1/time_entry?ids=e1,e2");
     expect(opts.method).toBe("DELETE");
   });
@@ -616,7 +637,7 @@ describe("authentication", () => {
     mockFetch.mockResolvedValueOnce(jsonResponse([]));
     await provider.getProjects();
 
-    const [, opts] = mockFetch.mock.calls[0];
+    const [, opts] = fetchCall(0);
     expect(opts.headers.Authorization).toMatch(/^Bearer eyJ/);
   });
 
@@ -657,11 +678,11 @@ describe("authentication", () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
 
     // First call was to token endpoint
-    const [refreshUrl] = mockFetch.mock.calls[0];
+    const [refreshUrl] = fetchCall(0);
     expect(refreshUrl).toBe("https://qvik.agileday.io/api/v1/oauth/token");
 
     // Second call used new token
-    const [, apiOpts] = mockFetch.mock.calls[1];
+    const [, apiOpts] = fetchCall(1);
     expect(apiOpts.headers.Authorization).toMatch(/^Bearer /);
 
     expect(setAuthState).toHaveBeenCalledOnce();
@@ -686,8 +707,8 @@ describe("authentication", () => {
     await provider.getProjects();
 
     expect(setAuthState).toHaveBeenCalledOnce();
-    const newState = setAuthState.mock.calls[0][0] as AuthState;
-    expect(newState.refreshToken).toBe("original-refresh-token");
+    const newState = setAuthState.mock.calls[0]?.[0];
+    expect(newState?.refreshToken).toBe("original-refresh-token");
   });
 
   it("deduplicates parallel refreshes to survive refresh-token rotation", async () => {
@@ -710,7 +731,9 @@ describe("authentication", () => {
 
     await Promise.all([provider.getProjects(), provider.getProjects()]);
 
-    const tokenCalls = mockFetch.mock.calls.filter(([url]) => String(url).endsWith("/oauth/token"));
+    const tokenCalls = mockFetch.mock.calls.filter(([url]) =>
+      (url as string).endsWith("/oauth/token")
+    );
     expect(tokenCalls).toHaveLength(1);
   });
 
@@ -723,7 +746,8 @@ describe("authentication", () => {
   });
 
   it("clears auth when expired and no refresh token", async () => {
-    authState = { ...EXPIRED_AUTH, refreshToken: undefined };
+    const { refreshToken: _, ...noRefreshToken } = EXPIRED_AUTH;
+    authState = noRefreshToken;
 
     await expect(provider.getProjects()).rejects.toThrow("Session expired");
     expect(clearAuthState).toHaveBeenCalledOnce();
@@ -739,7 +763,7 @@ describe("security", () => {
       () => authState,
       setAuthState,
       clearAuthState,
-      mockFetch as typeof globalThis.fetch
+      mockFetch
     );
 
     await expect(httpProvider.getProjects()).rejects.toThrow("API calls must use HTTPS");
@@ -750,7 +774,7 @@ describe("security", () => {
     mockFetch.mockResolvedValueOnce(jsonResponse([]));
     await provider.getProjects();
 
-    const [, opts] = mockFetch.mock.calls[0];
+    const [, opts] = fetchCall(0);
     expect(opts.headers["Content-Type"]).toBe("application/json");
   });
 });
@@ -782,12 +806,14 @@ describe("submitTimesheet", () => {
 
     await provider.submitTimesheet("emp-1", "2026-09-28", "2026-10-01");
 
-    const [lookupUrl, lookupOpts] = mockFetch.mock.calls[0];
+    const [lookupUrl, lookupOpts] = fetchCall(0);
     expect(lookupUrl).toContain("/v1/timesheets/by-employee/month/2026-10-01");
     expect(lookupOpts.method).toBe("POST");
-    expect(JSON.parse(lookupOpts.body).filter).toEqual({ id: { in: ["emp-1"] } });
+    expect((JSON.parse(lookupOpts.body) as { filter: unknown }).filter).toEqual({
+      id: { in: ["emp-1"] },
+    });
 
-    const [url, opts] = mockFetch.mock.calls[1];
+    const [url, opts] = fetchCall(1);
     expect(url).toContain("/v1/time_entry/employee/id/emp-1/time_card/id/tc-oct");
     expect(opts.method).toBe("POST");
     expect(JSON.parse(opts.body)).toEqual({ status: "SUBMITTED" });
@@ -824,18 +850,18 @@ describe("batchUpdateEntries", () => {
     ]);
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
-    const [url, opts] = mockFetch.mock.calls[0];
+    const [url, opts] = fetchCall(0);
     expect(url).toContain("/v1/time_entry/employee/id/emp-1");
     expect(opts.method).toBe("PATCH");
 
-    const body = JSON.parse(opts.body);
+    const body = JSON.parse(opts.body) as { id: string; minutes: number; description: string }[];
     expect(body).toHaveLength(2);
     expect(body[0]).toEqual({ id: "e1", minutes: 60 });
     expect(body[1]).toEqual({ id: "e2", minutes: 45 });
 
     expect(results).toHaveLength(2);
-    expect(results[0].minutes).toBe(60);
-    expect(results[1].minutes).toBe(45);
+    expect(results[0]?.minutes).toBe(60);
+    expect(results[1]?.minutes).toBe(45);
   });
 
   it("returns mapped TimeEntry objects", async () => {
@@ -855,9 +881,9 @@ describe("batchUpdateEntries", () => {
 
     const results = await provider.batchUpdateEntries("emp-1", [{ id: "e1", minutes: 60 }]);
 
-    expect(results[0].id).toBe("e1");
-    expect(results[0].syncStatus).toBe("synced");
-    expect(results[0].description).toBe("work");
+    expect(results[0]?.id).toBe("e1");
+    expect(results[0]?.syncStatus).toBe("synced");
+    expect(results[0]?.description).toBe("work");
   });
 
   it("throws on empty API response", async () => {
@@ -887,6 +913,7 @@ describe("getAllocations", () => {
   it("maps percentage-mode openings straight through", async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({ openings: [opening({})] }));
     const [alloc] = await provider.getAllocations("emp-1");
+    assert(alloc);
     expect(alloc.periods).toEqual([{ startDate: "2026-09-01", percentage: 100 }]);
     expect(alloc.percentage).toBe(100);
   });
@@ -908,6 +935,7 @@ describe("getAllocations", () => {
       })
     );
     const [alloc] = await provider.getAllocations("emp-1");
+    assert(alloc);
     expect(alloc.periods).toEqual([{ startDate: "2026-09-07", percentage: 50 }]);
     expect(alloc.percentage).toBe(0);
     expect(alloc.hours).toBe(20);
@@ -929,6 +957,7 @@ describe("getAllocations", () => {
       })
     );
     const [alloc] = await provider.getAllocations("emp-1");
+    assert(alloc);
     expect(alloc.periods).toEqual([]);
     expect(alloc.startDate).toBeNull();
     expect(alloc.percentage).toBe(0);

@@ -7,12 +7,13 @@
  * See specs/agileday-tracker/entry-sync.md for the full specification.
  */
 
-import { describe, it, expect, beforeEach, vi, type Mock } from "vitest";
-import { createAgileDayProvider, type AgileDayConfig } from "../agileday";
-import type { ApiProvider } from "../provider";
-import type { AuthState } from "../auth";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 
-const mockFetch = vi.fn() as Mock;
+import { createAgileDayProvider, type AgileDayConfig } from "../agileday";
+import type { AuthState } from "../auth";
+import type { ApiProvider } from "../provider";
+
+const mockFetch = vi.fn<typeof globalThis.fetch>();
 vi.stubGlobal("fetch", mockFetch);
 vi.mock("@tauri-apps/plugin-http", () => ({
   fetch: (...args: Parameters<typeof globalThis.fetch>) => mockFetch(...args),
@@ -42,6 +43,18 @@ function jsonResponse(data: unknown, status = 200): Response {
 
 type RawEntryLike = Record<string, unknown>;
 
+/** An entry as the client writes it in a PATCH/POST body. */
+interface SentEntry {
+  id?: string;
+  minutes?: number;
+  description?: string;
+}
+
+/** JSON body of the nth fetch call — the client always sends a JSON string. */
+function sentBody(n: number): SentEntry[] {
+  return JSON.parse(mockFetch.mock.calls[n]?.[1]?.body as string) as SentEntry[];
+}
+
 interface FetchRoutes {
   /** GET /v1/time_entry/employee/id/{id}?startDate=&endDate= — primary read */
   dateRange?: RawEntryLike[];
@@ -60,8 +73,8 @@ interface FetchRoutes {
  * endpoints were hit without depending on how many calls precede them.
  */
 function routeFetch(routes: FetchRoutes) {
-  mockFetch.mockImplementation((rawUrl: string, init?: RequestInit) => {
-    const url = new URL(String(rawUrl));
+  mockFetch.mockImplementation((rawUrl, init) => {
+    const url = new URL(rawUrl as string);
     const path = url.pathname;
 
     if ((init?.method ?? "GET") !== "GET") {
@@ -87,16 +100,17 @@ function routeFetch(routes: FetchRoutes) {
 
 /** Every URL the mocked fetch was called with. */
 function fetchedUrls(): string[] {
-  return mockFetch.mock.calls.map((call) => String(call[0]));
+  return mockFetch.mock.calls.map((call) => call[0] as string);
 }
 
 /** Non-GET calls the mocked fetch received, as {method, body}. */
-function writeCalls(): { method: string; body: RawEntryLike[] }[] {
+function writeCalls(): { method: string; body: SentEntry[] }[] {
   return mockFetch.mock.calls
-    .filter((call) => (call[1]?.method ?? "GET") !== "GET")
+    .map(([, init]) => ({ method: init?.method ?? "GET", body: init?.body }))
+    .filter((call) => call.method !== "GET")
     .map((call) => ({
-      method: String(call[1].method),
-      body: call[1].body ? JSON.parse(String(call[1].body)) : [],
+      method: call.method,
+      body: call.body ? (JSON.parse(call.body as string) as SentEntry[]) : [],
     }));
 }
 
@@ -121,13 +135,7 @@ let authState: AuthState | null;
 beforeEach(() => {
   mockFetch.mockReset();
   authState = { ...VALID_AUTH };
-  provider = createAgileDayProvider(
-    TEST_CONFIG,
-    () => authState,
-    vi.fn(),
-    vi.fn(),
-    mockFetch as typeof globalThis.fetch
-  );
+  provider = createAgileDayProvider(TEST_CONFIG, () => authState, vi.fn(), vi.fn(), mockFetch);
 });
 
 // =============================================================================
@@ -162,9 +170,9 @@ describe("Create (Timer Stop)", () => {
     });
 
     // First call: existence lookup for that day (by work date, not update time)
-    expect(mockFetch.mock.calls[0][0]).toContain("startDate=2026-04-28&endDate=2026-04-29");
+    expect(mockFetch.mock.calls[0]?.[0]).toContain("startDate=2026-04-28&endDate=2026-04-29");
     // Second call: POST
-    expect(mockFetch.mock.calls[1][1].method).toBe("POST");
+    expect(mockFetch.mock.calls[1]?.[1]?.method).toBe("POST");
     expect(entry.id).toBe("agile-1");
     expect(entry.minutes).toBe(5);
   });
@@ -206,11 +214,11 @@ describe("Create (Timer Stop)", () => {
       status: "SAVED",
     });
 
-    expect(mockFetch.mock.calls[1][1].method).toBe("PATCH");
-    const patchBody = JSON.parse(mockFetch.mock.calls[1][1].body);
+    expect(mockFetch.mock.calls[1]?.[1]?.method).toBe("PATCH");
+    const patchBody = sentBody(1);
     // App sends full state — minutes and description overwrite, not merge
-    expect(patchBody[0].minutes).toBe(15);
-    expect(patchBody[0].description).toBe("- code review");
+    expect(patchBody[0]?.minutes).toBe(15);
+    expect(patchBody[0]?.description).toBe("- code review");
     expect(entry.id).toBe("agile-existing");
   });
 
@@ -271,7 +279,7 @@ describe("Create (Timer Stop)", () => {
     });
 
     // Should POST (no SAVED match for same project+task+date)
-    expect(mockFetch.mock.calls[1][1].method).toBe("POST");
+    expect(mockFetch.mock.calls[1]?.[1]?.method).toBe("POST");
   });
 
   it("PATCHes an existing entry last updated before its own work date", async () => {
@@ -301,8 +309,8 @@ describe("Create (Timer Stop)", () => {
 
     const writes = writeCalls();
     expect(writes).toHaveLength(1);
-    expect(writes[0].method).toBe("PATCH");
-    expect(writes[0].body[0].id).toBe("stale-1");
+    expect(writes[0]?.method).toBe("PATCH");
+    expect(writes[0]?.body[0]?.id).toBe("stale-1");
     expect(result.minutes).toBe(90);
 
     // Lookup is a single-day range: startDate inclusive, endDate exclusive.
@@ -324,8 +332,8 @@ describe("Delete (deleteTimeEntry)", () => {
 
     await provider.deleteTimeEntry(["agile-1"]);
 
-    expect(mockFetch.mock.calls[0][0]).toContain("ids=agile-1");
-    expect(mockFetch.mock.calls[0][1].method).toBe("DELETE");
+    expect(mockFetch.mock.calls[0]?.[0]).toContain("ids=agile-1");
+    expect(mockFetch.mock.calls[0]?.[1]?.method).toBe("DELETE");
   });
 
   it("skips API call for empty ID list", async () => {
@@ -358,10 +366,10 @@ describe("Update (updateTimeEntry)", () => {
       minutes: 30,
     });
 
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body[0].id).toBe("agile-1");
-    expect(body[0].description).toBe("updated");
-    expect(body[0].minutes).toBe(30);
+    const body = sentBody(0);
+    expect(body[0]?.id).toBe("agile-1");
+    expect(body[0]?.description).toBe("updated");
+    expect(body[0]?.minutes).toBe(30);
     expect(body[0]).not.toHaveProperty("projectId");
   });
 
@@ -383,8 +391,8 @@ describe("Update (updateTimeEntry)", () => {
       minutes: 12, // group total: edited 5 + other 7
     });
 
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body[0].minutes).toBe(12);
+    const body = sentBody(0);
+    expect(body[0]?.minutes).toBe(12);
     expect(result.minutes).toBe(12);
   });
 
@@ -407,8 +415,8 @@ describe("Update (updateTimeEntry)", () => {
       minutes: 75,
     });
 
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body[0].description).toBe("- planning\n- new desc");
+    const body = sentBody(0);
+    expect(body[0]?.description).toBe("- planning\n- new desc");
     expect(result.description).toBe("- planning\n- new desc");
   });
 });
@@ -505,7 +513,7 @@ describe("Read (getTimeEntries)", () => {
 
     // Should have exactly 1 entry, not 2
     expect(entries).toHaveLength(1);
-    expect(entries[0].minutes).toBe(60);
+    expect(entries[0]?.minutes).toBe(60);
   });
 
   it("fetches a summary for every month the window touches", async () => {

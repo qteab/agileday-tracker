@@ -108,7 +108,7 @@ export async function exchangeCodeForTokens(
   }
 
   try {
-    return await response.json();
+    return (await response.json()) as TokenResponse;
   } catch {
     throw new Error("Token exchange returned invalid response — expected JSON");
   }
@@ -135,7 +135,7 @@ export async function refreshAccessToken(
   }
 
   try {
-    return await response.json();
+    return (await response.json()) as TokenResponse;
   } catch {
     throw new Error("Token refresh returned invalid response — expected JSON");
   }
@@ -154,9 +154,10 @@ export function tokenResponseToAuthState(
   tokens: TokenResponse,
   previous?: AuthState | null
 ): AuthState {
+  const refreshToken = tokens.refresh_token ?? previous?.refreshToken;
   return {
     accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token ?? previous?.refreshToken,
+    ...(refreshToken !== undefined ? { refreshToken } : {}),
     expiresAt: Date.now() + tokens.expires_in * 1000,
   };
 }
@@ -173,14 +174,15 @@ export function isTokenExpired(state: AuthState, bufferMs = 60_000): boolean {
 let inFlightRefresh: Promise<AuthState> | null = null;
 
 export async function refreshAuthState(config: AuthConfig, current: AuthState): Promise<AuthState> {
-  if (!current.refreshToken) {
+  const refreshToken = current.refreshToken;
+  if (!refreshToken) {
     throw new Error("No refresh token available");
   }
   if (inFlightRefresh) {
     return inFlightRefresh;
   }
   inFlightRefresh = (async () => {
-    const tokens = await refreshAccessToken(config, current.refreshToken!);
+    const tokens = await refreshAccessToken(config, refreshToken);
     return tokenResponseToAuthState(tokens, current);
   })();
   try {

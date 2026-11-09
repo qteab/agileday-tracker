@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+
 import { countWeekdays, normalizeAllocationPeriods } from "../allocation";
 
 describe("countWeekdays", () => {

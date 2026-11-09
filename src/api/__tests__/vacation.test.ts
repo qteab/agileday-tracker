@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+
 import { calculateVacation, formatVacationDays } from "../../utils/vacation";
 import type { TimeEntry } from "../types";
 
@@ -85,7 +86,7 @@ describe("calculateVacation", () => {
     ];
     const result = calculateVacation(entries, START, 25, VACATION_PROJECT, TODAY);
     expect(result.usedDays).toBe(1);
-    expect(result.usedEntries[0].date).toBe("2026-07-01");
+    expect(result.usedEntries[0]?.date).toBe("2026-07-01");
   });
 
   it("ignores unsaved entries", () => {

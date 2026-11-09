@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+
 import {
   ClickUpRateLimitError,
   accountedMinutes,
@@ -82,16 +83,16 @@ describe("sync accounting", () => {
   ];
 
   it("splits accounted from unsynced time", () => {
-    const sync = markSynced({ since, synced: {} }, [entries[1]]);
+    const sync = markSynced({ since, synced: {} }, entries.slice(1, 2));
     expect(accountedMinutes(entries, sync, task.id, "2026-10-02")).toBe(50);
     const groups = unsyncedGroups(entries, sync);
     expect(groups).toHaveLength(1);
     expect(groups[0]).toMatchObject({ date: "2026-10-02", minutes: 15, task });
-    expect(groups[0].entries.map((x) => x.id)).toEqual(["b"]);
+    expect(groups[0]?.entries.map((x) => x.id)).toEqual(["b"]);
   });
 
   it("marking synced moves time over", () => {
-    const sync = markSynced({ since, synced: {} }, [entries[1], entries[2]]);
+    const sync = markSynced({ since, synced: {} }, entries.slice(1, 3));
     expect(unsyncedGroups(entries, sync)).toEqual([]);
     expect(accountedMinutes(entries, sync, task.id, "2026-10-02")).toBe(65);
   });
@@ -111,7 +112,7 @@ describe("accounts", () => {
     // Re-adding the same token refreshes it in place.
     const renamed = upsertAccount(both, { ...qte, teams: [{ id: "1", name: "QTE AB" }] });
     expect(renamed.config.accounts).toHaveLength(2);
-    expect(renamed.config.accounts[0].teams[0].name).toBe("QTE AB");
+    expect(renamed.config.accounts[0]?.teams[0]?.name).toBe("QTE AB");
   });
 
   it("migrates the single-workspace config", () => {
@@ -131,12 +132,13 @@ const accounts = [
   { token: "pk_qte", teams: [{ id: "1", name: "QTE" }] },
   { token: "pk_dhl", teams: [{ id: "2", name: "DHL" }] },
 ];
-const authOf = (init: RequestInit) => (init.headers as Record<string, string>).Authorization;
+const authOf = (init?: RequestInit) =>
+  (init?.headers as { Authorization?: string } | undefined)?.Authorization;
 
 describe("ClickUp client", () => {
   it("creates a time entry with the token of the workspace's account", async () => {
-    const fetchMock = vi.fn(async () => ok({ data: { id: "123" } }));
-    const client = createClickUpClient(accounts, fetchMock as typeof fetch);
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(ok({ data: { id: "123" } })));
+    const client = createClickUpClient(accounts, fetchMock);
     const created = await client.createTimeEntry("2", task.id, 1000, 60000);
     expect(created).toMatchObject({ id: "123", teamId: "2" });
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
@@ -147,15 +149,17 @@ describe("ClickUp client", () => {
   });
 
   it("finds a task in whichever account can see it", async () => {
-    const fetchMock = vi.fn(async (_url: string, init: RequestInit) =>
-      authOf(init) === "pk_dhl"
-        ? ok({ id: task.id, name: task.name, team_id: 2 })
-        : new Response("not found", { status: 404 })
+    const fetchMock = vi.fn<typeof fetch>((_url, init) =>
+      Promise.resolve(
+        authOf(init) === "pk_dhl"
+          ? ok({ id: task.id, name: task.name, team_id: 2 })
+          : new Response("not found", { status: 404 })
+      )
     );
-    const client = createClickUpClient(accounts, fetchMock as unknown as typeof fetch);
+    const client = createClickUpClient(accounts, fetchMock);
     expect(await client.getTask({ id: task.id, custom: false })).toEqual({ ...task, teamId: "2" });
     await expect(
-      createClickUpClient(accounts.slice(0, 1), fetchMock as unknown as typeof fetch).getTask({
+      createClickUpClient(accounts.slice(0, 1), fetchMock).getTask({
         id: task.id,
         custom: false,
       })
@@ -169,16 +173,18 @@ describe("ClickUp client", () => {
         { id: "2", task: null, start: "2000", duration: "60000" },
       ],
     };
-    const fetchMock = vi.fn(async () => ok(body));
-    const client = createClickUpClient(accounts, fetchMock as typeof fetch);
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(ok(body)));
+    const client = createClickUpClient(accounts, fetchMock);
     expect(await client.getTimeEntries("1", 0, 5000)).toEqual([
       { id: "1", teamId: "1", taskId: "t1", taskName: "One", start: 1000, duration: 60000 },
     ]);
   });
 
   it("throws on API errors and unknown workspaces", async () => {
-    const fetchMock = vi.fn(async () => new Response("nope", { status: 401 }));
-    const client = createClickUpClient(accounts, fetchMock as typeof fetch);
+    const fetchMock = vi.fn<typeof fetch>(() =>
+      Promise.resolve(new Response("nope", { status: 401 }))
+    );
+    const client = createClickUpClient(accounts, fetchMock);
     await expect(client.getRunning("1")).rejects.toThrow("ClickUp 401");
     await expect(client.getRunning("999")).rejects.toThrow("No connected ClickUp account");
   });
@@ -199,36 +205,44 @@ describe("rate limiting", () => {
   });
 
   it("pauses the token after a 429 without calling ClickUp again", async () => {
-    const fetchMock = vi.fn(async () => limited(Math.floor(Date.now() / 1000) + 30));
+    const fetchMock = vi.fn<typeof fetch>(() =>
+      Promise.resolve(limited(Math.floor(Date.now() / 1000) + 30))
+    );
     const accts = [{ token: "pk_limited", teams: [{ id: "7", name: "QTE" }] }];
-    const client = createClickUpClient(accts, fetchMock as typeof fetch);
+    const client = createClickUpClient(accts, fetchMock);
     await expect(client.getRunning("7")).rejects.toBeInstanceOf(ClickUpRateLimitError);
     // A fresh client for the same token stays quiet too.
-    const again = createClickUpClient(accts, fetchMock as typeof fetch);
+    const again = createClickUpClient(accts, fetchMock);
     await expect(again.getTimeEntries("7", 0, 1)).rejects.toBeInstanceOf(ClickUpRateLimitError);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("only pauses the limited account", async () => {
-    const fetchMock = vi.fn(async (_url: string, init: RequestInit) =>
-      authOf(init) === "pk_busy" ? limited(Math.floor(Date.now() / 1000) + 30) : ok({ data: null })
+    const fetchMock = vi.fn<typeof fetch>((_url, init) =>
+      Promise.resolve(
+        authOf(init) === "pk_busy"
+          ? limited(Math.floor(Date.now() / 1000) + 30)
+          : ok({ data: null })
+      )
     );
     const client = createClickUpClient(
       [
         { token: "pk_busy", teams: [{ id: "8", name: "Busy" }] },
         { token: "pk_calm", teams: [{ id: "9", name: "Calm" }] },
       ],
-      fetchMock as unknown as typeof fetch
+      fetchMock
     );
     await expect(client.getRunning("8")).rejects.toBeInstanceOf(ClickUpRateLimitError);
     expect(await client.getRunning("9")).toBeNull();
   });
 
   it("task lookup reports the rate limit instead of 'not found'", async () => {
-    const fetchMock = vi.fn(async () => limited(Math.floor(Date.now() / 1000) + 30));
+    const fetchMock = vi.fn<typeof fetch>(() =>
+      Promise.resolve(limited(Math.floor(Date.now() / 1000) + 30))
+    );
     const client = createClickUpClient(
       [{ token: "pk_lookup", teams: [{ id: "10", name: "QTE" }] }],
-      fetchMock as typeof fetch
+      fetchMock
     );
     await expect(client.getTask({ id: "abc", custom: false })).rejects.toBeInstanceOf(
       ClickUpRateLimitError

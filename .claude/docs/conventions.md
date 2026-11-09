@@ -2,34 +2,20 @@
 
 ## TypeScript
 
-- **Strict mode** with `noUnusedLocals`, `noUnusedParameters` enabled
+- **Strict mode** plus `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noPropertyAccessFromIndexSignature`, `noImplicitReturns`, `noImplicitOverride`, `noUnusedLocals`/`Parameters`, `verbatimModuleSyntax`, `erasableSyntaxOnly` (see `tsconfig.json`)
 - **Target**: ES2021, **Module**: ESNext (bundler resolution)
-- `type` imports used consistently (`import type { Foo }`)
-- No `any` — explicit types everywhere
-- Unused function params prefixed with `_` (ESLint rule)
+- `type` imports required (`import type { Foo }`, enforced by `verbatimModuleSyntax`)
+- No `any`, no `!` non-null assertions, no lint/ts suppression comments — narrow instead
+- Optional fields that get cleared via spread-merge are typed `?: T | undefined`; otherwise omit the key rather than setting `undefined`
+- Unused function params prefixed with `_`
 
-## Code Style (Prettier)
+## Formatting (oxfmt)
 
-```json
-{
-  "semi": true,
-  "singleQuote": false,
-  "trailingComma": "es5",
-  "printWidth": 100,
-  "tabWidth": 2
-}
-```
+Config in `.oxfmtrc.json`: double quotes, semicolons, ES5 trailing commas, 100-char lines. Imports are sorted and Tailwind classes ordered (using `src/styles/index.css` as the theme) on format.
 
-- Double quotes for strings
-- Semicolons required
-- Trailing commas in ES5-valid positions
-- 100-char line width
+## Linting (oxlint)
 
-## ESLint
-
-- Uses `typescript-eslint` recommended config
-- Ignores: `dist/`, `src-tauri/`, `node_modules/`
-- `@typescript-eslint/no-unused-vars` with `argsIgnorePattern: "^_"` and `varsIgnorePattern: "^_"`
+Config in `.oxlintrc.json`. Type-aware (`oxlint-tsgolint`) with the typescript-eslint `strict-type-checked` rule set, plus the `correctness` category for eslint, typescript, unicorn, oxc, react (incl. hooks / React Compiler rules), import and vitest. Warnings fail the run.
 
 ## React Patterns
 

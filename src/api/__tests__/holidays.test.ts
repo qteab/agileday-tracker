@@ -1,11 +1,12 @@
-import { describe, it, expect, beforeEach, vi, type Mock } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+import { isHoliday, getHolidayName, holidaySet } from "../../utils/holidays";
 import { createAgileDayProvider, type AgileDayConfig } from "../agileday";
 import type { AuthState } from "../auth";
-import { isHoliday, getHolidayName, holidaySet } from "../../utils/holidays";
 import type { Holiday } from "../types";
 
 // Mock fetch
-const mockFetch = vi.fn() as Mock;
+const mockFetch = vi.fn<typeof globalThis.fetch>();
 
 const TEST_CONFIG: AgileDayConfig = {
   apiBaseUrl: "https://qvik.agileday.io/api",
@@ -77,7 +78,7 @@ describe("AgileDay getHolidays", () => {
     const result = await provider.getHolidays("SE", "2026-01-01", "2026-12-31");
 
     expect(result).toEqual(holidays);
-    const url = mockFetch.mock.calls[0][0];
+    const url = mockFetch.mock.calls[0]?.[0];
     expect(url).toContain("/v1/workpackages/SE/holidays");
     expect(url).toContain("startDate=2026-01-01");
     expect(url).toContain("endDate=2026-12-31");
@@ -98,7 +99,7 @@ describe("AgileDay getHolidays", () => {
     const provider = createProvider();
     await provider.getHolidays("SE", "2026-01-01", "2026-12-31");
 
-    const url = mockFetch.mock.calls[0][0];
+    const url = mockFetch.mock.calls[0]?.[0];
     expect(url).toContain("/v1/workpackages/SE/holidays");
   });
 });

@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
+
 import { useApp, useApi } from "../store/context";
-import { BillableIndicator } from "./BillableIndicator";
 import { describeTaskPickerState, type TaskLoadStatus } from "../utils/task-picker";
+import { BillableIndicator } from "./BillableIndicator";
 
 interface TaskPickerProps {
   projectId: string | null;
@@ -25,26 +26,34 @@ export function TaskPicker({
   const { state, dispatch } = useApp();
   const api = useApi();
   const [open, setOpen] = useState(false);
-  const [status, setStatus] = useState<TaskLoadStatus>("ready");
+  // Trigger rect, measured when the panel opens.
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  // Load result for the project it was fetched for; any other project is still loading.
+  const [loaded, setLoaded] = useState<{ projectId: string; status: TaskLoadStatus } | null>(null);
+  const status: TaskLoadStatus = !projectId
+    ? "ready"
+    : loaded?.projectId === projectId
+      ? loaded.status
+      : "loading";
   const ref = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   const selected = state.tasks.find((t) => t.id === selectedId);
 
   useEffect(() => {
     if (!projectId) {
-      setStatus("ready");
       dispatch({ type: "SET_TASKS", payload: [] });
       return;
     }
     let cancelled = false;
-    setStatus("loading");
     api
       .getTasks(projectId)
       .then((tasks) => {
         if (cancelled) return;
-        setStatus("ready");
+        setLoaded({ projectId, status: "ready" });
         dispatch({ type: "SET_TASKS", payload: tasks });
         const billable: Record<string, boolean> = {};
         const names: Record<string, string> = {};
@@ -68,7 +77,7 @@ export function TaskPicker({
       .catch(() => {
         // Surfaced in the picker rather than swallowed — an unreachable task
         // list used to look identical to a project with no tasks.
-        if (!cancelled) setStatus("error");
+        if (!cancelled) setLoaded({ projectId, status: "error" });
       });
     return () => {
       cancelled = true;
@@ -83,7 +92,9 @@ export function TaskPicker({
       }
     }
     document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+    };
   }, []);
 
   const pickerState = describeTaskPickerState({ projectId, tasks: state.tasks, status });
@@ -96,7 +107,7 @@ export function TaskPicker({
 
   const clipboardIcon = (
     <svg
-      className="w-3.5 h-3.5 text-text-muted shrink-0"
+      className="h-3.5 w-3.5 shrink-0 text-text-muted"
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
@@ -115,7 +126,7 @@ export function TaskPicker({
     return (
       <div className={rootClass}>
         <div
-          className={`flex w-full items-center gap-2 ${sizingClass} text-sm bg-bg-card border border-divider text-text-muted cursor-not-allowed`}
+          className={`flex w-full items-center gap-2 ${sizingClass} cursor-not-allowed border border-divider bg-bg-card text-sm text-text-muted`}
           aria-disabled="true"
         >
           {clipboardIcon}
@@ -129,7 +140,10 @@ export function TaskPicker({
     <div ref={ref} className={rootClass}>
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          setAnchor(ref.current?.getBoundingClientRect() ?? null);
+          setOpen(!open);
+        }}
         className={buttonClass}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -141,7 +155,7 @@ export function TaskPicker({
           </span>
         </span>
         <svg
-          className={`w-3 h-3 text-text-muted shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`h-3 w-3 shrink-0 text-text-muted transition-transform ${open ? "rotate-180" : ""}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -152,12 +166,12 @@ export function TaskPicker({
 
       {open && (
         <div
-          className="fixed mt-1 bg-bg-card rounded-lg shadow-lg border border-divider z-50 py-1 max-h-56 overflow-y-auto"
+          className="fixed z-50 mt-1 max-h-56 overflow-y-auto rounded-lg border border-divider bg-bg-card py-1 shadow-lg"
           style={{
             // Anchor below the trigger, matching its width exactly.
-            top: ref.current?.getBoundingClientRect().bottom,
-            left: ref.current?.getBoundingClientRect().left,
-            width: ref.current?.getBoundingClientRect().width,
+            top: anchor?.bottom,
+            left: anchor?.left,
+            width: anchor?.width,
           }}
         >
           {pickerState.rows
@@ -170,13 +184,13 @@ export function TaskPicker({
                   onSelect(task.id);
                   setOpen(false);
                 }}
-                className={`w-full px-3 py-2 text-sm hover:bg-bg/70 cursor-pointer transition-colors flex items-center gap-2 ${
+                className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-bg/70 ${
                   task.id === selectedId ? "bg-primary/10" : ""
                 }`}
               >
                 <BillableIndicator billable={task.billable} />
-                <span className="truncate text-left flex-1">{task.name}</span>
-                {hint && <span className="text-xs text-text-muted shrink-0">{hint}</span>}
+                <span className="flex-1 truncate text-left">{task.name}</span>
+                {hint && <span className="shrink-0 text-xs text-text-muted">{hint}</span>}
               </button>
             ))}
         </div>

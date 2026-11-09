@@ -38,10 +38,10 @@ src/
 
 `ApiProvider` interface with two implementations:
 
-| Implementation | File | Purpose |
-|---|---|---|
-| `AgileDayProvider` | `agileday.ts` | Real REST client with Bearer JWT, token refresh, HTTPS enforcement |
-| `MockProvider` | `mock-core.ts` | In-memory storage with seeded data, injectable `EntryStore` (tests only) |
+| Implementation     | File           | Purpose                                                                  |
+| ------------------ | -------------- | ------------------------------------------------------------------------ |
+| `AgileDayProvider` | `agileday.ts`  | Real REST client with Bearer JWT, token refresh, HTTPS enforcement       |
+| `MockProvider`     | `mock-core.ts` | In-memory storage with seeded data, injectable `EntryStore` (tests only) |
 
 Provider is created in `context.tsx` based on auth state. If authenticated, `createAgileDayProvider()` is used. Otherwise `null` (login screen shown).
 
@@ -64,19 +64,19 @@ Uses React Context + `useReducer` (no external state library).
 interface AppState {
   employee: Employee | null;
   projects: Project[];
-  myProjectIds: string[];           // allocated projects
+  myProjectIds: string[]; // allocated projects
   projectOpeningMap: Record<string, string>;
   tasks: Task[];
   taskBillableById: Record<string, boolean>;
-  entries: TimeEntry[];             // last 30 days + 30 days ahead
+  entries: TimeEntry[]; // last 30 days + 30 days ahead
   allocations: Allocation[];
   allocationsFetchedAt: number | null;
-  timer: TimerState;                // isRunning, projectId, taskId, startTime
+  timer: TimerState; // isRunning, projectId, taskId, startTime
   flexConfig: FlexConfig | null;
-  flexEntries: TimeEntry[] | null;  // entries before the 30-day window (for flex calc)
+  flexEntries: TimeEntry[] | null; // entries before the 30-day window (for flex calc)
   holidays: Holiday[];
-  displayPrefs: DisplayPrefs;       // menuBarMode, theme, inactivity settings
-  inactivity: InactivityState;      // idleSeconds, isAway, pendingReturn (Discard/Keep)
+  displayPrefs: DisplayPrefs; // menuBarMode, theme, inactivity settings
+  inactivity: InactivityState; // idleSeconds, isAway, pendingReturn (Discard/Keep)
   loading: boolean;
   error: string | null;
 }
@@ -85,6 +85,7 @@ interface AppState {
 **Inactivity slice**: Rust emits `inactivity` ({ idle_seconds, is_away }) on each change of away-state or idle-minute; `useInactivitySync` dispatches `SET_INACTIVITY`. The reducer raises a `pendingReturn` (frozen away duration) on the away→active transition — the `InactivityBanner` then shows a persistent Discard/Keep prompt and `useTimer.stop` is blocked until it's resolved (`RESOLVE_RETURN`). Discard shifts the timer's `startTime` forward by the away duration.
 
 **Persistence** (via Tauri store plugin):
+
 - `timer-store.ts` — running timer survives app quit/crash
 - `unsaved-store.ts` — entries whose save failed (`syncStatus: "unsaved"`) survive sync and restart; `SET_ENTRIES` keeps them over the fetched copy until the card's Retry succeeds or Discard drops them
 - `flex-store.ts` — flex config (startDate + initialHours)
@@ -120,6 +121,7 @@ Timer state no longer includes `description` — descriptions live on entries an
 ## Entry Layout
 
 The UI uses a **card-per-project-per-day** layout that maps 1:1 to AgileDay's data model. Each card represents one AgileDay entry with:
+
 - Project name + task tag in header
 - Billable indicator (display-only)
 - Elapsed time + play/stop (Today's cards only)
@@ -149,6 +151,7 @@ New cards are created via the floating + button (FAB), which opens a project/tas
 **When it runs.** Only when `VITE_POSTHOG_KEY` and `VITE_POSTHOG_HOST` are present at build time. Release builds get them from the GitHub repo variables `POSTHOG_KEY` / `POSTHOG_HOST`. Tests never send. Dev builds send only with `VITE_POSTHOG_ENABLE_IN_DEV=true` in `.env` (see `.env.example`).
 
 **What is sent.**
+
 - Product events: `timer_started`, `time_entry_saved`, `time_entry_updated`, `time_entry_deleted`, `timesheet_submitted`, `timesheet_rounded`, `clickup_connected`. Properties are counts and flags — never descriptions, project or customer names.
 - Unhandled errors and promise rejections (`$exception`), scrubbed — see below.
 - Logs: `agileday_api_request_failed` / `agileday_api_network_error` from `request()` in `src/api/agileday.ts`, with method, status and duration (no URL).

@@ -30,13 +30,13 @@ export interface TimeEntry {
   id: string;
   description: string;
   projectId: string;
-  projectName?: string;
-  projectType?: ProjectType;
-  openingId?: string;
-  taskId?: string;
+  projectName?: string | undefined;
+  projectType?: ProjectType | undefined;
+  openingId?: string | undefined;
+  taskId?: string | undefined;
   date: string; // YYYY-MM-DD
   startTime: string; // ISO timestamp
-  endTime?: string; // ISO timestamp (null = running)
+  endTime?: string | undefined; // ISO timestamp (null = running)
   minutes: number;
   status: TimeEntryStatus;
   syncStatus: SyncStatus;

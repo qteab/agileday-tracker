@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo } from "react";
+
 import { useApp } from "../store/context";
 
 interface ProjectPickerProps {
@@ -21,8 +22,12 @@ export function ProjectPicker({
 }: ProjectPickerProps) {
   const { state } = useApp();
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  });
   const [open, setOpen] = useState(false);
+  // Trigger rect, measured when the panel opens.
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const [search, setSearch] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -102,7 +107,9 @@ export function ProjectPicker({
       }
     }
     document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+    };
   }, []);
 
   useEffect(() => {
@@ -121,7 +128,10 @@ export function ProjectPicker({
     <div ref={ref} className={rootClass}>
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          setAnchor(ref.current?.getBoundingClientRect() ?? null);
+          setOpen(!open);
+        }}
         className={buttonClass}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -130,17 +140,17 @@ export function ProjectPicker({
           {selected ? (
             <>
               <span
-                className="w-2.5 h-2.5 rounded-full shrink-0"
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ backgroundColor: selected.color }}
               />
-              <span className="text-text truncate">{selected.name}</span>
+              <span className="truncate text-text">{selected.name}</span>
             </>
           ) : (
-            <span className="text-text-muted truncate">Select project</span>
+            <span className="truncate text-text-muted">Select project</span>
           )}
         </span>
         <svg
-          className={`w-3 h-3 text-text-muted shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`h-3 w-3 shrink-0 text-text-muted transition-transform ${open ? "rotate-180" : ""}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -151,36 +161,38 @@ export function ProjectPicker({
 
       {open && (
         <div
-          className="fixed mt-1 bg-bg-card rounded-lg shadow-lg border border-divider z-50 overflow-hidden"
+          className="fixed z-50 mt-1 overflow-hidden rounded-lg border border-divider bg-bg-card shadow-lg"
           style={{
             // Anchor below the trigger, matching its width exactly.
-            top: ref.current?.getBoundingClientRect().bottom,
-            left: ref.current?.getBoundingClientRect().left,
-            width: ref.current?.getBoundingClientRect().width,
+            top: anchor?.bottom,
+            left: anchor?.left,
+            width: anchor?.width,
           }}
         >
           {/* Search input */}
-          <div className="p-2.5 border-b border-divider">
+          <div className="border-b border-divider p-2.5">
             <input
               ref={inputRef}
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+              }}
               placeholder="Search by project or client..."
-              className="w-full px-3 py-2 text-sm bg-bg rounded-lg outline-none placeholder:text-text-muted"
+              className="w-full rounded-lg bg-bg px-3 py-2 text-sm outline-none placeholder:text-text-muted"
             />
           </div>
 
           {/* Project list */}
           <div className="max-h-64 overflow-y-auto pb-1">
             {/* My projects section */}
-            <div className="px-3 py-1.5 text-[10px] font-semibold text-text-muted uppercase tracking-wide">
+            <div className="px-3 py-1.5 text-[10px] font-semibold tracking-wide text-text-muted uppercase">
               {search.trim()
                 ? `My projects (${mySearchResults.length})`
                 : `My projects (${displayProjects.length})`}
             </div>
             {displayProjects.length === 0 && (
-              <div className="px-3 py-3 text-xs text-text-muted text-center">
+              <div className="px-3 py-3 text-center text-xs text-text-muted">
                 {search.trim() ? "No allocated projects found" : "No allocated projects"}
               </div>
             )}
@@ -193,17 +205,17 @@ export function ProjectPicker({
                   setOpen(false);
                   setSearch("");
                 }}
-                className={`w-full text-left px-3 py-2.5 flex items-center gap-2.5 hover:bg-bg/70 cursor-pointer transition-colors text-sm ${
+                className={`flex w-full cursor-pointer items-center gap-2.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-bg/70 ${
                   project.id === selectedId ? "bg-primary/10" : ""
                 }`}
               >
                 <span
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
                   style={{ backgroundColor: project.color }}
                 />
-                <span className="truncate flex-1">{project.name}</span>
+                <span className="flex-1 truncate">{project.name}</span>
                 {project.customerName && (
-                  <span className="text-text-muted text-xs shrink-0 max-w-[40%] truncate text-right">
+                  <span className="max-w-[40%] shrink-0 truncate text-right text-xs text-text-muted">
                     {project.customerName}
                   </span>
                 )}
@@ -213,7 +225,7 @@ export function ProjectPicker({
             {/* Other projects section (only shown when searching) */}
             {search.trim() && otherSearchResults.length > 0 && (
               <>
-                <div className="px-3 py-1.5 mt-1 text-[10px] font-semibold text-text-muted uppercase tracking-wide border-t border-divider pt-2">
+                <div className="mt-1 border-t border-divider px-3 py-1.5 pt-2 text-[10px] font-semibold tracking-wide text-text-muted uppercase">
                   Other projects ({otherSearchResults.length})
                 </div>
                 {otherSearchResults.map((project) => (
@@ -225,17 +237,17 @@ export function ProjectPicker({
                       setOpen(false);
                       setSearch("");
                     }}
-                    className={`w-full text-left px-3 py-2.5 flex items-center gap-2.5 hover:bg-bg/70 cursor-pointer transition-colors text-sm ${
+                    className={`flex w-full cursor-pointer items-center gap-2.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-bg/70 ${
                       project.id === selectedId ? "bg-primary/10" : ""
                     }`}
                   >
                     <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
                       style={{ backgroundColor: project.color }}
                     />
-                    <span className="truncate flex-1">{project.name}</span>
+                    <span className="flex-1 truncate">{project.name}</span>
                     {project.customerName && (
-                      <span className="text-text-muted text-xs shrink-0 max-w-[40%] truncate text-right">
+                      <span className="max-w-[40%] shrink-0 truncate text-right text-xs text-text-muted">
                         {project.customerName}
                       </span>
                     )}
@@ -247,7 +259,7 @@ export function ProjectPicker({
             {/* Absence section — always visible, regardless of allocation */}
             {absenceResults.length > 0 && (
               <>
-                <div className="px-3 py-1.5 mt-1 text-[10px] font-semibold text-text-muted uppercase tracking-wide border-t border-divider pt-2">
+                <div className="mt-1 border-t border-divider px-3 py-1.5 pt-2 text-[10px] font-semibold tracking-wide text-text-muted uppercase">
                   Absence ({absenceResults.length})
                 </div>
                 {absenceResults.map((project) => (
@@ -259,17 +271,17 @@ export function ProjectPicker({
                       setOpen(false);
                       setSearch("");
                     }}
-                    className={`w-full text-left px-3 py-2.5 flex items-center gap-2.5 hover:bg-bg/70 cursor-pointer transition-colors text-sm ${
+                    className={`flex w-full cursor-pointer items-center gap-2.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-bg/70 ${
                       project.id === selectedId ? "bg-primary/10" : ""
                     }`}
                   >
                     <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
                       style={{ backgroundColor: project.color }}
                     />
-                    <span className="truncate flex-1">{project.name}</span>
+                    <span className="flex-1 truncate">{project.name}</span>
                     {project.customerName && (
-                      <span className="text-text-muted text-xs shrink-0 max-w-[40%] truncate text-right">
+                      <span className="max-w-[40%] shrink-0 truncate text-right text-xs text-text-muted">
                         {project.customerName}
                       </span>
                     )}

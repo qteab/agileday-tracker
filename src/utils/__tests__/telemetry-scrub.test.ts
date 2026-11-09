@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
 import type { CaptureResult } from "posthog-js";
+import { describe, it, expect } from "vitest";
+
 import { scrubErrorMessage, scrubExceptionEvent } from "../telemetry-scrub";
 
 describe("scrubErrorMessage", () => {
@@ -42,7 +43,7 @@ describe("scrubExceptionEvent", () => {
 
     const result = scrubExceptionEvent(event);
 
-    expect(result?.properties.$exception_list).toEqual([
+    expect(result?.properties["$exception_list"]).toEqual([
       { type: "Error", value: "Auth failed (401) at <url>" },
       { type: "Error", value: "plain" },
     ]);
