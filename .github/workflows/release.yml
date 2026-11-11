@@ -1,18 +1,18 @@
-      # tauri-action signs the updater tarball, uploads it together with its
-      # .sig, and generates latest.json itself. Verify that latest.json points
-      # at an asset that actually exists on the release, so a broken updater
-      # feed fails the workflow instead of 404ing for every user.
-      - name: Verify updater feed
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG=${{ steps.version.outputs.tag }}
-          gh release download "$TAG" --pattern latest.json --output latest.json
-          FEED_URL=$(jq -r '.platforms["darwin-aarch64"].url' latest.json)
-          FEED_ASSET=$(basename "$FEED_URL")
-          echo "latest.json points at: $FEED_ASSET"
-          if ! gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qxF "$FEED_ASSET"; then
-            echo "latest.json points at an asset that is not on the release:"
-            gh release view "$TAG" --json assets --jq '.assets[].name'
-            exit 1
-          fi
+# tauri-action signs the updater tarball, uploads it together with its
+# .sig, and generates latest.json itself. Verify that latest.json points
+# at an asset that actually exists on the release, so a broken updater
+# feed fails the workflow instead of 404ing for every user.
+- name: Verify updater feed
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  run: |
+    TAG=${{ steps.version.outputs.tag }}
+    gh release download "$TAG" --pattern latest.json --output latest.json
+    FEED_URL=$(jq -r '.platforms["darwin-aarch64"].url' latest.json)
+    FEED_ASSET=$(basename "$FEED_URL")
+    echo "latest.json points at: $FEED_ASSET"
+    if ! gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qxF "$FEED_ASSET"; then
+      echo "latest.json points at an asset that is not on the release:"
+      gh release view "$TAG" --json assets --jq '.assets[].name'
+      exit 1
+    fi
