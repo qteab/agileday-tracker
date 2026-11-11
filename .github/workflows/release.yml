@@ -112,6 +112,20 @@ jobs:
           releaseDraft: false
           prerelease: false
 
+      # The .dmg tauri-action uploads carries the version in its name, so no
+      # URL stays valid across releases. Upload a second copy under a fixed
+      # name, so this always downloads the newest build:
+      #   https://github.com/qteab/agileday-tracker/releases/latest/download/QTE.Time.Tracker.dmg
+      # The HR site's Time Tracker page links to it. The updater is unaffected:
+      # latest.json points at the .app.tar.gz, not the .dmg.
+      - name: Upload fixed-name .dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=${{ steps.version.outputs.tag }}
+          gh release download "$TAG" --pattern '*_aarch64.dmg' --output QTE.Time.Tracker.dmg
+          gh release upload "$TAG" QTE.Time.Tracker.dmg --clobber
+
       # tauri-action signs the updater tarball, uploads it together with its
       # .sig, and generates latest.json itself. Verify that latest.json points
       # at an asset that actually exists on the release, so a broken updater
