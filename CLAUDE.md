@@ -90,7 +90,7 @@ Total: 314 tests. Run a single file: `npx vitest run src/api/__tests__/mock-prov
 - **CI** (`.github/workflows/ci.yml`): runs on push to main + PRs. Typecheck, lint, format, test.
 - **Release** (`.github/workflows/release.yml`): manual dispatch from GitHub Actions. Choose patch/minor/major → auto-bumps version in 3 files (`package.json`, `tauri.conf.json`, `Cargo.toml`), commits, tags, builds macOS DMG + updater artifacts, publishes GitHub Release.
 
-Secrets: `TAURI_SIGNING_PRIVATE_KEY` (Tauri-generated key for update signing).
+Secrets: `TAURI_SIGNING_PRIVATE_KEY` (Tauri-generated key for update signing); `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY` (Developer ID signing); `APPLE_API_ISSUER`, `APPLE_API_KEY`, `APPLE_API_KEY_P8` (notarization).
 
 ## Key decisions
 

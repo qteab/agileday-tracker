@@ -88,12 +88,26 @@ jobs:
           git tag ${{ steps.version.outputs.tag }}
           git push origin main --tags
 
+      # App Store Connect API key (.p8) that Tauri uses to notarize the app.
+      - name: Write notarization key
+        env:
+          P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: echo "$P8" > "$RUNNER_TEMP/AuthKey.p8"
+
       - name: Build and release
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          # Developer ID signing + notarization. Tauri signs with the
+          # certificate and notarizes with the API key when these are set.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ runner.temp }}/AuthKey.p8
           # PostHog project token (public by design) and host, from repo variables.
           # Unset = the app is built with telemetry off.
           VITE_POSTHOG_KEY: ${{ vars.POSTHOG_KEY }}
@@ -106,7 +120,6 @@ jobs:
 
             Download the `.dmg` file below and drag to Applications.
 
-            **First install:** Right-click the app → Open → confirm (one time only).
             **Updates:** The app checks for updates automatically.
           generateReleaseNotes: true
           releaseDraft: false
