@@ -1,6 +1,7 @@
 import { posthogLogger } from "../posthog";
 import { normalizeAllocationPeriods, type RawAllocationPeriod } from "../utils/allocation";
 import { addDays, monthsInRange } from "../utils/date-range";
+import { getTimesheetPeriod } from "../utils/week";
 import type { AuthConfig, AuthState } from "./auth";
 import { isTokenExpired, refreshAuthState } from "./auth";
 import { createGlobalDefaultTaskLoader } from "./global-tasks";
@@ -49,7 +50,11 @@ export function createAgileDayProvider(
   setAuthState: (state: AuthState) => void,
   clearAuthState: () => void,
   /** Override fetch for testing — defaults to Tauri HTTP plugin */
-  fetchOverride?: typeof globalThis.fetch
+  fetchOverride?: typeof globalThis.fetch,
+  opts?: {
+    /** Read live so toggling the setting needs no new provider. */
+    autoSubmit?: () => boolean;
+  }
 ): ApiProvider {
   async function getValidToken(): Promise<string> {
     const auth = getAuthState();
@@ -205,7 +210,63 @@ export function createAgileDayProvider(
     });
   }
 
-  return {
+  /** Employee id straight from the token, without a profile round-trip. */
+  function employeeIdFromToken(): string | null {
+    const token = getAuthState()?.accessToken;
+    if (!token) return null;
+    try {
+      const payload = JSON.parse(
+        atob((token.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/"))
+      ) as { sub?: string; employee_id?: string; uid?: string };
+      return payload.sub ?? payload.employee_id ?? payload.uid ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Bracket a write with timecard status changes when auto-submit is on:
+   * unsubmit each affected week so the write sees editable entries, run the
+   * write untouched, then submit each week again. Status changes are
+   * best-effort — a week with no timecard, or one the API refuses to move,
+   * must never cost the user their time entry.
+   */
+  async function withAutoSubmit<T>(
+    employeeId: string | null,
+    dates: Array<string | undefined>,
+    write: () => Promise<T>
+  ): Promise<T> {
+    if (!opts?.autoSubmit?.() || !employeeId) return write();
+
+    const weeks = new Map<string, { weekStart: string; month: string }>();
+    for (const date of dates) {
+      if (!date) continue;
+      const { weekStart, month } = getTimesheetPeriod(date);
+      weeks.set(`${weekStart}|${month}`, { weekStart, month });
+    }
+    if (weeks.size === 0) return write();
+
+    const moveAll = async (status: TimecardStatus): Promise<void> => {
+      for (const { weekStart, month } of weeks.values()) {
+        try {
+          await setTimesheetStatus(employeeId, weekStart, month, status);
+        } catch (err) {
+          posthogLogger?.warn(
+            `auto-submit: could not set week of ${weekStart} to ${status}: ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
+        }
+      }
+    };
+
+    await moveAll("SAVED");
+    const result = await write();
+    await moveAll("SUBMITTED");
+    return result;
+  }
+
+  const base: ApiProvider = {
     async getCurrentEmployee(): Promise<Employee> {
       const auth = getAuthState();
       if (!auth?.accessToken) {
@@ -697,5 +758,23 @@ export function createAgileDayProvider(
       );
       return data.map((h) => ({ date: h.date, name: h.name }));
     },
+  };
+
+  return {
+    ...base,
+    createTimeEntry: (employeeId, entry) =>
+      withAutoSubmit(employeeId, [entry.date], () => base.createTimeEntry(employeeId, entry)),
+    updateTimeEntry: (employeeId, id, updates) =>
+      withAutoSubmit(employeeId, [updates.date], () =>
+        base.updateTimeEntry(employeeId, id, updates)
+      ),
+    batchUpdateEntries: (employeeId, updates) =>
+      withAutoSubmit(
+        employeeId,
+        updates.map((u) => u.date),
+        () => base.batchUpdateEntries(employeeId, updates)
+      ),
+    deleteTimeEntry: (ids, dates) =>
+      withAutoSubmit(employeeIdFromToken(), dates ?? [], () => base.deleteTimeEntry(ids)),
   };
 }

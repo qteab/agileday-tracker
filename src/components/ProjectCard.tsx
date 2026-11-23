@@ -581,7 +581,7 @@ export function ProjectCard({
     }
 
     try {
-      await api.deleteTimeEntry([entry.id]);
+      await api.deleteTimeEntry([entry.id], [entry.date]);
       dispatch({ type: "DELETE_ENTRY", payload: entry.id });
       posthogClient?.capture("time_entry_deleted", { persisted: true });
     } catch (err) {

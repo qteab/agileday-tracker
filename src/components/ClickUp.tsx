@@ -329,7 +329,7 @@ export function ClickUpCard({
     if (rest > 0 || description) {
       await persist({ description, minutes: Math.max(0, rest) });
     } else {
-      if (!isLocalOnlyEntry(entry)) await api.deleteTimeEntry([entry.id]);
+      if (!isLocalOnlyEntry(entry)) await api.deleteTimeEntry([entry.id], [entry.date]);
       dispatch({ type: "DELETE_ENTRY", payload: entry.id });
     }
   };
