@@ -1,19 +1,32 @@
-import { posthogLogger } from "../posthog";
+/**
+ * The AgileDay implementation of `ApiProvider`: one method per thing the app
+ * needs, each a thin mapping over an AgileDay endpoint.
+ *
+ * The pieces it is built from live beside it — `agileday-http` holds the token
+ * and fetch handling, `agileday-entries` the time-entry mapping,
+ * `agileday-read-entries` the two-endpoint range read, and `agileday-timecards`
+ * the weekly timecard and the auto-submit bracket.
+ */
+
 import { normalizeAllocationPeriods, type RawAllocationPeriod } from "../utils/allocation";
-import { addDays, monthsInRange } from "../utils/date-range";
-import { getTimesheetPeriod } from "../utils/week";
-import type { AuthConfig, AuthState } from "./auth";
-import { isTokenExpired, refreshAuthState } from "./auth";
+import { addDays } from "../utils/date-range";
+import {
+  findMergeTarget,
+  toEntryCreate,
+  toEntryPatch,
+  toTimeEntry,
+  type RawTimeEntry,
+} from "./agileday-entries";
+import { createApiFetch, type AgileDayConfig } from "./agileday-http";
+import { createEntryReader } from "./agileday-read-entries";
+import { createAutoSubmitBracket, createTimecardApi } from "./agileday-timecards";
+import type { AuthState } from "./auth";
 import { createGlobalDefaultTaskLoader } from "./global-tasks";
-import type { ApiProvider, MyProjectInfo, TimecardStatus } from "./provider";
+import { decodeJwtPayload, employeeIdFromPayload, employeeIdFromToken } from "./jwt";
+import type { ApiProvider, MyProjectInfo } from "./provider";
 import type { Allocation, Employee, Holiday, Project, ProjectType, Task, TimeEntry } from "./types";
 
-/**
- * Lookback for the /updated fallback read. That endpoint filters by last-update
- * timestamp, not work date, so the cutoff must sit far enough back to still
- * catch entries that were written long before the requested window.
- */
-const FALLBACK_LOOKBACK_DAYS = 400;
+export type { AgileDayConfig };
 
 // Color palette for projects (AgileDay doesn't return colors)
 const PROJECT_COLORS = [
@@ -38,10 +51,10 @@ function assignProjectColor(index: number): string {
   return PROJECT_COLORS[index % PROJECT_COLORS.length] ?? "#AEA7FF";
 }
 
-export interface AgileDayConfig {
-  /** e.g. "https://qvik.agileday.io/api" */
-  apiBaseUrl: string;
-  authConfig: AuthConfig;
+/** The `/v2/opening` path for one employee's own openings. */
+function openingsForEmployee(employeeId: string): string {
+  const filter = JSON.stringify({ candidate: { in: [employeeId] } });
+  return `/v2/opening?limit=100&filter=${encodeURIComponent(filter)}`;
 }
 
 export function createAgileDayProvider(
@@ -56,303 +69,53 @@ export function createAgileDayProvider(
     autoSubmit?: () => boolean;
   }
 ): ApiProvider {
-  async function getValidToken(): Promise<string> {
-    const auth = getAuthState();
-    if (!auth) throw new Error("Not authenticated — please log in");
+  const apiFetch = createApiFetch(
+    config,
+    { getAuthState, setAuthState, clearAuthState },
+    fetchOverride
+  );
 
-    if (isTokenExpired(auth, 0)) {
-      // Token is expired or about to expire — try to refresh
-      if (!auth.refreshToken) {
-        clearAuthState();
-        throw new Error("Session expired — please log in again");
-      }
-
-      // Try refresh with one retry. refreshAuthState dedupes parallel callers
-      // so we don't trip refresh-token rotation when the timer + visibility
-      // handler + an in-flight API call all hit expiry at the same time.
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const newState = await refreshAuthState(config.authConfig, auth);
-          setAuthState(newState);
-          return newState.accessToken;
-        } catch {
-          if (attempt === 0) {
-            await new Promise((r) => setTimeout(r, 1000));
-          }
-        }
-      }
-      clearAuthState();
-      throw new Error("Session expired — please log in again");
-    }
-
-    // Token still valid but refresh proactively if < 2 min left
-    if (isTokenExpired(auth, 120_000) && auth.refreshToken) {
-      refreshAuthState(config.authConfig, auth)
-        .then(setAuthState)
-        .catch(() => {}); // Best effort, don't block the current request
-    }
-
-    return auth.accessToken;
-  }
-
-  let resolvedFetch: typeof globalThis.fetch | null = fetchOverride ?? null;
-
-  async function getResolvedFetch() {
-    if (!resolvedFetch) {
-      try {
-        const mod = await import("@tauri-apps/plugin-http");
-        resolvedFetch = mod.fetch;
-      } catch {
-        resolvedFetch = globalThis.fetch;
-      }
-    }
-    return resolvedFetch;
-  }
-
-  async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const token = await getValidToken();
-    const url = `${config.apiBaseUrl}${path}`;
-
-    // Security: enforce HTTPS
-    if (!url.startsWith("https://")) {
-      throw new Error("API calls must use HTTPS");
-    }
-
-    const doFetch = await getResolvedFetch();
-    const method = options.method ?? "GET";
-    const startedAt = performance.now();
-    let response: Response;
-    try {
-      response = await doFetch(url, {
-        ...options,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          Origin: new URL(config.apiBaseUrl).origin,
-          ...(options.headers as Record<string, string> | undefined),
-        },
-      });
-    } catch (err) {
-      const elapsed = Math.round(performance.now() - startedAt);
-      console.log(`[AgileDay] ${method} ${url} → network error (${elapsed}ms)`);
-      posthogLogger?.warn("agileday_api_network_error", {
-        http_method: method,
-        duration_ms: elapsed,
-      });
-      throw err;
-    }
-    const elapsed = Math.round(performance.now() - startedAt);
-    console.log(`[AgileDay] ${method} ${url} → ${response.status} (${elapsed}ms)`);
-
-    if (!response.ok) {
-      posthogLogger?.error("agileday_api_request_failed", {
-        http_method: method,
-        http_status_code: response.status,
-        duration_ms: elapsed,
-      });
-    }
-
-    if (response.status === 401) {
-      const body = await response.text().catch(() => "");
-      throw new Error(`Auth failed (401) at ${url}: ${body}`);
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "Unknown error");
-      throw new Error(`API error ${response.status} at ${url}: ${errorText}`);
-    }
-
-    if (response.status === 204) return undefined as T;
-    return (await response.json()) as T;
-  }
+  const readTimeEntries = createEntryReader(apiFetch);
+  const timecards = createTimecardApi(apiFetch);
+  const autoSubmitEnabled = () => opts?.autoSubmit?.() === true;
+  const withAutoSubmit = createAutoSubmitBracket(timecards, autoSubmitEnabled);
 
   // Memoised per provider instance: discovered on first getTasks call, reused for
   // the rest of the session. Resolves to [] on failure so a task-less project
   // degrades to the app's previous behaviour rather than breaking.
   const loadGlobalDefaultTasks = createGlobalDefaultTaskLoader((path) => apiFetch(path));
 
-  type Timecard = {
-    id: string;
-    employeeId: string;
-    week: string;
-    month: string;
-    status: string;
-  };
-
-  /** The employee's timecard for one week, or a throw naming the week. */
-  async function findTimecard(
-    employeeId: string,
-    weekStart: string,
-    month: string
-  ): Promise<Timecard> {
-    const { timecards } = await apiFetch<{ timecards: Timecard[] }>(
-      `/v1/timesheets/by-employee/month/${month}`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          text: "",
-          filter: { id: { in: [employeeId] } },
-        }),
-      }
-    );
-    const card = timecards.find(
-      (t) =>
-        t.employeeId === employeeId &&
-        t.week.slice(0, 10) === weekStart &&
-        t.month.slice(0, 10) === month
-    );
-    if (!card) throw new Error(`No AgileDay timesheet found for week of ${weekStart}`);
-    return card;
-  }
-
-  async function setTimesheetStatus(
-    employeeId: string,
-    weekStart: string,
-    month: string,
-    status: TimecardStatus
-  ): Promise<void> {
-    const card = await findTimecard(employeeId, weekStart, month);
-    if (card.status === status) return;
-    await apiFetch(`/v1/time_entry/employee/id/${employeeId}/time_card/id/${card.id}`, {
-      method: "POST",
-      body: JSON.stringify({ status }),
-    });
-  }
-
-  /** Employee id straight from the token, without a profile round-trip. */
-  function employeeIdFromToken(): string | null {
-    const token = getAuthState()?.accessToken;
-    if (!token) return null;
-    try {
-      const payload = JSON.parse(
-        atob((token.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/"))
-      ) as { sub?: string; employee_id?: string; uid?: string };
-      return payload.sub ?? payload.employee_id ?? payload.uid ?? null;
-    } catch {
-      return null;
-    }
-  }
-
-  /** Statuses whose presence in a week means we must not move its timecard. */
-  async function weekHasApprovedEntry(employeeId: string, weekStart: string): Promise<boolean> {
-    type RawStatus = { status?: string };
-    const entries = await apiFetch<RawStatus[]>(
-      `/v1/time_entry/employee/id/${employeeId}?startDate=${weekStart}&endDate=${addDays(weekStart, 7)}`
-    ).catch(() => [] as RawStatus[]);
-    return entries.some((e) => e.status === "APPROVED");
-  }
-
-  /**
-   * Bracket a write with timecard status changes when auto-submit is on:
-   * unsubmit each affected week so the write sees editable entries, run the
-   * write untouched, then submit each week again.
-   *
-   * Two rules keep this from costing the user anything. Status changes are
-   * best-effort — a week with no timecard, or one the API refuses to move,
-   * must never cost a time entry. And a week holding an APPROVED entry is left
-   * alone entirely: moving its timecard cascades onto every entry in the week,
-   * which would revert a manager's decision.
-   */
-  async function withAutoSubmit<T>(
-    employeeId: string | null,
-    dates: Array<string | undefined>,
-    write: () => Promise<T>
-  ): Promise<T> {
-    if (!opts?.autoSubmit?.() || !employeeId) return write();
-
-    const weeks = new Map<string, { weekStart: string; month: string }>();
-    for (const date of dates) {
-      if (!date) continue;
-      const { weekStart, month } = getTimesheetPeriod(date);
-      weeks.set(`${weekStart}|${month}`, { weekStart, month });
-    }
-    if (weeks.size === 0) return write();
-
-    // One read per distinct week, reused by both directions of the bracket.
-    const movable: Array<{ weekStart: string; month: string }> = [];
-    for (const week of weeks.values()) {
-      if (!(await weekHasApprovedEntry(employeeId, week.weekStart))) movable.push(week);
-    }
-    if (movable.length === 0) return write();
-
-    const moveAll = async (status: TimecardStatus): Promise<void> => {
-      for (const { weekStart, month } of movable) {
-        try {
-          await setTimesheetStatus(employeeId, weekStart, month, status);
-        } catch {
-          posthogLogger?.warn("agileday_auto_submit_status_failed", {
-            target_status: status,
-          });
-        }
-      }
-    };
-
-    await moveAll("SAVED");
-    try {
-      return await write();
-    } finally {
-      // Resubmit even when the write threw, so a failed save never leaves the
-      // week sitting unsubmitted with nothing to tell the user.
-      await moveAll("SUBMITTED");
-    }
-  }
-
   const base: ApiProvider = {
     async getCurrentEmployee(): Promise<Employee> {
-      const auth = getAuthState();
-      if (!auth?.accessToken) {
-        throw new Error("Not authenticated — please sign in");
-      }
+      const accessToken = getAuthState()?.accessToken;
+      if (!accessToken) throw new Error("Not authenticated — please sign in");
 
-      // Get employee ID from JWT
-      let employeeId: string | undefined;
-      let jwtName: string;
-      let jwtEmail: string;
-      try {
-        const payload = JSON.parse(
-          atob((auth.accessToken.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/"))
-        ) as {
-          sub?: string;
-          employee_id?: string;
-          uid?: string;
-          email?: string;
-          name?: string;
-          preferred_username?: string;
-        };
-        employeeId = payload.sub || payload.employee_id || payload.uid;
-        jwtEmail = payload.email || "";
-        jwtName = payload.name || payload.preferred_username || jwtEmail || "User";
-      } catch {
-        throw new Error("Failed to read user info from token");
-      }
+      const claims = decodeJwtPayload(accessToken);
+      if (!claims) throw new Error("Failed to read user info from token");
 
+      const employeeId = employeeIdFromPayload(claims);
       if (!employeeId) {
         throw new Error("Token does not contain an employee ID — please contact your admin");
       }
 
-      // Try to fetch full profile (name, email) from API
+      const jwtEmail = claims.email || "";
+      const jwtName = claims.name || claims.preferred_username || jwtEmail || "User";
+
+      // The profile endpoint has the authoritative name and email; the token's
+      // own claims stand in when it can't be read.
       try {
         const emp = await apiFetch<{ id: string; name: string; email: string }>(
           `/v1/employee/id/${employeeId}`
         );
-        return {
-          id: emp.id,
-          name: emp.name || jwtName,
-          email: emp.email || jwtEmail,
-        };
+        return { id: emp.id, name: emp.name || jwtName, email: emp.email || jwtEmail };
       } catch {
-        // Employee endpoint not accessible — use JWT data
         return { id: employeeId, name: jwtName, email: jwtEmail };
       }
     },
 
     async getProjects(): Promise<Project[]> {
       const projects = await apiFetch<
-        Array<{
-          id: string;
-          name: string;
-          customer?: { name: string };
-        }>
+        Array<{ id: string; name: string; customer?: { name: string } }>
       >("/v1/project?projectStage=ACTIVE&sortBy=name&sortDirection=asc");
 
       return projects.map((p, i) => ({
@@ -368,11 +131,7 @@ export function createAgileDayProvider(
       // entity — they are NOT returned by /v1/project, so they need their own
       // fetch. Degrade gracefully to [] if the token can't read this endpoint.
       const absences = await apiFetch<
-        Array<{
-          id: string;
-          name: string;
-          customer?: { name: string };
-        }>
+        Array<{ id: string; name: string; customer?: { name: string } }>
       >("/v1/absence?sortBy=name&sortDirection=asc&limit=1000").catch(() => []);
 
       return absences.map((a, i) => ({
@@ -423,208 +182,44 @@ export function createAgileDayProvider(
       return [...own, ...extras];
     },
 
-    async getTimeEntries(
-      employeeId: string,
-      startDate: string,
-      endDate: string
-    ): Promise<TimeEntry[]> {
-      type RawEntry = {
-        id: string;
-        description?: string;
-        projectId: string;
-        projectName: string;
-        taskId?: string;
-        date: string;
-        minutes: number;
-        status: string;
-      };
-
-      type SummaryEntry = {
-        date: string;
-        project: string;
-        projectId: string;
-        projectType?: ProjectType;
-        customer: string;
-        minutes: number;
-        status: string;
-      };
-
-      // 1. Fetch detailed entries by WORK DATE (with descriptions + IDs).
-      //    endDate is exclusive on this endpoint, hence the +1 day.
-      const detailedEntries = await apiFetch<RawEntry[]>(
-        `/v1/time_entry/employee/id/${employeeId}?startDate=${startDate}&endDate=${addDays(endDate, 1)}`
-      ).catch(async () => {
-        // Fallback: /updated filters on last-update timestamp rather than work
-        // date, so it needs a wide lookback — anything narrower silently drops
-        // entries booked before the window (e.g. vacation planned months ahead).
-        const updatedAfter = new Date(
-          addDays(startDate, -FALLBACK_LOOKBACK_DAYS) + "T00:00:00Z"
-        ).toISOString();
-        return apiFetch<RawEntry[]>(
-          `/v1/time_entry/employee/id/${employeeId}/updated?updatedAfter=${updatedAfter}`
-        ).catch(() => [] as RawEntry[]);
-      });
-
-      // 2. Fetch timesheets summary (has all statuses, but no descriptions) for
-      //    EVERY month the window touches — a ±30-day window normally spans
-      //    three, and skipping the middle one leaves that month uncovered.
-      //    In parallel: the flex backfill can span a year of months, and those
-      //    would otherwise be a year's worth of serial round-trips.
-      const summaryPages = await Promise.all(
-        monthsInRange(startDate, endDate).map((month) =>
-          apiFetch<{ entries: SummaryEntry[] }>(
-            `/v1/timesheets/${employeeId}/summary?date=${month}&intervalType=day&month=${month}`
-          ).catch(() => ({ entries: [] as SummaryEntry[] }))
-        )
-      );
-      const summaryEntries: SummaryEntry[] = summaryPages.flatMap((page) => page.entries);
-
-      // Build a projectId -> projectType lookup from summary entries (the summary
-      // endpoint reliably exposes projectType, the /updated endpoint does not).
-      const projectTypeById = new Map<string, ProjectType>();
-      for (const s of summaryEntries) {
-        if (s.projectType && !projectTypeById.has(s.projectId)) {
-          projectTypeById.set(s.projectId, s.projectType);
-        }
-      }
-
-      // 3. Build result: use detailed entries as primary (they have descriptions + IDs)
-      const result: TimeEntry[] = detailedEntries
-        .filter((e) => e.date >= startDate && e.date <= endDate)
-        .map((e) => {
-          const projectType = projectTypeById.get(e.projectId);
-          return {
-            id: e.id,
-            description: e.description ?? "",
-            projectId: e.projectId,
-            projectName: e.projectName,
-            ...(projectType ? { projectType } : {}),
-            ...(e.taskId !== undefined ? { taskId: e.taskId } : {}),
-            date: e.date,
-            startTime: `${e.date}T09:00:00.000Z`,
-            minutes: e.minutes,
-            status: e.status as TimeEntry["status"],
-            syncStatus: "synced" as const,
-          };
-        });
-
-      // 4. Add entries from summary that aren't covered by detailed entries
-      //    (e.g. entries in SAVED/NEW status that time_entry endpoint doesn't return)
-      const detailedByProjectDate = new Map<string, number>();
-      for (const e of result) {
-        const key = `${e.projectId}::${e.date}`;
-        detailedByProjectDate.set(key, (detailedByProjectDate.get(key) ?? 0) + e.minutes);
-      }
-
-      for (const s of summaryEntries) {
-        if (s.minutes <= 0 || s.date < startDate || s.date > endDate) continue;
-        const key = `${s.projectId}::${s.date}`;
-        const detailedMinutes = detailedByProjectDate.get(key) ?? 0;
-
-        if (detailedMinutes < s.minutes) {
-          result.push({
-            id: `summary-${s.projectId}-${s.date}`,
-            description: "",
-            projectId: s.projectId,
-            projectName: s.project,
-            ...(s.projectType ? { projectType: s.projectType } : {}),
-            date: s.date,
-            startTime: `${s.date}T09:00:00.000Z`,
-            minutes: s.minutes - detailedMinutes,
-            status: s.status as TimeEntry["status"],
-            syncStatus: "synced" as const,
-          });
-        }
-      }
-
-      return result;
+    getTimeEntries(employeeId: string, startDate: string, endDate: string): Promise<TimeEntry[]> {
+      return readTimeEntries(employeeId, startDate, endDate);
     },
 
     async createTimeEntry(
       employeeId: string,
       entry: Omit<TimeEntry, "id" | "syncStatus">
     ): Promise<TimeEntry> {
-      type RawEntry = {
-        id: string;
-        date: string;
-        minutes: number;
-        status: string;
-        description?: string;
-        projectId: string;
-        taskId?: string;
-      };
-
-      const desc = entry.description;
-
-      // App is source of truth when saving. Check if an entry already exists
-      // on AgileDay for this (project, task, date) — if so, PATCH it with
-      // the app's full state. Otherwise POST a new entry.
-      // Look the day up by work date. Filtering by last-update timestamp would
-      // miss an entry left untouched since before its own date (and would miss
-      // every future-dated entry outright), causing a duplicate POST.
-      const EDITABLE_STATUSES = new Set(["NEW", "SAVED", "CHANGE_REQUESTED"]);
-      // While auto-submit is on the week is normally unsubmitted around this
-      // write, but if that failed — or another write resubmitted in between —
-      // the entry is still ours to merge into. Without this a refused status
-      // call silently POSTs a duplicate and inflates the day's hours.
-      if (opts?.autoSubmit?.()) EDITABLE_STATUSES.add("SUBMITTED");
-      const sameDay = await apiFetch<RawEntry[]>(
+      // The app is the source of truth when saving: if AgileDay already holds an
+      // entry for this project, task and date, patch it with the app's state
+      // rather than adding a second row. The day is looked up by work date —
+      // filtering by last-update timestamp would miss an entry left untouched
+      // since before its own date, and every future-dated entry outright,
+      // causing a duplicate POST.
+      const sameDay = await apiFetch<RawTimeEntry[]>(
         `/v1/time_entry/employee/id/${employeeId}?startDate=${entry.date}&endDate=${addDays(entry.date, 1)}`
-      ).catch(() => [] as RawEntry[]);
+      ).catch(() => [] as RawTimeEntry[]);
 
-      const match = sameDay.find((e) => {
-        if (e.projectId !== entry.projectId || e.date !== entry.date) return false;
-        if (!EDITABLE_STATUSES.has(e.status)) return false;
-        const eTask = e.taskId ?? "";
-        const entryTask = entry.taskId ?? "";
-        return eTask === entryTask;
+      const match = findMergeTarget(sameDay, entry, { allowSubmitted: autoSubmitEnabled() });
+
+      const body = match
+        ? [toEntryPatch({ id: match.id, minutes: entry.minutes, description: entry.description })]
+        : [toEntryCreate(entry)];
+
+      const results = await apiFetch<RawTimeEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
+        method: match ? "PATCH" : "POST",
+        body: JSON.stringify(body),
       });
 
-      let created: RawEntry;
+      const [saved] = results;
+      if (!saved) throw new Error("No entry returned from API");
 
-      if (match) {
-        // PATCH existing entry with app's full state (overwrite, not merge)
-        const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
-          method: "PATCH",
-          body: JSON.stringify([{ id: match.id, minutes: entry.minutes, description: desc }]),
-        });
-        const [first] = results;
-        if (!first) throw new Error("No entry returned from API");
-        created = first;
-      } else {
-        // POST new entry
-        const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
-          method: "POST",
-          body: JSON.stringify([
-            {
-              date: entry.date,
-              minutes: entry.minutes,
-              status: "SAVED",
-              projectId: entry.projectId,
-              ...(entry.openingId ? { openingId: entry.openingId } : {}),
-              ...(entry.taskId ? { taskId: entry.taskId } : {}),
-              ...(desc ? { description: desc } : {}),
-            },
-          ]),
-        });
-        const [first] = results;
-        if (!first) throw new Error("No entry returned from API");
-        created = first;
-      }
-
-      return {
-        id: created.id,
-        description: created.description ?? desc,
-        projectId: created.projectId,
-        ...(entry.projectName !== undefined ? { projectName: entry.projectName } : {}),
-        ...(created.taskId !== undefined ? { taskId: created.taskId } : {}),
-        date: created.date,
+      return toTimeEntry(saved, {
+        descriptionFallback: entry.description,
+        projectName: entry.projectName,
         startTime: entry.startTime,
-        ...(entry.endTime !== undefined ? { endTime: entry.endTime } : {}),
-        minutes: created.minutes,
-        status: created.status as TimeEntry["status"],
-        syncStatus: "synced",
-      };
+        endTime: entry.endTime,
+      });
     },
 
     async updateTimeEntry(
@@ -632,56 +227,24 @@ export function createAgileDayProvider(
       id: string,
       updates: Partial<TimeEntry>
     ): Promise<TimeEntry> {
-      const body = [
-        {
-          id,
-          ...(updates.description !== undefined ? { description: updates.description } : {}),
-          ...(updates.projectId ? { projectId: updates.projectId } : {}),
-          ...(updates.openingId ? { openingId: updates.openingId } : {}),
-          ...(updates.taskId ? { taskId: updates.taskId } : {}),
-          ...(updates.minutes !== undefined ? { minutes: updates.minutes } : {}),
-          ...(updates.status ? { status: updates.status } : {}),
-          ...(updates.date ? { date: updates.date } : {}),
-        },
-      ];
-
-      const results = await apiFetch<
-        Array<{
-          id: string;
-          date: string;
-          minutes: number;
-          status: string;
-          description?: string;
-          projectId: string;
-          taskId?: string;
-        }>
-      >(`/v1/time_entry/employee/id/${employeeId}`, {
+      const results = await apiFetch<RawTimeEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
         method: "PATCH",
-        body: JSON.stringify(body),
+        body: JSON.stringify([toEntryPatch({ ...updates, id })]),
       });
 
       const [updated] = results;
       if (!updated) throw new Error("No entry returned from API");
 
-      return {
-        id: updated.id,
-        description: updated.description ?? "",
-        projectId: updated.projectId,
-        ...(updates.projectName !== undefined ? { projectName: updates.projectName } : {}),
-        ...(updated.taskId !== undefined ? { taskId: updated.taskId } : {}),
-        date: updated.date,
+      return toTimeEntry(updated, {
+        projectName: updates.projectName,
         startTime: updates.startTime ?? "",
-        ...(updates.endTime !== undefined ? { endTime: updates.endTime } : {}),
-        minutes: updated.minutes,
-        status: updated.status as TimeEntry["status"],
-        syncStatus: "synced",
-      };
+        endTime: updates.endTime,
+      });
     },
 
     async deleteTimeEntry(ids: string[]): Promise<void> {
       if (ids.length === 0) return;
-      const idsParam = ids.join(",");
-      await apiFetch(`/v1/time_entry?ids=${idsParam}`, { method: "DELETE" });
+      await apiFetch(`/v1/time_entry?ids=${ids.join(",")}`, { method: "DELETE" });
     },
 
     async batchUpdateEntries(
@@ -690,53 +253,23 @@ export function createAgileDayProvider(
     ): Promise<TimeEntry[]> {
       if (updates.length === 0) return [];
 
-      const body = updates.map((u) => {
-        const patch: { id: string } & Partial<TimeEntry> = { id: u.id };
-        if (u.minutes !== undefined) patch.minutes = u.minutes;
-        if (u.description !== undefined) patch.description = u.description;
-        if (u.projectId) patch.projectId = u.projectId;
-        if (u.taskId) patch.taskId = u.taskId;
-        if (u.status) patch.status = u.status;
-        if (u.date) patch.date = u.date;
-        return patch;
-      });
-
-      type RawEntry = {
-        id: string;
-        date: string;
-        minutes: number;
-        status: string;
-        description?: string;
-        projectId: string;
-        taskId?: string;
-      };
-
-      const results = await apiFetch<RawEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
+      const results = await apiFetch<RawTimeEntry[]>(`/v1/time_entry/employee/id/${employeeId}`, {
         method: "PATCH",
-        body: JSON.stringify(body),
+        body: JSON.stringify(updates.map((u) => toEntryPatch(u))),
       });
 
-      return results.map((r) => ({
-        id: r.id,
-        description: r.description ?? "",
-        projectId: r.projectId,
-        ...(r.taskId !== undefined ? { taskId: r.taskId } : {}),
-        date: r.date,
-        startTime: "",
-        minutes: r.minutes,
-        status: r.status as TimeEntry["status"],
-        syncStatus: "synced" as const,
-      }));
+      return results.map((r) => toTimeEntry(r));
     },
 
     submitTimesheet(employeeId: string, weekStart: string, month: string): Promise<void> {
-      return setTimesheetStatus(employeeId, weekStart, month, "SUBMITTED");
+      return timecards.setTimesheetStatus(employeeId, weekStart, month, "SUBMITTED");
     },
 
-    setTimesheetStatus,
+    setTimesheetStatus(employeeId, weekStart, month, status): Promise<void> {
+      return timecards.setTimesheetStatus(employeeId, weekStart, month, status);
+    },
 
     async getAllocations(employeeId: string): Promise<Allocation[]> {
-      const filter = JSON.stringify({ candidate: { in: [employeeId] } });
       const data = await apiFetch<{
         openings: Array<{
           projectlikeId: string;
@@ -749,7 +282,7 @@ export function createAgileDayProvider(
           endDate: string | null;
           hours: number | null;
         }>;
-      }>(`/v2/opening?limit=100&filter=${encodeURIComponent(filter)}`);
+      }>(openingsForEmployee(employeeId));
 
       return data.openings.map((o) => ({
         projectId: o.projectlikeId,
@@ -764,7 +297,6 @@ export function createAgileDayProvider(
     },
 
     async getMyProjects(employeeId: string): Promise<MyProjectInfo[]> {
-      const filter = JSON.stringify({ candidate: { in: [employeeId] } });
       const data = await apiFetch<{
         openings: Array<{
           id: string;
@@ -773,7 +305,7 @@ export function createAgileDayProvider(
           projectlikeType?: ProjectType | null;
           status: string;
         }>;
-      }>(`/v2/opening?limit=100&filter=${encodeURIComponent(filter)}`);
+      }>(openingsForEmployee(employeeId));
 
       const byId = new Map<string, Omit<MyProjectInfo, "id">>();
       for (const o of data.openings) {
@@ -800,6 +332,8 @@ export function createAgileDayProvider(
     },
   };
 
+  // Writes are bracketed, reads are not: only a write needs the week it touches
+  // unsubmitted around it.
   return {
     ...base,
     createTimeEntry: (employeeId, entry) =>
@@ -815,6 +349,8 @@ export function createAgileDayProvider(
         () => base.batchUpdateEntries(employeeId, updates)
       ),
     deleteTimeEntry: (ids, dates) =>
-      withAutoSubmit(employeeIdFromToken(), dates ?? [], () => base.deleteTimeEntry(ids)),
+      withAutoSubmit(employeeIdFromToken(getAuthState()?.accessToken), dates ?? [], () =>
+        base.deleteTimeEntry(ids)
+      ),
   };
 }
