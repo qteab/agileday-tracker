@@ -171,7 +171,13 @@ export function createAgileDayProvider(
   // degrades to the app's previous behaviour rather than breaking.
   const loadGlobalDefaultTasks = createGlobalDefaultTaskLoader((path) => apiFetch(path));
 
-  type Timecard = { id: string; employeeId: string; week: string; month: string; status: string };
+  type Timecard = {
+    id: string;
+    employeeId: string;
+    week: string;
+    month: string;
+    status: string;
+  };
 
   /** The employee's timecard for one week, or a throw naming the week. */
   async function findTimecard(
@@ -183,7 +189,10 @@ export function createAgileDayProvider(
       `/v1/timesheets/by-employee/month/${month}`,
       {
         method: "POST",
-        body: JSON.stringify({ text: "", filter: { id: { in: [employeeId] } } }),
+        body: JSON.stringify({
+          text: "",
+          filter: { id: { in: [employeeId] } },
+        }),
       }
     );
     const card = timecards.find(
@@ -304,7 +313,11 @@ export function createAgileDayProvider(
         const emp = await apiFetch<{ id: string; name: string; email: string }>(
           `/v1/employee/id/${employeeId}`
         );
-        return { id: emp.id, name: emp.name || jwtName, email: emp.email || jwtEmail };
+        return {
+          id: emp.id,
+          name: emp.name || jwtName,
+          email: emp.email || jwtEmail,
+        };
       } catch {
         // Employee endpoint not accessible — use JWT data
         return { id: employeeId, name: jwtName, email: jwtEmail };

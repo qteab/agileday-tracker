@@ -8,10 +8,7 @@ import type { TimeEntryStatus } from "../api/types";
  * writes to) it must stay editable, or the app would lock the user out of
  * everything it just saved.
  */
-export function isEntryLocked(
-  entry: { status: TimeEntryStatus },
-  autoSubmit: boolean
-): boolean {
+export function isEntryLocked(entry: { status: TimeEntryStatus }, autoSubmit: boolean): boolean {
   if (entry.status === "APPROVED") return true;
   if (entry.status === "SUBMITTED") return !autoSubmit;
   return false;

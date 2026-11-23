@@ -3,8 +3,20 @@ import type { ApiProvider, TimecardStatus } from "./provider";
 import type { Allocation, Employee, Project, Task, TimeEntry } from "./types";
 
 export const MOCK_PROJECTS: Project[] = [
-  { id: "p1", name: "Fokus", customerName: "QTE", color: "#E5B80B", projectType: "INTERNAL" },
-  { id: "p2", name: "DHL - PIL", customerName: "DHL", color: "#AEA7FF", projectType: "EXTERNAL" },
+  {
+    id: "p1",
+    name: "Fokus",
+    customerName: "QTE",
+    color: "#E5B80B",
+    projectType: "INTERNAL",
+  },
+  {
+    id: "p2",
+    name: "DHL - PIL",
+    customerName: "DHL",
+    color: "#AEA7FF",
+    projectType: "EXTERNAL",
+  },
   {
     id: "p3",
     name: "maverick",
@@ -12,8 +24,20 @@ export const MOCK_PROJECTS: Project[] = [
     color: "#D946EF",
     projectType: "EXTERNAL",
   },
-  { id: "p4", name: "KBV", customerName: "KBV", color: "#374151", projectType: "EXTERNAL" },
-  { id: "p5", name: "QTE - möten", customerName: "QTE", color: "#7A59FC", projectType: "INTERNAL" },
+  {
+    id: "p4",
+    name: "KBV",
+    customerName: "KBV",
+    color: "#374151",
+    projectType: "EXTERNAL",
+  },
+  {
+    id: "p5",
+    name: "QTE - möten",
+    customerName: "QTE",
+    color: "#7A59FC",
+    projectType: "INTERNAL",
+  },
 ];
 
 export const MOCK_ABSENCE_PROJECTS: Project[] = [
@@ -23,22 +47,90 @@ export const MOCK_ABSENCE_PROJECTS: Project[] = [
 
 export const MOCK_TASKS: Record<string, Task[]> = {
   p1: [
-    { id: "t1", projectId: "p1", name: "Development", billable: true, active: true },
+    {
+      id: "t1",
+      projectId: "p1",
+      name: "Development",
+      billable: true,
+      active: true,
+    },
     { id: "t2", projectId: "p1", name: "Design", billable: true, active: true },
-    { id: "t3", projectId: "p1", name: "Meetings", billable: false, active: true },
+    {
+      id: "t3",
+      projectId: "p1",
+      name: "Meetings",
+      billable: false,
+      active: true,
+    },
   ],
   p2: [
-    { id: "t4", projectId: "p2", name: "Fältbeskrivningar", billable: true, active: true },
-    { id: "t5", projectId: "p2", name: "Integration", billable: true, active: true },
+    {
+      id: "t4",
+      projectId: "p2",
+      name: "Fältbeskrivningar",
+      billable: true,
+      active: true,
+    },
+    {
+      id: "t5",
+      projectId: "p2",
+      name: "Integration",
+      billable: true,
+      active: true,
+    },
   ],
   p3: [
-    { id: "t6", projectId: "p3", name: "Development", billable: true, active: true },
-    { id: "t7", projectId: "p3", name: "Planning", billable: false, active: true },
+    {
+      id: "t6",
+      projectId: "p3",
+      name: "Development",
+      billable: true,
+      active: true,
+    },
+    {
+      id: "t7",
+      projectId: "p3",
+      name: "Planning",
+      billable: false,
+      active: true,
+    },
   ],
-  p4: [{ id: "t8", projectId: "p4", name: "Operations", billable: true, active: true }],
-  p5: [{ id: "t9", projectId: "p5", name: "Internal", billable: false, active: true }],
-  a1: [{ id: "t10", projectId: "a1", name: "Vacation", billable: false, active: true }],
-  a2: [{ id: "t11", projectId: "a2", name: "Sick leave", billable: false, active: true }],
+  p4: [
+    {
+      id: "t8",
+      projectId: "p4",
+      name: "Operations",
+      billable: true,
+      active: true,
+    },
+  ],
+  p5: [
+    {
+      id: "t9",
+      projectId: "p5",
+      name: "Internal",
+      billable: false,
+      active: true,
+    },
+  ],
+  a1: [
+    {
+      id: "t10",
+      projectId: "a1",
+      name: "Vacation",
+      billable: false,
+      active: true,
+    },
+  ],
+  a2: [
+    {
+      id: "t11",
+      projectId: "a2",
+      name: "Sick leave",
+      billable: false,
+      active: true,
+    },
+  ],
 };
 
 /**

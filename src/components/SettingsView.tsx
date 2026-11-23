@@ -29,6 +29,7 @@ export type SettingsPage =
   | "appearance"
   | "timer"
   | "list"
+  | "timesheet"
   | "clickup";
 
 interface SettingsViewProps {
@@ -44,6 +45,7 @@ const PAGE_TITLES: Record<SettingsPage, string> = {
   appearance: "Appearance",
   timer: "Timer",
   list: "Entry list",
+  timesheet: "Timesheet",
   clickup: "ClickUp",
 };
 
@@ -88,6 +90,7 @@ export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) 
         {page === "appearance" && <AppearanceSettings />}
         {page === "timer" && <TimerSettings />}
         {page === "list" && <ListSettings />}
+        {page === "timesheet" && <TimesheetSettings />}
         {page === "clickup" && <ClickUpSettings />}
       </div>
     </div>
@@ -96,7 +99,12 @@ export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) 
 
 /** Keep hints general — they describe the page, not the settings on it. */
 /** `icon` is an outline path; items without one show their brand logo. */
-const MENU_ITEMS: { page: SettingsPage; label: string; hint: string; icon?: string }[] = [
+const MENU_ITEMS: {
+  page: SettingsPage;
+  label: string;
+  hint: string;
+  icon?: string;
+}[] = [
   {
     page: "list",
     label: "Entry list",
@@ -114,6 +122,12 @@ const MENU_ITEMS: { page: SettingsPage; label: string; hint: string; icon?: stri
     label: "Vacation days",
     hint: "Set up how your vacation day balance is tracked",
     icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+  },
+  {
+    page: "timesheet",
+    label: "Timesheet",
+    hint: "Submit to AgileDay automatically as you track",
+    icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4",
   },
   {
     page: "clickup",
@@ -259,14 +273,29 @@ function MenuBarSettings() {
   }
 
   async function toggleTrayIcon() {
-    await persist({ ...displayPrefs, showTrayIcon: !displayPrefs.showTrayIcon });
+    await persist({
+      ...displayPrefs,
+      showTrayIcon: !displayPrefs.showTrayIcon,
+    });
   }
 
   const withIcon = displayPrefs.showTrayIcon;
   const options: { value: MenuBarMode; label: string; hint: string }[] = [
-    { value: "off", label: "Off", hint: withIcon ? "Icon only" : "Play/pause only" },
-    { value: "compact", label: "Compact", hint: withIcon ? "Icon + time" : "Time only" },
-    { value: "full", label: "Full", hint: withIcon ? "Icon + time + task" : "Time + task" },
+    {
+      value: "off",
+      label: "Off",
+      hint: withIcon ? "Icon only" : "Play/pause only",
+    },
+    {
+      value: "compact",
+      label: "Compact",
+      hint: withIcon ? "Icon + time" : "Time only",
+    },
+    {
+      value: "full",
+      label: "Full",
+      hint: withIcon ? "Icon + time + task" : "Time + task",
+    },
   ];
 
   return (
@@ -398,6 +427,52 @@ function AppearanceSettings() {
   );
 }
 
+function TimesheetSettings() {
+  const { state, dispatch } = useApp();
+  const { displayPrefs } = state;
+
+  async function toggleAutoSubmit() {
+    const next = { ...displayPrefs, autoSubmit: !displayPrefs.autoSubmit };
+    dispatch({ type: "SET_DISPLAY_PREFS", payload: next });
+    await saveDisplayPrefs(next).catch(() => {});
+  }
+
+  return (
+    <div className="space-y-4 px-4 py-4">
+      <div className="rounded-xl border border-border bg-bg-card p-4">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium text-text">Submit automatically</div>
+          <button
+            role="switch"
+            aria-checked={displayPrefs.autoSubmit}
+            onClick={() => {
+              void toggleAutoSubmit();
+            }}
+            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+              displayPrefs.autoSubmit ? "bg-primary" : "bg-border"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
+                displayPrefs.autoSubmit ? "translate-x-4" : ""
+              }`}
+            />
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-text-muted">
+          Mark the whole week as submitted in AgileDay every time the app saves an entry, so you
+          never have to submit a timesheet by hand.
+        </p>
+      </div>
+
+      <p className="px-1 text-[11px] text-text-muted">
+        Entries stay editable here while this is on — the app re-submits the week after every
+        change. Weeks your manager has already approved are left alone.
+      </p>
+    </div>
+  );
+}
+
 function TimerSettings() {
   const { state, dispatch } = useApp();
   const { displayPrefs } = state;
@@ -409,7 +484,10 @@ function TimerSettings() {
   }
 
   async function toggleInactivity() {
-    await persist({ ...displayPrefs, inactivityEnabled: !displayPrefs.inactivityEnabled });
+    await persist({
+      ...displayPrefs,
+      inactivityEnabled: !displayPrefs.inactivityEnabled,
+    });
   }
 
   async function commitMinutes() {
@@ -485,7 +563,10 @@ function ListSettings() {
   }
 
   async function toggleGroupByWeek() {
-    await persist({ ...displayPrefs, listGroupByWeek: !displayPrefs.listGroupByWeek });
+    await persist({
+      ...displayPrefs,
+      listGroupByWeek: !displayPrefs.listGroupByWeek,
+    });
   }
 
   async function setStickyHeadings(mode: ListStickyHeadings) {
@@ -500,13 +581,21 @@ function ListSettings() {
     });
   }
 
-  const stickyOptions: { value: ListStickyHeadings; label: string; hint: string }[] = [
+  const stickyOptions: {
+    value: ListStickyHeadings;
+    label: string;
+    hint: string;
+  }[] = [
     { value: "off", label: "Never", hint: "Scroll away" },
     { value: "days", label: "Days", hint: "Day pinned" },
     { value: "both", label: "Days + weeks", hint: "Both pinned" },
   ];
 
-  const collapseOptions: { value: ListAutoCollapse; label: string; hint: string }[] = [
+  const collapseOptions: {
+    value: ListAutoCollapse;
+    label: string;
+    hint: string;
+  }[] = [
     { value: "off", label: "Never", hint: "All expanded" },
     { value: "days", label: "Past days", hint: "Today expanded" },
     { value: "weeks", label: "Past weeks", hint: "This week expanded" },
@@ -848,7 +937,10 @@ function VacationSettings() {
         setSaved(false);
       }, 2000);
     } catch {
-      dispatch({ type: "SET_ERROR", payload: "Failed to save vacation config" });
+      dispatch({
+        type: "SET_ERROR",
+        payload: "Failed to save vacation config",
+      });
     } finally {
       setSaving(false);
     }
@@ -894,7 +986,11 @@ function VacationSettings() {
             = 1 day).
           </p>
           <Dropdown
-            options={absenceProjects.map((p) => ({ id: p.id, label: p.name, color: p.color }))}
+            options={absenceProjects.map((p) => ({
+              id: p.id,
+              label: p.name,
+              color: p.color,
+            }))}
             selectedId={projectId || null}
             onSelect={setProjectId}
             placeholder="Select a project…"
@@ -945,7 +1041,9 @@ function ClickUpSettings() {
       // ClickUp time from today on is offered for AgileDay; older time is
       // assumed to be logged already.
       dispatch({ type: "SET_CLICKUP_ACCOUNT", payload: account });
-      posthogClient?.capture("clickup_connected", { workspace_count: account.teams.length });
+      posthogClient?.capture("clickup_connected", {
+        workspace_count: account.teams.length,
+      });
       setToken("");
       setAdding(false);
     } catch (err) {
@@ -974,7 +1072,10 @@ function ClickUpSettings() {
               </div>
               <button
                 onClick={() => {
-                  dispatch({ type: "REMOVE_CLICKUP_ACCOUNT", payload: { token: a.token } });
+                  dispatch({
+                    type: "REMOVE_CLICKUP_ACCOUNT",
+                    payload: { token: a.token },
+                  });
                 }}
                 className="rounded-lg bg-danger/10 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/20"
               >

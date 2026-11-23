@@ -6,8 +6,8 @@ import { useNow } from "../hooks/useNow";
 import { useTimer, formatTime, formatMinutes } from "../hooks/useTimer";
 import { posthogClient } from "../posthog";
 import { useApp, useApi } from "../store/context";
-import { isEntryLocked } from "../utils/entry-lock";
 import { splitDescriptions, joinDescriptions } from "../utils/descriptions";
+import { isEntryLocked } from "../utils/entry-lock";
 import { Collapsible } from "./Collapsible";
 import {
   parseDurationInput,
@@ -77,7 +77,10 @@ export function usePersistEntry(entry: TimeEntry) {
     async (overrides: { description?: string; minutes?: number }) => {
       dispatch({
         type: "UPDATE_ENTRY",
-        payload: { id: entry.id, updates: { ...overrides, syncStatus: "pending" } },
+        payload: {
+          id: entry.id,
+          updates: { ...overrides, syncStatus: "pending" },
+        },
       });
 
       try {
@@ -208,7 +211,10 @@ export function ProjectCard({
   const [collapseOverride, setCollapseOverride] = useState<boolean | null>(
     isThisRunning ? false : null
   );
-  const [collapseSync, setCollapseSync] = useState({ isThisRunning, autoCollapsed });
+  const [collapseSync, setCollapseSync] = useState({
+    isThisRunning,
+    autoCollapsed,
+  });
   if (
     collapseSync.isThisRunning !== isThisRunning ||
     collapseSync.autoCollapsed !== autoCollapsed
@@ -292,7 +298,9 @@ export function ProjectCard({
   const saveDescriptions = useCallback(
     async (newLines: string[]) => {
       if (joinDescriptions(newLines) === joinDescriptions(ownLines(entry.description))) return;
-      await persistViaCreate({ description: joinDescriptions([...newLines, ...clickupLines]) });
+      await persistViaCreate({
+        description: joinDescriptions([...newLines, ...clickupLines]),
+      });
     },
     [entry.description, persistViaCreate, ownLines, clickupLines]
   );
@@ -344,7 +352,10 @@ export function ProjectCard({
     if (isThisRunning) {
       const { bankedMinutes } = computeRunningTimeEdit(mins);
       // Reset the timer start so the clock continues from the entered total.
-      dispatch({ type: "SET_TIMER", payload: { startTime: new Date().toISOString() } });
+      dispatch({
+        type: "SET_TIMER",
+        payload: { startTime: new Date().toISOString() },
+      });
       if (bankedMinutes !== ownMinutes)
         void persistViaCreate({ minutes: bankedMinutes + cuMinutes });
     } else {
@@ -394,7 +405,10 @@ export function ProjectCard({
       // If this card's timer is running, re-point it to the new project so it
       // keeps counting (task cleared until the user picks one below).
       if (isThisRunning) {
-        dispatch({ type: "SET_TIMER", payload: { projectId: newProjectId, taskId: null } });
+        dispatch({
+          type: "SET_TIMER",
+          payload: { projectId: newProjectId, taskId: null },
+        });
       }
       // Force a task selection for the new project before persisting.
       setEditMode("task");
@@ -423,7 +437,10 @@ export function ProjectCard({
 
       dispatch({
         type: "UPDATE_ENTRY",
-        payload: { id: entry.id, updates: { taskId: newTaskId, syncStatus: "pending" } },
+        payload: {
+          id: entry.id,
+          updates: { taskId: newTaskId, syncStatus: "pending" },
+        },
       });
 
       // Keep a running timer pointed at the re-categorized project+task so it
@@ -567,9 +584,15 @@ export function ProjectCard({
 
     // ClickUp cards still live on this entry — remove only this card's share.
     if (clickupLines.length > 0) {
-      const keep = { description: joinDescriptions(clickupLines), minutes: cuMinutes };
+      const keep = {
+        description: joinDescriptions(clickupLines),
+        minutes: cuMinutes,
+      };
       if (isLocalOnlyEntry(entry))
-        dispatch({ type: "UPDATE_ENTRY", payload: { id: entry.id, updates: keep } });
+        dispatch({
+          type: "UPDATE_ENTRY",
+          payload: { id: entry.id, updates: keep },
+        });
       else await persistViaCreate(keep);
       return;
     }
@@ -1137,7 +1160,11 @@ export function ProjectCard({
             isThisRunning ? " — the running timer will be discarded." : ""
           } This can't be undone.`}
           actions={[
-            { label: "Cancel", variant: "secondary", onClick: closeDeleteModal },
+            {
+              label: "Cancel",
+              variant: "secondary",
+              onClick: closeDeleteModal,
+            },
             {
               label: "Delete",
               variant: "danger",
@@ -1157,8 +1184,17 @@ export function ProjectCard({
               : "Discarding brings back the version AgileDay has."
           }`}
           actions={[
-            { label: "Cancel", variant: "secondary", onClick: closeDeleteModal },
-            { label: "Discard", variant: "danger", autoFocus: true, onClick: confirmDiscard },
+            {
+              label: "Cancel",
+              variant: "secondary",
+              onClick: closeDeleteModal,
+            },
+            {
+              label: "Discard",
+              variant: "danger",
+              autoFocus: true,
+              onClick: confirmDiscard,
+            },
           ]}
         />
       )}

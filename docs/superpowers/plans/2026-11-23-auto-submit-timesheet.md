@@ -32,10 +32,12 @@
 ### Task 1: `autoSubmit` preference
 
 **Files:**
+
 - Modify: `src/store/display-store.ts`
 - Test: `src/store/__tests__/display-prefs.test.ts` (create)
 
 **Interfaces:**
+
 - Produces: `DisplayPrefs.autoSubmit: boolean`; `normalizeDisplayPrefs(saved: LegacyDisplayPrefs | null): DisplayPrefs`
 
 - [ ] **Step 1: Write the failing test**
@@ -83,10 +85,12 @@ git commit -m "Add autoSubmit display preference"
 ### Task 2: `setTimesheetStatus` on the provider
 
 **Files:**
+
 - Modify: `src/api/provider.ts`, `src/api/agileday.ts`, `src/api/mock-core.ts`
 - Test: `src/api/__tests__/agileday-provider.test.ts` (extend the existing `submitTimesheet` describe block at :782)
 
 **Interfaces:**
+
 - Produces: `ApiProvider.setTimesheetStatus(employeeId: string, weekStart: string, month: string, status: "SUBMITTED" | "SAVED"): Promise<void>`
 - Consumes: nothing from earlier tasks.
 
@@ -138,10 +142,12 @@ git commit -m "Generalize submitTimesheet into setTimesheetStatus"
 ### Task 3: The auto-submit write wrapper
 
 **Files:**
+
 - Modify: `src/api/agileday.ts`, `src/api/provider.ts`, `src/api/mock-core.ts`
 - Test: `src/api/__tests__/auto-submit.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: `setTimesheetStatus` (Task 2); `getTimesheetPeriod(date)` from `src/utils/week.ts:54`.
 - Produces: `createAgileDayProvider(opts?: { autoSubmit?: () => boolean })`; `ApiProvider.deleteTimeEntry(ids: string[], dates?: string[])`.
 
@@ -224,11 +230,13 @@ git commit -m "Submit the affected week after each AgileDay write"
 ### Task 4: Shared entry-lock helper and UI unlocking
 
 **Files:**
+
 - Create: `src/utils/entry-lock.ts`
 - Test: `src/utils/__tests__/entry-lock.test.ts` (create)
 - Modify: `src/api/rounding.ts`, `src/api/__tests__/rounding.test.ts`, `src/components/ProjectCard.tsx:154`, `src/components/ClickUp.tsx:263` and `:721`, `src/components/FinalizeView.tsx:58` and `:655`
 
 **Interfaces:**
+
 - Produces: `isEntryLocked(entry: Pick<TimeEntry, "status">, autoSubmit: boolean): boolean`
 - Consumes: `DisplayPrefs.autoSubmit` (Task 1), read via `useApp().state.displayPrefs`.
 
@@ -295,9 +303,11 @@ git commit -m "Keep submitted entries editable while auto-submit is on"
 ### Task 5: Wire the provider to the setting
 
 **Files:**
+
 - Modify: `src/store/context.tsx`
 
 **Interfaces:**
+
 - Consumes: `createAgileDayProvider({ autoSubmit })` (Task 3), `state.displayPrefs.autoSubmit` (Task 1).
 
 - [ ] **Step 1: Pass the setting through**
@@ -321,9 +331,11 @@ git commit -m "Feed the autoSubmit preference to the AgileDay provider"
 ### Task 6: Settings page
 
 **Files:**
+
 - Modify: `src/components/SettingsView.tsx`
 
 **Interfaces:**
+
 - Consumes: `DisplayPrefs.autoSubmit` (Task 1).
 
 - [ ] **Step 1: Add the page**
@@ -347,6 +359,7 @@ git commit -m "Add a Timesheet settings page with the auto-submit toggle"
 ### Task 7: Full check and docs
 
 **Files:**
+
 - Modify: `CLAUDE.md` (Key decisions)
 
 - [ ] **Step 1: Note the decision**

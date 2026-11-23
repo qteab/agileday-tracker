@@ -165,8 +165,20 @@ describe("buildRoundingPlan", () => {
 
   it("handles multiple projects on same day separately", () => {
     const entries = [
-      makeEntry({ id: "e1", projectId: "p1", projectName: "A", date: "2026-05-05", minutes: 47 }),
-      makeEntry({ id: "e2", projectId: "p2", projectName: "B", date: "2026-05-05", minutes: 22 }),
+      makeEntry({
+        id: "e1",
+        projectId: "p1",
+        projectName: "A",
+        date: "2026-05-05",
+        minutes: 47,
+      }),
+      makeEntry({
+        id: "e2",
+        projectId: "p2",
+        projectName: "B",
+        date: "2026-05-05",
+        minutes: 22,
+      }),
     ];
     const plan = buildRoundingPlan(entries);
 
@@ -184,7 +196,13 @@ describe("buildRoundingPlan", () => {
 
   it("excludes SUBMITTED entries from the total and never adjusts them", () => {
     const entries = [
-      makeEntry({ id: "e1", projectId: "p1", date: "2026-05-05", minutes: 47, status: "SAVED" }),
+      makeEntry({
+        id: "e1",
+        projectId: "p1",
+        date: "2026-05-05",
+        minutes: 47,
+        status: "SAVED",
+      }),
       makeEntry({
         id: "e2",
         projectId: "p1",
@@ -206,7 +224,13 @@ describe("buildRoundingPlan", () => {
 
   it("counts and adjusts SUBMITTED entries when includeSubmitted is set", () => {
     const entries = [
-      makeEntry({ id: "e1", projectId: "p1", date: "2026-05-05", minutes: 22, status: "SUBMITTED" }),
+      makeEntry({
+        id: "e1",
+        projectId: "p1",
+        date: "2026-05-05",
+        minutes: 22,
+        status: "SUBMITTED",
+      }),
     ];
     const plan = buildRoundingPlan(entries, { includeSubmitted: true });
 
@@ -217,7 +241,13 @@ describe("buildRoundingPlan", () => {
 
   it("never adjusts APPROVED entries even when includeSubmitted is set", () => {
     const entries = [
-      makeEntry({ id: "e1", projectId: "p1", date: "2026-05-05", minutes: 22, status: "APPROVED" }),
+      makeEntry({
+        id: "e1",
+        projectId: "p1",
+        date: "2026-05-05",
+        minutes: 22,
+        status: "APPROVED",
+      }),
     ];
     const plan = buildRoundingPlan(entries, { includeSubmitted: true });
 
@@ -227,7 +257,13 @@ describe("buildRoundingPlan", () => {
 
   it("excludes APPROVED entries from the total and never adjusts them", () => {
     const entries = [
-      makeEntry({ id: "e1", projectId: "p1", date: "2026-05-05", minutes: 22, status: "APPROVED" }),
+      makeEntry({
+        id: "e1",
+        projectId: "p1",
+        date: "2026-05-05",
+        minutes: 22,
+        status: "APPROVED",
+      }),
     ];
     const plan = buildRoundingPlan(entries);
 
@@ -248,9 +284,24 @@ describe("buildRoundingPlan", () => {
 
   it("real-world: entries across multiple days for one project", () => {
     const entries = [
-      makeEntry({ id: "e1", projectId: "p1", date: "2026-05-05", minutes: 480 }), // 8h Mon
-      makeEntry({ id: "e2", projectId: "p1", date: "2026-05-06", minutes: 467 }), // 7:47 Tue
-      makeEntry({ id: "e3", projectId: "p1", date: "2026-05-07", minutes: 480 }), // 8h Wed
+      makeEntry({
+        id: "e1",
+        projectId: "p1",
+        date: "2026-05-05",
+        minutes: 480,
+      }), // 8h Mon
+      makeEntry({
+        id: "e2",
+        projectId: "p1",
+        date: "2026-05-06",
+        minutes: 467,
+      }), // 7:47 Tue
+      makeEntry({
+        id: "e3",
+        projectId: "p1",
+        date: "2026-05-07",
+        minutes: 480,
+      }), // 8h Wed
     ];
     const plan = buildRoundingPlan(entries);
 

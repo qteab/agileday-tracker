@@ -111,7 +111,11 @@ describe("getCurrentEmployee", () => {
 
     const [url] = fetchCall(0);
     expect(url).toBe("https://qvik.agileday.io/api/v1/employee/id/emp-1");
-    expect(emp).toEqual({ id: "emp-1", name: "Axel Jonsson", email: "axel@qte.se" });
+    expect(emp).toEqual({
+      id: "emp-1",
+      name: "Axel Jonsson",
+      email: "axel@qte.se",
+    });
   });
 
   it("falls back to JWT claims if employee API fails", async () => {
@@ -127,7 +131,11 @@ describe("getCurrentEmployee", () => {
   it("throws when JWT has no employee_id", async () => {
     authState = {
       ...VALID_AUTH,
-      accessToken: fakeJwt({ sub: undefined, employee_id: undefined, uid: undefined }),
+      accessToken: fakeJwt({
+        sub: undefined,
+        employee_id: undefined,
+        uid: undefined,
+      }),
     };
     provider = createAgileDayProvider(
       TEST_CONFIG,
@@ -222,8 +230,20 @@ describe("getTasks", () => {
   it("calls GET /v1/project/id/{projectId}/task", async () => {
     mockFetch.mockResolvedValueOnce(
       jsonResponse([
-        { id: "t1", name: "Dev", projectId: "p1", billable: true, active: true },
-        { id: "t2", name: "Archived", projectId: "p1", billable: true, active: false },
+        {
+          id: "t1",
+          name: "Dev",
+          projectId: "p1",
+          billable: true,
+          active: true,
+        },
+        {
+          id: "t2",
+          name: "Archived",
+          projectId: "p1",
+          billable: true,
+          active: false,
+        },
       ])
     );
 
@@ -238,14 +258,29 @@ describe("getTasks", () => {
   it("keeps inactive tasks so already-logged entries can resolve them", async () => {
     mockFetch.mockResolvedValueOnce(
       jsonResponse([
-        { id: "t1", name: "Active", projectId: "p1", billable: true, active: true },
-        { id: "t2", name: "Inactive", projectId: "p1", billable: true, active: false },
+        {
+          id: "t1",
+          name: "Active",
+          projectId: "p1",
+          billable: true,
+          active: true,
+        },
+        {
+          id: "t2",
+          name: "Inactive",
+          projectId: "p1",
+          billable: true,
+          active: false,
+        },
       ])
     );
 
     const tasks = await provider.getTasks("p1");
     expect(tasks.map((t) => t.id)).toEqual(["t1", "t2"]);
-    expect(tasks.find((t) => t.id === "t2")).toMatchObject({ active: false, billable: true });
+    expect(tasks.find((t) => t.id === "t2")).toMatchObject({
+      active: false,
+      billable: true,
+    });
   });
 });
 
@@ -278,7 +313,12 @@ describe("getTasks + global default tasks", () => {
           jsonResponse(
             options.globalPage ?? {
               data: [GLOBAL_DEV],
-              pagination: { page: 1, pageSize: 200, totalItems: 1, totalPages: 1 },
+              pagination: {
+                page: 1,
+                pageSize: 200,
+                totalItems: 1,
+                totalPages: 1,
+              },
             }
           )
         );
@@ -332,8 +372,20 @@ describe("getTasks + global default tasks", () => {
   it("appends globals after the project's own tasks", async () => {
     routeFetch({
       projectTasks: [
-        { id: "t1", name: "Own A", projectId: "p1", billable: true, active: true },
-        { id: "t2", name: "Own B", projectId: "p1", billable: false, active: true },
+        {
+          id: "t1",
+          name: "Own A",
+          projectId: "p1",
+          billable: true,
+          active: true,
+        },
+        {
+          id: "t2",
+          name: "Own B",
+          projectId: "p1",
+          billable: false,
+          active: true,
+        },
       ],
     });
 
@@ -349,8 +401,20 @@ describe("getTasks + global default tasks", () => {
     // filters them (see describeTaskPickerState).
     routeFetch({
       projectTasks: [
-        { id: "t1", name: "Own", projectId: "p1", billable: true, active: true },
-        { id: "t2", name: "Archived", projectId: "p1", billable: true, active: false },
+        {
+          id: "t1",
+          name: "Own",
+          projectId: "p1",
+          billable: true,
+          active: true,
+        },
+        {
+          id: "t2",
+          name: "Archived",
+          projectId: "p1",
+          billable: true,
+          active: false,
+        },
       ],
     });
 
@@ -389,7 +453,13 @@ describe("getTasks + global default tasks", () => {
   it("does not duplicate a task the project already owns", async () => {
     routeFetch({
       projectTasks: [
-        { id: "global-dev", name: "Development", projectId: "p1", billable: true, active: true },
+        {
+          id: "global-dev",
+          name: "Development",
+          projectId: "p1",
+          billable: true,
+          active: true,
+        },
       ],
     });
 
@@ -402,7 +472,15 @@ describe("getTasks + global default tasks", () => {
 
   it("returns the project's own tasks unaffected when /v2/task fails", async () => {
     routeFetch({
-      projectTasks: [{ id: "t1", name: "Own", projectId: "p1", billable: true, active: true }],
+      projectTasks: [
+        {
+          id: "t1",
+          name: "Own",
+          projectId: "p1",
+          billable: true,
+          active: true,
+        },
+      ],
       globalFails: true,
     });
 
@@ -556,7 +634,11 @@ describe("createTimeEntry", () => {
     const [, opts] = fetchCall(1);
     expect(opts.method).toBe("PATCH");
     // App sends full state — minutes and description are overwritten, not merged
-    const body = JSON.parse(opts.body) as { id: string; minutes: number; description: string }[];
+    const body = JSON.parse(opts.body) as {
+      id: string;
+      minutes: number;
+      description: string;
+    }[];
     expect(body[0]?.minutes).toBe(90);
     expect(body[0]?.description).toBe("- task 1\n- task 2");
     expect(entry.minutes).toBe(90);
@@ -602,7 +684,11 @@ describe("updateTimeEntry", () => {
     expect(url).toBe("https://qvik.agileday.io/api/v1/time_entry/employee/id/emp-1");
     expect(opts.method).toBe("PATCH");
 
-    const body = JSON.parse(opts.body) as { id: string; minutes: number; description: string }[];
+    const body = JSON.parse(opts.body) as {
+      id: string;
+      minutes: number;
+      description: string;
+    }[];
     expect(body).toHaveLength(1);
     expect(body[0]?.id).toBe("e1");
     expect(body[0]?.description).toBe("updated");
@@ -879,8 +965,20 @@ describe("batchUpdateEntries", () => {
   it("sends a single PATCH with array body containing multiple entries", async () => {
     mockFetch.mockResolvedValueOnce(
       jsonResponse([
-        { id: "e1", date: "2026-05-05", minutes: 60, status: "SAVED", projectId: "p1" },
-        { id: "e2", date: "2026-05-05", minutes: 45, status: "SAVED", projectId: "p2" },
+        {
+          id: "e1",
+          date: "2026-05-05",
+          minutes: 60,
+          status: "SAVED",
+          projectId: "p1",
+        },
+        {
+          id: "e2",
+          date: "2026-05-05",
+          minutes: 45,
+          status: "SAVED",
+          projectId: "p2",
+        },
       ])
     );
 
@@ -894,7 +992,11 @@ describe("batchUpdateEntries", () => {
     expect(url).toContain("/v1/time_entry/employee/id/emp-1");
     expect(opts.method).toBe("PATCH");
 
-    const body = JSON.parse(opts.body) as { id: string; minutes: number; description: string }[];
+    const body = JSON.parse(opts.body) as {
+      id: string;
+      minutes: number;
+      description: string;
+    }[];
     expect(body).toHaveLength(2);
     expect(body[0]).toEqual({ id: "e1", minutes: 60 });
     expect(body[1]).toEqual({ id: "e2", minutes: 45 });

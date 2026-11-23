@@ -74,7 +74,7 @@ function statusBodies(): unknown[] {
 /** Write calls to the time_entry collection, in order. */
 function writeMethods(): string[] {
   return calls
-    .filter((c) => /\/v1\/time_entry\/employee\/id\/emp-1$/.test(c.path) && c.method !== "GET")
+    .filter((c) => c.path.endsWith("/v1/time_entry/employee/id/emp-1") && c.method !== "GET")
     .map((c) => c.method);
 }
 
@@ -82,8 +82,7 @@ function writeMethods(): string[] {
 function timeline(): string[] {
   return calls.flatMap((c) => {
     if (c.path.includes("/time_card/")) return [(c.body as { status: string }).status];
-    if (/\/v1\/time_entry\/employee\/id\/emp-1$/.test(c.path) && c.method !== "GET")
-      return ["write"];
+    if (c.path.endsWith("/v1/time_entry/employee/id/emp-1") && c.method !== "GET") return ["write"];
     if (c.path.startsWith("/v1/time_entry") && c.method === "DELETE") return ["write"];
     return [];
   });
@@ -129,14 +128,21 @@ beforeEach(() => {
     }
 
     // Day lookup used by createTimeEntry to find a mergeable entry.
-    if (method === "GET" && /\/v1\/time_entry\/employee\/id\/emp-1$/.test(path)) {
+    if (method === "GET" && path.endsWith("/v1/time_entry/employee/id/emp-1")) {
       return Promise.resolve(jsonResponse(dayEntries));
     }
 
     // Writes echo one entry back.
     return Promise.resolve(
       jsonResponse([
-        { id: "e-new", date: DATE, minutes: 60, status: "SAVED", projectId: "p1", taskId: "t1" },
+        {
+          id: "e-new",
+          date: DATE,
+          minutes: 60,
+          status: "SAVED",
+          projectId: "p1",
+          taskId: "t1",
+        },
       ])
     );
   });
@@ -167,9 +173,9 @@ function entry(over: Partial<Parameters<ApiProvider["createTimeEntry"]>[1]> = {}
 describe("auto-submit off", () => {
   it("makes no timecard requests", async () => {
     await provider.createTimeEntry("emp-1", entry());
-    expect(calls.filter((c) => c.path.includes("time_card") || c.path.includes("timesheets"))).toEqual(
-      []
-    );
+    expect(
+      calls.filter((c) => c.path.includes("time_card") || c.path.includes("timesheets"))
+    ).toEqual([]);
   });
 });
 
@@ -187,7 +193,14 @@ describe("auto-submit on", () => {
   it("merges into the existing entry instead of creating a duplicate", async () => {
     // The day already holds this project+task, locked by the submitted week.
     dayEntries = [
-      { id: "e1", date: DATE, minutes: 60, status: "SUBMITTED", projectId: "p1", taskId: "t1" },
+      {
+        id: "e1",
+        date: DATE,
+        minutes: 60,
+        status: "SUBMITTED",
+        projectId: "p1",
+        taskId: "t1",
+      },
     ];
     await provider.createTimeEntry("emp-1", entry({ minutes: 30 }));
     expect(writeMethods()).toEqual(["PATCH"]);
@@ -195,13 +208,17 @@ describe("auto-submit on", () => {
 
   it("still saves the entry when the week has no timecard", async () => {
     cardMissing = true;
-    await expect(provider.createTimeEntry("emp-1", entry())).resolves.toMatchObject({ id: "e-new" });
+    await expect(provider.createTimeEntry("emp-1", entry())).resolves.toMatchObject({
+      id: "e-new",
+    });
     expect(writeMethods()).toEqual(["POST"]);
   });
 
   it("still saves the entry when the status call fails", async () => {
     statusFails = true;
-    await expect(provider.createTimeEntry("emp-1", entry())).resolves.toMatchObject({ id: "e-new" });
+    await expect(provider.createTimeEntry("emp-1", entry())).resolves.toMatchObject({
+      id: "e-new",
+    });
     expect(writeMethods()).toEqual(["POST"]);
   });
 
