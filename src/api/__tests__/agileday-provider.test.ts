@@ -895,6 +895,24 @@ describe("batchUpdateEntries", () => {
   });
 });
 
+describe("getMyProjects", () => {
+  it("picks the opening the employee is contracted on, not the first listed", async () => {
+    const o = (id: string, contracteeId: string) => ({
+      id,
+      projectlikeId: "proj-1",
+      status: "open",
+      startDate: "2000-01-01",
+      endDate: "2999-12-31",
+      contractee: { id: contracteeId },
+    });
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ openings: [o("someone-elses", "emp-2"), o("mine", "emp-1")] })
+    );
+    const [project] = await provider.getMyProjects("emp-1");
+    expect(project?.openingId).toBe("mine");
+  });
+});
+
 describe("getAllocations", () => {
   function opening(overrides: Record<string, unknown>) {
     return {
