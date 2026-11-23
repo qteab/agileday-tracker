@@ -73,9 +73,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [timerLoaded, setTimerLoaded] = useState(false);
   const [unsavedLoaded, setUnsavedLoaded] = useState(false);
   const authStateRef = useRef<AuthState | null>(null);
+  // Read by the provider on every write, so toggling the setting takes effect
+  // without rebuilding the client (which would re-trigger the data reload).
+  const autoSubmitRef = useRef(state.displayPrefs.autoSubmit);
 
   useLayoutEffect(() => {
     authStateRef.current = authState;
+    autoSubmitRef.current = state.displayPrefs.autoSubmit;
   });
 
   // The client is built on connect rather than during render: it reads the
@@ -100,7 +104,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             setApi(null);
             dispatch({ type: "SET_ERROR", payload: "Session expired — please sign in again" });
             clearAuth().catch(() => {});
-          }
+          },
+          undefined,
+          { autoSubmit: () => autoSubmitRef.current }
         )
       );
     });
