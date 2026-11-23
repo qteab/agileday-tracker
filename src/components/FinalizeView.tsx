@@ -61,8 +61,7 @@ function computeWeekStatus(entries: TimeEntry[], autoSubmit: boolean): WeekStatu
   const synced = syncedOnly(entries);
   if (synced.length === 0) return "rounded";
   const allSubmitted = synced.every((e) => e.status === "SUBMITTED" || e.status === "APPROVED");
-  // With auto-submit on, a submitted week is still the user's to round.
-  if (allSubmitted && !autoSubmit) return "submitted";
+  if (allSubmitted) return "submitted";
   const plan = buildRoundingPlan(synced, { includeSubmitted: autoSubmit });
   const needsRounding = plan.some((p) => p.difference > 0);
   return needsRounding ? "active" : "rounded";
@@ -478,7 +477,9 @@ function WeekDetail({
   );
   const groupsToRound = plan.filter((p) => p.difference !== 0);
   const adjustedEntries = plan.flatMap((p) => p.entries.filter((e) => e.isAdjusted));
-  const canRound = groupsToRound.length > 0 && week.status !== "submitted";
+  // A submitted week is still roundable while auto-submit is on: it submits
+  // every week the app writes to, so the badge alone must not disable this.
+  const canRound = groupsToRound.length > 0 && (autoSubmit || week.status !== "submitted");
 
   const handleOverride = useCallback((key: string, value: number) => {
     setOverrides((prev) => {
@@ -516,6 +517,8 @@ function WeekDetail({
       const updates = adjustedEntries.map((e) => ({
         id: e.id,
         minutes: e.adjustedMinutes,
+        // Carried so auto-submit can resolve which weeks this round touched.
+        date: e.date,
       }));
       await api.batchUpdateEntries(state.employee.id, updates);
       posthogClient?.capture("timesheet_rounded", {
@@ -647,7 +650,7 @@ function WeekDetail({
             disabled={!canRound}
             className="w-full rounded-lg bg-primary py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {week.status === "submitted"
+            {week.status === "submitted" && !autoSubmit
               ? "Already submitted"
               : groupsToRound.length === 0
                 ? "All entries rounded"

@@ -233,12 +233,25 @@ export function createAgileDayProvider(
     }
   }
 
+  /** Statuses whose presence in a week means we must not move its timecard. */
+  async function weekHasApprovedEntry(employeeId: string, weekStart: string): Promise<boolean> {
+    type RawStatus = { status?: string };
+    const entries = await apiFetch<RawStatus[]>(
+      `/v1/time_entry/employee/id/${employeeId}?startDate=${weekStart}&endDate=${addDays(weekStart, 7)}`
+    ).catch(() => [] as RawStatus[]);
+    return entries.some((e) => e.status === "APPROVED");
+  }
+
   /**
    * Bracket a write with timecard status changes when auto-submit is on:
    * unsubmit each affected week so the write sees editable entries, run the
-   * write untouched, then submit each week again. Status changes are
+   * write untouched, then submit each week again.
+   *
+   * Two rules keep this from costing the user anything. Status changes are
    * best-effort — a week with no timecard, or one the API refuses to move,
-   * must never cost the user their time entry.
+   * must never cost a time entry. And a week holding an APPROVED entry is left
+   * alone entirely: moving its timecard cascades onto every entry in the week,
+   * which would revert a manager's decision.
    */
   async function withAutoSubmit<T>(
     employeeId: string | null,
@@ -255,24 +268,33 @@ export function createAgileDayProvider(
     }
     if (weeks.size === 0) return write();
 
+    // One read per distinct week, reused by both directions of the bracket.
+    const movable: Array<{ weekStart: string; month: string }> = [];
+    for (const week of weeks.values()) {
+      if (!(await weekHasApprovedEntry(employeeId, week.weekStart))) movable.push(week);
+    }
+    if (movable.length === 0) return write();
+
     const moveAll = async (status: TimecardStatus): Promise<void> => {
-      for (const { weekStart, month } of weeks.values()) {
+      for (const { weekStart, month } of movable) {
         try {
           await setTimesheetStatus(employeeId, weekStart, month, status);
-        } catch (err) {
-          posthogLogger?.warn(
-            `auto-submit: could not set week of ${weekStart} to ${status}: ${
-              err instanceof Error ? err.message : String(err)
-            }`
-          );
+        } catch {
+          posthogLogger?.warn("agileday_auto_submit_status_failed", {
+            target_status: status,
+          });
         }
       }
     };
 
     await moveAll("SAVED");
-    const result = await write();
-    await moveAll("SUBMITTED");
-    return result;
+    try {
+      return await write();
+    } finally {
+      // Resubmit even when the write threw, so a failed save never leaves the
+      // week sitting unsubmitted with nothing to tell the user.
+      await moveAll("SUBMITTED");
+    }
   }
 
   const base: ApiProvider = {
@@ -541,6 +563,11 @@ export function createAgileDayProvider(
       // miss an entry left untouched since before its own date (and would miss
       // every future-dated entry outright), causing a duplicate POST.
       const EDITABLE_STATUSES = new Set(["NEW", "SAVED", "CHANGE_REQUESTED"]);
+      // While auto-submit is on the week is normally unsubmitted around this
+      // write, but if that failed — or another write resubmitted in between —
+      // the entry is still ours to merge into. Without this a refused status
+      // call silently POSTs a duplicate and inflates the day's hours.
+      if (opts?.autoSubmit?.()) EDITABLE_STATUSES.add("SUBMITTED");
       const sameDay = await apiFetch<RawEntry[]>(
         `/v1/time_entry/employee/id/${employeeId}?startDate=${entry.date}&endDate=${addDays(entry.date, 1)}`
       ).catch(() => [] as RawEntry[]);

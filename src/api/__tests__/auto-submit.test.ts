@@ -62,6 +62,10 @@ let calls: Call[];
 let cardStatuses: Record<string, string>;
 /** Entries the fake API reports for the looked-up day. */
 let dayEntries: Array<Record<string, unknown>>;
+/** Entries the fake API reports for the whole week (the APPROVED guard's read). */
+let weekEntries: Array<Record<string, unknown>>;
+/** Make the entry write itself fail. */
+let writeFails: boolean;
 /** Make the timecard lookup find nothing, as for a week with no timesheet. */
 let cardMissing: boolean;
 /** Make the status POST fail, as a frozen or approved timecard would. */
@@ -96,6 +100,8 @@ beforeEach(() => {
   cardMissing = false;
   statusFails = false;
   dayEntries = [];
+  weekEntries = [];
+  writeFails = false;
 
   mockFetch.mockImplementation((rawUrl, init) => {
     const url = new URL(rawUrl as string);
@@ -127,9 +133,15 @@ beforeEach(() => {
       return Promise.resolve(jsonResponse({}));
     }
 
-    // Day lookup used by createTimeEntry to find a mergeable entry.
+    // Reads against the entry collection: the whole-week read the APPROVED
+    // guard does, and the single-day read createTimeEntry does to find a match.
     if (method === "GET" && path.endsWith("/v1/time_entry/employee/id/emp-1")) {
-      return Promise.resolve(jsonResponse(dayEntries));
+      const from = url.searchParams.get("startDate");
+      return Promise.resolve(jsonResponse(from === WEEK ? weekEntries : dayEntries));
+    }
+
+    if (writeFails && method !== "GET") {
+      return Promise.resolve(jsonResponse({ error: "boom" }, 500));
     }
 
     // Writes echo one entry back.
@@ -248,5 +260,47 @@ describe("auto-submit on", () => {
   it("submits the week of a delete when the date is given", async () => {
     await provider.deleteTimeEntry(["e1"], [DATE]);
     expect(timeline()).toEqual(["SAVED", "write", "SUBMITTED"]);
+  });
+});
+
+describe("auto-submit resilience", () => {
+  beforeEach(() => {
+    enabled = true;
+  });
+
+  it("merges into the existing entry even when the unsubmit fails", async () => {
+    // The week stays SUBMITTED because the status call is refused; the write
+    // must still find its entry rather than POST a duplicate alongside it.
+    statusFails = true;
+    dayEntries = [
+      { id: "e1", date: DATE, minutes: 60, status: "SUBMITTED", projectId: "p1", taskId: "t1" },
+    ];
+    await provider.createTimeEntry("emp-1", entry({ minutes: 30 }));
+    expect(writeMethods()).toEqual(["PATCH"]);
+  });
+
+  it("resubmits the week even when the write fails", async () => {
+    writeFails = true;
+    await expect(provider.createTimeEntry("emp-1", entry())).rejects.toThrow(/API error 500/);
+    expect(statusBodies()).toEqual([{ status: "SAVED" }, { status: "SUBMITTED" }]);
+  });
+
+  it("leaves a week holding an APPROVED entry untouched", async () => {
+    // Moving the timecard would cascade onto the approved entry and revert a
+    // manager's decision, which the settings copy promises it never does.
+    weekEntries = [
+      { id: "vac", date: "2026-05-06", minutes: 480, status: "APPROVED", projectId: "absence" },
+    ];
+    await provider.createTimeEntry("emp-1", entry());
+    expect(statusBodies()).toEqual([]);
+    expect(writeMethods()).toEqual(["POST"]);
+  });
+
+  it("still brackets a week whose entries are merely submitted", async () => {
+    weekEntries = [
+      { id: "e1", date: DATE, minutes: 60, status: "SUBMITTED", projectId: "p1", taskId: "t1" },
+    ];
+    await provider.createTimeEntry("emp-1", entry());
+    expect(statusBodies()).toEqual([{ status: "SAVED" }, { status: "SUBMITTED" }]);
   });
 });

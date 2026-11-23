@@ -468,6 +468,7 @@ export function ProjectCard({
           projectId: entry.projectId,
           openingId: entry.openingId,
           taskId: newTaskId,
+          date: entry.date,
         });
         dispatch({
           type: "UPDATE_ENTRY",
@@ -542,6 +543,7 @@ export function ProjectCard({
         projectId: entry.projectId,
         openingId: entry.openingId,
         taskId: entry.taskId,
+        date: entry.date,
         minutes: entry.minutes,
         description: entry.description,
       });
