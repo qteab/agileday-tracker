@@ -656,10 +656,26 @@ export function createAgileDayProvider(
           projectlikeName?: string;
           projectlikeType?: ProjectType | null;
           status: string;
+          startDate?: string | null;
+          endDate?: string | null;
+          contractee?: { id: string } | null;
         }>;
-      }>(`/v2/opening?limit=100&filter=${encodeURIComponent(filter)}`);
+        // Newest first, so the 100 cap drops old openings rather than current ones.
+      }>(
+        `/v2/opening?limit=100&sortBy=createdAt&orderBy=desc&filter=${encodeURIComponent(filter)}`
+      );
 
-      const byId = new Map<string, Omit<MyProjectInfo, "id">>();
+      // A project can have several openings (renewals, ones we were only a
+      // candidate for). Hours must go to the one we are contracted on, else
+      // AgileDay rejects them as "unplanned" (403).
+      // ponytail: one opening per project, chosen for today — back-dated entries
+      // spanning a renewal would need a per-date lookup.
+      const today = new Date().toLocaleDateString("sv-SE");
+      const rank = (o: (typeof data.openings)[number]) =>
+        (o.contractee?.id === employeeId ? 2 : 0) +
+        (o.startDate && o.endDate && o.startDate <= today && today <= o.endDate ? 1 : 0);
+
+      const byId = new Map<string, Omit<MyProjectInfo, "id"> & { rank: number }>();
       for (const o of data.openings) {
         const prev = byId.get(o.projectlikeId);
         if (!prev) {
@@ -667,13 +683,18 @@ export function createAgileDayProvider(
             ...(o.projectlikeName !== undefined ? { name: o.projectlikeName } : {}),
             ...(o.projectlikeType ? { projectType: o.projectlikeType } : {}),
             openingId: o.id,
+            rank: rank(o),
           });
-        } else if (!prev.projectType && o.projectlikeType) {
-          // Prefer non-null type if multiple openings exist for the same project
-          prev.projectType = o.projectlikeType;
+          continue;
+        }
+        // Prefer non-null type if multiple openings exist for the same project
+        if (!prev.projectType && o.projectlikeType) prev.projectType = o.projectlikeType;
+        if (rank(o) > prev.rank) {
+          prev.openingId = o.id;
+          prev.rank = rank(o);
         }
       }
-      return [...byId.entries()].map(([id, info]) => ({ id, ...info }));
+      return [...byId.entries()].map(([id, { rank: _rank, ...info }]) => ({ id, ...info }));
     },
 
     async getHolidays(countryCode: string, startDate: string, endDate: string): Promise<Holiday[]> {

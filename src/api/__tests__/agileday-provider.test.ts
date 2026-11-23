@@ -895,6 +895,85 @@ describe("batchUpdateEntries", () => {
   });
 });
 
+describe("getMyProjects", () => {
+  it("picks the opening the employee is contracted on, not the first listed", async () => {
+    const o = (id: string, contracteeId: string) => ({
+      id,
+      projectlikeId: "proj-1",
+      status: "open",
+      startDate: "2000-01-01",
+      endDate: "2999-12-31",
+      contractee: { id: contracteeId },
+    });
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ openings: [o("someone-elses", "emp-2"), o("mine", "emp-1")] })
+    );
+    const [project] = await provider.getMyProjects("emp-1");
+    expect(project?.openingId).toBe("mine");
+  });
+
+  it("picks the opening covering today over an expired one, in either order", async () => {
+    const o = (id: string, startDate: string, endDate: string) => ({
+      id,
+      projectlikeId: "proj-1",
+      status: "open",
+      startDate,
+      endDate,
+      contractee: { id: "emp-1" },
+    });
+    const expired = o("expired", "2000-01-01", "2000-12-31");
+    const current = o("current", "2001-01-01", "2999-12-31");
+    for (const openings of [
+      [expired, current],
+      [current, expired],
+    ]) {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ openings }));
+      const [project] = await provider.getMyProjects("emp-1");
+      expect(project?.openingId).toBe("current");
+    }
+  });
+
+  it("still returns an opening when the employee is only a candidate", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({
+        openings: [{ id: "cand", projectlikeId: "proj-1", status: "open", contractee: null }],
+      })
+    );
+    const [project] = await provider.getMyProjects("emp-1");
+    expect(project?.openingId).toBe("cand");
+  });
+
+  it("asks for newest openings first so the page cap drops old ones", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ openings: [] }));
+    await provider.getMyProjects("emp-1");
+    expect(fetchCall(0)[0]).toContain("sortBy=createdAt&orderBy=desc");
+  });
+});
+
+describe("createTimeEntry opening", () => {
+  it("sends the openingId when creating a new entry", async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse([])) // same-day lookup: nothing to PATCH
+      .mockResolvedValueOnce(
+        jsonResponse([
+          { id: "e1", date: "2026-04-24", minutes: 30, status: "SAVED", projectId: "p1" },
+        ])
+      );
+    await provider.createTimeEntry("emp-1", {
+      description: "",
+      projectId: "p1",
+      openingId: "op-1",
+      date: "2026-04-24",
+      startTime: "2026-04-24T09:00:00Z",
+      minutes: 30,
+      status: "SAVED",
+    });
+    const [, opts] = fetchCall(1);
+    expect(opts.method).toBe("POST");
+    expect((JSON.parse(opts.body) as { openingId?: string }[])[0]?.openingId).toBe("op-1");
+  });
+});
+
 describe("getAllocations", () => {
   function opening(overrides: Record<string, unknown>) {
     return {
