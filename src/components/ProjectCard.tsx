@@ -6,6 +6,7 @@ import { useNow } from "../hooks/useNow";
 import { useTimer, formatTime, formatMinutes } from "../hooks/useTimer";
 import { posthogClient } from "../posthog";
 import { useApp, useApi } from "../store/context";
+import { isEntryLocked } from "../utils/entry-lock";
 import { splitDescriptions, joinDescriptions } from "../utils/descriptions";
 import { Collapsible } from "./Collapsible";
 import {
@@ -151,7 +152,7 @@ export function ProjectCard({
 
   const project = state.projects.find((p) => p.id === entry.projectId);
   const taskName = entry.taskId ? state.taskNamesById[entry.taskId] : undefined;
-  const isSubmitted = entry.status === "SUBMITTED" || entry.status === "APPROVED";
+  const isSubmitted = isEntryLocked(entry, state.displayPrefs.autoSubmit);
   const isEditable = !isSubmitted && entry.syncStatus !== "pending";
 
   const isThisRunning =

@@ -204,6 +204,27 @@ describe("buildRoundingPlan", () => {
     expect(submitted?.adjustedMinutes).toBe(30); // unchanged
   });
 
+  it("counts and adjusts SUBMITTED entries when includeSubmitted is set", () => {
+    const entries = [
+      makeEntry({ id: "e1", projectId: "p1", date: "2026-05-05", minutes: 22, status: "SUBMITTED" }),
+    ];
+    const plan = buildRoundingPlan(entries, { includeSubmitted: true });
+
+    expect(plan[0]?.totalMinutes).toBe(22);
+    expect(plan[0]?.roundedTotal).toBe(30);
+    expect(plan[0]?.entries.find((e) => e.id === "e1")?.isAdjusted).toBe(true);
+  });
+
+  it("never adjusts APPROVED entries even when includeSubmitted is set", () => {
+    const entries = [
+      makeEntry({ id: "e1", projectId: "p1", date: "2026-05-05", minutes: 22, status: "APPROVED" }),
+    ];
+    const plan = buildRoundingPlan(entries, { includeSubmitted: true });
+
+    expect(plan[0]?.totalMinutes).toBe(0);
+    expect(plan[0]?.entries.find((e) => e.id === "e1")?.isAdjusted).toBe(false);
+  });
+
   it("excludes APPROVED entries from the total and never adjusts them", () => {
     const entries = [
       makeEntry({ id: "e1", projectId: "p1", date: "2026-05-05", minutes: 22, status: "APPROVED" }),

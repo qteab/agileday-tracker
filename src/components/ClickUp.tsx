@@ -16,6 +16,7 @@ import type { TimeEntry } from "../api/types";
 import { useNow } from "../hooks/useNow";
 import { useAddTime, useTimer, formatTime, formatMinutes } from "../hooks/useTimer";
 import { useApp, useApi } from "../store/context";
+import { isEntryLocked } from "../utils/entry-lock";
 import { Collapsible } from "./Collapsible";
 import { isLocalOnlyEntry } from "./entry-edit";
 import { Modal } from "./Modal";
@@ -260,7 +261,7 @@ export function ClickUpCard({
 
   const project = state.projects.find((p) => p.id === entry.projectId);
   const taskName = entry.taskId ? state.taskNamesById[entry.taskId] : undefined;
-  const isSubmitted = entry.status === "SUBMITTED" || entry.status === "APPROVED";
+  const isSubmitted = isEntryLocked(entry, state.displayPrefs.autoSubmit);
   const isEditable = !isSubmitted && entry.syncStatus !== "pending";
   const isThisRunning =
     isRunning &&
@@ -718,12 +719,11 @@ export function ClickUpBanner() {
       state.entries.find(
         (e) =>
           e.date === date &&
-          e.status !== "SUBMITTED" &&
-          e.status !== "APPROVED" &&
+          !isEntryLocked(e, state.displayPrefs.autoSubmit) &&
           e.syncStatus !== "pending" &&
           clickupTasksIn(e.description).some((t) => t.id === taskId)
       ),
-    [state.entries]
+    [state.entries, state.displayPrefs.autoSubmit]
   );
 
   // Auto-add one linked group at a time; saves to one entry must not overlap.
