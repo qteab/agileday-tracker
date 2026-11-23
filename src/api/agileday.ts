@@ -4,7 +4,7 @@ import { addDays, monthsInRange } from "../utils/date-range";
 import type { AuthConfig, AuthState } from "./auth";
 import { isTokenExpired, refreshAuthState } from "./auth";
 import { createGlobalDefaultTaskLoader } from "./global-tasks";
-import type { ApiProvider, MyProjectInfo } from "./provider";
+import type { ApiProvider, MyProjectInfo, TimecardStatus } from "./provider";
 import type { Allocation, Employee, Holiday, Project, ProjectType, Task, TimeEntry } from "./types";
 
 /**
@@ -165,6 +165,45 @@ export function createAgileDayProvider(
   // the rest of the session. Resolves to [] on failure so a task-less project
   // degrades to the app's previous behaviour rather than breaking.
   const loadGlobalDefaultTasks = createGlobalDefaultTaskLoader((path) => apiFetch(path));
+
+  type Timecard = { id: string; employeeId: string; week: string; month: string; status: string };
+
+  /** The employee's timecard for one week, or a throw naming the week. */
+  async function findTimecard(
+    employeeId: string,
+    weekStart: string,
+    month: string
+  ): Promise<Timecard> {
+    const { timecards } = await apiFetch<{ timecards: Timecard[] }>(
+      `/v1/timesheets/by-employee/month/${month}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ text: "", filter: { id: { in: [employeeId] } } }),
+      }
+    );
+    const card = timecards.find(
+      (t) =>
+        t.employeeId === employeeId &&
+        t.week.slice(0, 10) === weekStart &&
+        t.month.slice(0, 10) === month
+    );
+    if (!card) throw new Error(`No AgileDay timesheet found for week of ${weekStart}`);
+    return card;
+  }
+
+  async function setTimesheetStatus(
+    employeeId: string,
+    weekStart: string,
+    month: string,
+    status: TimecardStatus
+  ): Promise<void> {
+    const card = await findTimecard(employeeId, weekStart, month);
+    if (card.status === status) return;
+    await apiFetch(`/v1/time_entry/employee/id/${employeeId}/time_card/id/${card.id}`, {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    });
+  }
 
   return {
     async getCurrentEmployee(): Promise<Employee> {
@@ -589,35 +628,11 @@ export function createAgileDayProvider(
       }));
     },
 
-    async submitTimesheet(employeeId: string, weekStart: string, month: string): Promise<void> {
-      type Timecard = {
-        id: string;
-        employeeId: string;
-        week: string;
-        month: string;
-        status: string;
-      };
-      const { timecards } = await apiFetch<{ timecards: Timecard[] }>(
-        `/v1/timesheets/by-employee/month/${month}`,
-        {
-          method: "POST",
-          body: JSON.stringify({ text: "", filter: { id: { in: [employeeId] } } }),
-        }
-      );
-      const card = timecards.find(
-        (t) =>
-          t.employeeId === employeeId &&
-          t.week.slice(0, 10) === weekStart &&
-          t.month.slice(0, 10) === month
-      );
-      if (!card) throw new Error(`No AgileDay timesheet found for week of ${weekStart}`);
-      if (card.status === "SUBMITTED") return;
-
-      await apiFetch(`/v1/time_entry/employee/id/${employeeId}/time_card/id/${card.id}`, {
-        method: "POST",
-        body: JSON.stringify({ status: "SUBMITTED" }),
-      });
+    submitTimesheet(employeeId: string, weekStart: string, month: string): Promise<void> {
+      return setTimesheetStatus(employeeId, weekStart, month, "SUBMITTED");
     },
+
+    setTimesheetStatus,
 
     async getAllocations(employeeId: string): Promise<Allocation[]> {
       const filter = JSON.stringify({ candidate: { in: [employeeId] } });

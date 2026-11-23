@@ -1,5 +1,5 @@
 import { getTimesheetPeriod } from "../utils/week";
-import type { ApiProvider } from "./provider";
+import type { ApiProvider, TimecardStatus } from "./provider";
 import type { Allocation, Employee, Project, Task, TimeEntry } from "./types";
 
 export const MOCK_PROJECTS: Project[] = [
@@ -103,6 +103,21 @@ export function createMockProvider(
   /** Tenant-level global defaults, appended to every project's task list. */
   globalDefaultTasks: Task[] = []
 ): ApiProvider {
+  /** Set every entry in one week+month to a status, as the real timecard call does. */
+  async function setStatus(
+    _employeeId: string,
+    weekStart: string,
+    month: string,
+    status: TimecardStatus
+  ): Promise<void> {
+    const entries = await store.getEntries();
+    for (const e of entries) {
+      const p = getTimesheetPeriod(e.date);
+      if (p.weekStart === weekStart && p.month === month) e.status = status;
+    }
+    await store.setEntries(entries);
+  }
+
   return {
     getCurrentEmployee() {
       return Promise.resolve(employee);
@@ -191,14 +206,11 @@ export function createMockProvider(
       return results;
     },
 
-    async submitTimesheet(_employeeId: string, weekStart: string, month: string) {
-      const entries = await store.getEntries();
-      for (const e of entries) {
-        const p = getTimesheetPeriod(e.date);
-        if (p.weekStart === weekStart && p.month === month) e.status = "SUBMITTED";
-      }
-      await store.setEntries(entries);
+    submitTimesheet(employeeId: string, weekStart: string, month: string) {
+      return setStatus(employeeId, weekStart, month, "SUBMITTED");
     },
+
+    setTimesheetStatus: setStatus,
 
     getAllocations(_employeeId: string) {
       return Promise.resolve(allocations);

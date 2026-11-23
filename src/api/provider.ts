@@ -1,5 +1,8 @@
 import type { Allocation, Employee, Holiday, Project, ProjectType, Task, TimeEntry } from "./types";
 
+/** The two timecard statuses this app sets. */
+export type TimecardStatus = "SUBMITTED" | "SAVED";
+
 export interface MyProjectInfo {
   id: string;
   /** Name from the opening (projectlikeName). Used to surface allocated
@@ -28,6 +31,13 @@ export interface ApiProvider {
   ): Promise<TimeEntry[]>;
   /** Submit the timecard for one week of one month (weekStart = Monday, month = 1st). */
   submitTimesheet(employeeId: string, weekStart: string, month: string): Promise<void>;
+  /** Move one week's timecard to an explicit status. Submitting is the common case. */
+  setTimesheetStatus(
+    employeeId: string,
+    weekStart: string,
+    month: string,
+    status: TimecardStatus
+  ): Promise<void>;
   getAllocations(employeeId: string): Promise<Allocation[]>;
   getMyProjects(employeeId: string): Promise<MyProjectInfo[]>;
   getHolidays(countryCode: string, startDate: string, endDate: string): Promise<Holiday[]>;

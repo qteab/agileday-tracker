@@ -833,6 +833,46 @@ describe("submitTimesheet", () => {
   });
 });
 
+// --- setTimesheetStatus ---
+
+describe("setTimesheetStatus", () => {
+  const cards = {
+    timecards: [
+      {
+        id: "tc-oct",
+        employeeId: "emp-1",
+        week: "2026-09-28",
+        month: "2026-10-01",
+        status: "SUBMITTED",
+      },
+    ],
+  };
+
+  it("sets a submitted card back to SAVED", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(cards)).mockResolvedValueOnce(jsonResponse({}));
+
+    await provider.setTimesheetStatus("emp-1", "2026-09-28", "2026-10-01", "SAVED");
+
+    const [url, opts] = fetchCall(1);
+    expect(url).toContain("/v1/time_entry/employee/id/emp-1/time_card/id/tc-oct");
+    expect(opts.method).toBe("POST");
+    expect(JSON.parse(opts.body)).toEqual({ status: "SAVED" });
+  });
+
+  it("does nothing when the card is already in the target status", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(cards));
+    await provider.setTimesheetStatus("emp-1", "2026-09-28", "2026-10-01", "SUBMITTED");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws when no timecard matches the week", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(cards));
+    await expect(
+      provider.setTimesheetStatus("emp-1", "2026-10-05", "2026-10-01", "SUBMITTED")
+    ).rejects.toThrow(/No AgileDay timesheet/);
+  });
+});
+
 // --- batchUpdateEntries ---
 
 describe("batchUpdateEntries", () => {
