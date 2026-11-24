@@ -37,7 +37,9 @@ describe("distinctWeeks", () => {
   });
 });
 
-function fakeTimecards(options: { approved?: boolean; statusFails?: boolean } = {}) {
+function fakeTimecards(
+  options: { approved?: boolean; statusFails?: boolean; approvedCheckFails?: boolean } = {}
+) {
   const setTimesheetStatus = vi.fn<TimecardApi["setTimesheetStatus"]>();
   if (options.statusFails) {
     setTimesheetStatus.mockRejectedValue(new Error("no timecard"));
@@ -45,9 +47,12 @@ function fakeTimecards(options: { approved?: boolean; statusFails?: boolean } = 
     setTimesheetStatus.mockResolvedValue(undefined);
   }
 
-  const weekHasApprovedEntry = vi
-    .fn<TimecardApi["weekHasApprovedEntry"]>()
-    .mockResolvedValue(options.approved ?? false);
+  const weekHasApprovedEntry = vi.fn<TimecardApi["weekHasApprovedEntry"]>();
+  if (options.approvedCheckFails) {
+    weekHasApprovedEntry.mockRejectedValue(new Error("read failed"));
+  } else {
+    weekHasApprovedEntry.mockResolvedValue(options.approved ?? false);
+  }
 
   const api: TimecardApi = { setTimesheetStatus, weekHasApprovedEntry };
   return { api, setTimesheetStatus, weekHasApprovedEntry };
@@ -99,6 +104,14 @@ describe("createAutoSubmitBracket", () => {
 
   it("leaves a week holding an approved entry alone", async () => {
     const { api, setTimesheetStatus } = fakeTimecards({ approved: true });
+    const bracket = createAutoSubmitBracket(api, () => true);
+
+    await expect(bracket("emp-1", ["2026-11-23"], wrote)).resolves.toBe("written");
+    expect(setTimesheetStatus).not.toHaveBeenCalled();
+  });
+
+  it("leaves a week alone when the approved check fails", async () => {
+    const { api, setTimesheetStatus } = fakeTimecards({ approvedCheckFails: true });
     const bracket = createAutoSubmitBracket(api, () => true);
 
     await expect(bracket("emp-1", ["2026-11-23"], wrote)).resolves.toBe("written");

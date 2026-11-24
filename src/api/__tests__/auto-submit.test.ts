@@ -66,6 +66,7 @@ let dayEntries: Array<Record<string, unknown>>;
 let weekEntries: Array<Record<string, unknown>>;
 /** Make the entry write itself fail. */
 let writeFails: boolean;
+let weekReadFails: boolean;
 /** Make the timecard lookup find nothing, as for a week with no timesheet. */
 let cardMissing: boolean;
 /** Make the status POST fail, as a frozen or approved timecard would. */
@@ -102,6 +103,7 @@ beforeEach(() => {
   dayEntries = [];
   weekEntries = [];
   writeFails = false;
+  weekReadFails = false;
 
   mockFetch.mockImplementation((rawUrl, init) => {
     const url = new URL(rawUrl as string);
@@ -137,6 +139,9 @@ beforeEach(() => {
     // guard does, and the single-day read createTimeEntry does to find a match.
     if (method === "GET" && path.endsWith("/v1/time_entry/employee/id/emp-1")) {
       const from = url.searchParams.get("startDate");
+      if (from === WEEK && weekReadFails) {
+        return Promise.resolve(jsonResponse({ error: "unavailable" }, 503));
+      }
       return Promise.resolve(jsonResponse(from === WEEK ? weekEntries : dayEntries));
     }
 
@@ -291,6 +296,15 @@ describe("auto-submit resilience", () => {
     weekEntries = [
       { id: "vac", date: "2026-05-06", minutes: 480, status: "APPROVED", projectId: "absence" },
     ];
+    await provider.createTimeEntry("emp-1", entry());
+    expect(statusBodies()).toEqual([]);
+    expect(writeMethods()).toEqual(["POST"]);
+  });
+
+  it("leaves the week untouched when the APPROVED check cannot read it", async () => {
+    // Failing open here would POST SAVED onto a week that may hold an approved
+    // entry, so an unreadable week is treated as off-limits.
+    weekReadFails = true;
     await provider.createTimeEntry("emp-1", entry());
     expect(statusBodies()).toEqual([]);
     expect(writeMethods()).toEqual(["POST"]);

@@ -11,7 +11,9 @@ import { posthogLogger } from "../posthog";
 import { addDays } from "../utils/date-range";
 import { getTimesheetPeriod } from "../utils/week";
 import type { ApiFetch } from "./agileday-http";
-import type { TimecardStatus } from "./provider";
+
+/** The two timecard statuses this app sets. */
+export type TimecardStatus = "SUBMITTED" | "SAVED";
 
 interface Timecard {
   id: string;
@@ -34,7 +36,7 @@ export interface TimecardApi {
     month: string,
     status: TimecardStatus
   ): Promise<void>;
-  /** Whether a manager has already approved any entry in the week. */
+  /** Whether a manager has approved any entry in the week. Rejects if the week can't be read. */
   weekHasApprovedEntry(employeeId: string, weekStart: string): Promise<boolean>;
 }
 
@@ -76,7 +78,7 @@ export function createTimecardApi(apiFetch: ApiFetch): TimecardApi {
       type RawStatus = { status?: string };
       const entries = await apiFetch<RawStatus[]>(
         `/v1/time_entry/employee/id/${employeeId}?startDate=${weekStart}&endDate=${addDays(weekStart, 7)}`
-      ).catch(() => [] as RawStatus[]);
+      );
       return entries.some((e) => e.status === "APPROVED");
     },
   };
@@ -91,6 +93,16 @@ export function distinctWeeks(dates: Array<string | undefined>): Week[] {
     byKey.set(`${weekStart}|${month}`, { weekStart, month });
   }
   return [...byKey.values()];
+}
+
+/** Fails closed: a week we can't read might hold an approved entry, so it is not moved. */
+async function isMovable(timecards: TimecardApi, employeeId: string, week: Week): Promise<boolean> {
+  try {
+    return !(await timecards.weekHasApprovedEntry(employeeId, week.weekStart));
+  } catch {
+    posthogLogger?.warn("agileday_auto_submit_approved_check_failed");
+    return false;
+  }
 }
 
 /** Runs a write with each affected week unsubmitted around it. */
@@ -108,7 +120,8 @@ export type AutoSubmitBracket = <T>(
  * Two rules keep this from costing the user anything. Status changes are
  * best-effort — a week with no timecard, or one the API refuses to move, must
  * never cost a time entry. And a week holding an APPROVED entry is left alone
- * entirely, because the cascade would revert a manager's decision.
+ * entirely, because the cascade would revert a manager's decision; so is a
+ * week whose entries can't be read to check.
  */
 export function createAutoSubmitBracket(
   timecards: TimecardApi,
@@ -126,7 +139,7 @@ export function createAutoSubmitBracket(
 
     const movable: Week[] = [];
     for (const week of weeks) {
-      if (!(await timecards.weekHasApprovedEntry(employeeId, week.weekStart))) movable.push(week);
+      if (await isMovable(timecards, employeeId, week)) movable.push(week);
     }
     if (movable.length === 0) return write();
 
