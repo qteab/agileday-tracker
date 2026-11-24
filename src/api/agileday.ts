@@ -265,10 +265,6 @@ export function createAgileDayProvider(
       return timecards.setTimesheetStatus(employeeId, weekStart, month, "SUBMITTED");
     },
 
-    setTimesheetStatus(employeeId, weekStart, month, status): Promise<void> {
-      return timecards.setTimesheetStatus(employeeId, weekStart, month, status);
-    },
-
     async getAllocations(employeeId: string): Promise<Allocation[]> {
       const data = await apiFetch<{
         openings: Array<{
