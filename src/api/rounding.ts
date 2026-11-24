@@ -1,3 +1,4 @@
+import { isEntryLocked } from "../utils/entry-lock";
 import type { TimeEntry, TimeEntryStatus } from "./types";
 
 /** Round minutes up to the nearest 15-minute increment. 0 stays 0. */
@@ -41,9 +42,16 @@ export interface DayProjectRounding {
  *
  * For each project+day: sum all SAVED entries, ceil to 15, then add the
  * difference to one entry (the largest SAVED entry absorbs the adjustment).
- * SUBMITTED/APPROVED entries are included for display but never modified.
+ * APPROVED entries are included for display but never modified, and so are
+ * SUBMITTED ones unless `includeSubmitted` is set — which it is while
+ * auto-submit is on, since then every week the app wrote to is already
+ * submitted and rounding would otherwise have nothing left to adjust.
  */
-export function buildRoundingPlan(entries: TimeEntry[]): DayProjectRounding[] {
+export function buildRoundingPlan(
+  entries: TimeEntry[],
+  opts?: { includeSubmitted?: boolean }
+): DayProjectRounding[] {
+  const autoSubmit = opts?.includeSubmitted ?? false;
   // Group by project + day
   const byKey = new Map<string, TimeEntry[]>();
   for (const e of entries) {
@@ -56,12 +64,8 @@ export function buildRoundingPlan(entries: TimeEntry[]): DayProjectRounding[] {
   const result: DayProjectRounding[] = [];
 
   for (const [, groupEntries] of byKey) {
-    const savedEntries = groupEntries.filter(
-      (e) => e.status !== "SUBMITTED" && e.status !== "APPROVED"
-    );
-    const lockedEntries = groupEntries.filter(
-      (e) => e.status === "SUBMITTED" || e.status === "APPROVED"
-    );
+    const savedEntries = groupEntries.filter((e) => !isEntryLocked(e, autoSubmit));
+    const lockedEntries = groupEntries.filter((e) => isEntryLocked(e, autoSubmit));
 
     const savedTotal = savedEntries.reduce((s, e) => s + e.minutes, 0);
     const roundedTotal = ceilTo15(savedTotal);
@@ -126,8 +130,10 @@ export function buildRoundingPlan(entries: TimeEntry[]): DayProjectRounding[] {
  */
 export function applyOverrides(
   plan: DayProjectRounding[],
-  overrides: Map<string, number>
+  overrides: Map<string, number>,
+  opts?: { includeSubmitted?: boolean }
 ): DayProjectRounding[] {
+  const autoSubmit = opts?.includeSubmitted ?? false;
   if (overrides.size === 0) return plan;
 
   return plan.map((group) => {
@@ -142,9 +148,7 @@ export function applyOverrides(
     const difference = clampedTotal - group.totalMinutes;
 
     // Find largest SAVED entry to absorb the difference
-    const savedEntries = group.entries.filter(
-      (e) => e.status !== "SUBMITTED" && e.status !== "APPROVED"
-    );
+    const savedEntries = group.entries.filter((e) => !isEntryLocked(e, autoSubmit));
     const largestSaved =
       savedEntries.length > 0
         ? savedEntries.reduce((best, e) => (e.currentMinutes > best.currentMinutes ? e : best))

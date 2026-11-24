@@ -7,6 +7,7 @@ import { useTimer, formatTime, formatMinutes } from "../hooks/useTimer";
 import { posthogClient } from "../posthog";
 import { useApp, useApi } from "../store/context";
 import { splitDescriptions, joinDescriptions } from "../utils/descriptions";
+import { isEntryLocked } from "../utils/entry-lock";
 import { Collapsible } from "./Collapsible";
 import {
   parseDurationInput,
@@ -151,7 +152,7 @@ export function ProjectCard({
 
   const project = state.projects.find((p) => p.id === entry.projectId);
   const taskName = entry.taskId ? state.taskNamesById[entry.taskId] : undefined;
-  const isSubmitted = entry.status === "SUBMITTED" || entry.status === "APPROVED";
+  const isSubmitted = isEntryLocked(entry, state.displayPrefs.autoSubmit);
   const isEditable = !isSubmitted && entry.syncStatus !== "pending";
 
   const isThisRunning =
@@ -450,6 +451,7 @@ export function ProjectCard({
           projectId: entry.projectId,
           openingId: entry.openingId,
           taskId: newTaskId,
+          date: entry.date,
         });
         dispatch({
           type: "UPDATE_ENTRY",
@@ -524,6 +526,7 @@ export function ProjectCard({
         projectId: entry.projectId,
         openingId: entry.openingId,
         taskId: entry.taskId,
+        date: entry.date,
         minutes: entry.minutes,
         description: entry.description,
       });
@@ -581,7 +584,7 @@ export function ProjectCard({
     }
 
     try {
-      await api.deleteTimeEntry([entry.id]);
+      await api.deleteTimeEntry([entry.id], [entry.date]);
       dispatch({ type: "DELETE_ENTRY", payload: entry.id });
       posthogClient?.capture("time_entry_deleted", { persisted: true });
     } catch (err) {

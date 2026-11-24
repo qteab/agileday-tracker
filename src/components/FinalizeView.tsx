@@ -13,6 +13,7 @@ import { useNow } from "../hooks/useNow";
 import { posthogClient } from "../posthog";
 import { useApp, useApi } from "../store/context";
 import type { AppAction } from "../store/reducer";
+import { isEntryLocked } from "../utils/entry-lock";
 import { fmtDate, getTimesheetPeriod, syncedOnly, type TimesheetPeriod } from "../utils/week";
 
 interface FinalizeViewProps {
@@ -52,18 +53,18 @@ interface WeekSummary extends TimesheetPeriod {
   entries: TimeEntry[];
 }
 
-function computeWeekStatus(entries: TimeEntry[]): WeekStatus {
+function computeWeekStatus(entries: TimeEntry[], autoSubmit: boolean): WeekStatus {
   const synced = syncedOnly(entries);
   if (synced.length === 0) return "rounded";
   const allSubmitted = synced.every((e) => e.status === "SUBMITTED" || e.status === "APPROVED");
   if (allSubmitted) return "submitted";
-  const plan = buildRoundingPlan(synced);
+  const plan = buildRoundingPlan(synced, { includeSubmitted: autoSubmit });
   const needsRounding = plan.some((p) => p.difference > 0);
   return needsRounding ? "active" : "rounded";
 }
 
 // One summary per AgileDay timesheet: weeks crossing a month boundary are split.
-function buildWeekSummaries(entries: TimeEntry[]): WeekSummary[] {
+function buildWeekSummaries(entries: TimeEntry[], autoSubmit: boolean): WeekSummary[] {
   const periodMap = new Map<string, { period: TimesheetPeriod; entries: TimeEntry[] }>();
 
   for (const entry of entries) {
@@ -76,7 +77,7 @@ function buildWeekSummaries(entries: TimeEntry[]): WeekSummary[] {
   const summaries: WeekSummary[] = [];
   for (const { period, entries: weekEntries } of periodMap.values()) {
     const synced = syncedOnly(weekEntries);
-    const plan = buildRoundingPlan(synced);
+    const plan = buildRoundingPlan(synced, { includeSubmitted: autoSubmit });
 
     summaries.push({
       ...period,
@@ -84,7 +85,7 @@ function buildWeekSummaries(entries: TimeEntry[]): WeekSummary[] {
       entryCount: weekEntries.length,
       groupsToRound: plan.filter((p) => p.difference > 0).length,
       unsavedCount: weekEntries.length - synced.length,
-      status: computeWeekStatus(weekEntries),
+      status: computeWeekStatus(weekEntries, autoSubmit),
       entries: weekEntries,
     });
   }
@@ -242,8 +243,8 @@ export function FinalizeView({ onBack }: FinalizeViewProps) {
 
   const weeks = useMemo(() => {
     const pastEntries = state.entries.filter((e) => e.date <= todayStr);
-    return buildWeekSummaries(pastEntries);
-  }, [state.entries, todayStr]);
+    return buildWeekSummaries(pastEntries, state.displayPrefs.autoSubmit);
+  }, [state.entries, todayStr, state.displayPrefs.autoSubmit]);
 
   if (showInfo) {
     return (
@@ -455,11 +456,20 @@ function WeekDetail({
 
   const synced = useMemo(() => syncedOnly(week.entries), [week.entries]);
   const unsavedCount = week.entries.length - synced.length;
-  const basePlan = useMemo(() => buildRoundingPlan(synced), [synced]);
-  const plan = useMemo(() => applyOverrides(basePlan, overrides), [basePlan, overrides]);
+  const autoSubmit = state.displayPrefs.autoSubmit;
+  const basePlan = useMemo(
+    () => buildRoundingPlan(synced, { includeSubmitted: autoSubmit }),
+    [synced, autoSubmit]
+  );
+  const plan = useMemo(
+    () => applyOverrides(basePlan, overrides, { includeSubmitted: autoSubmit }),
+    [basePlan, overrides, autoSubmit]
+  );
   const groupsToRound = plan.filter((p) => p.difference !== 0);
   const adjustedEntries = plan.flatMap((p) => p.entries.filter((e) => e.isAdjusted));
-  const canRound = groupsToRound.length > 0 && week.status !== "submitted";
+  // A submitted week is still roundable while auto-submit is on: it submits
+  // every week the app writes to, so the badge alone must not disable this.
+  const canRound = groupsToRound.length > 0 && (autoSubmit || week.status !== "submitted");
 
   const handleOverride = useCallback((key: string, value: number) => {
     setOverrides((prev) => {
@@ -497,6 +507,8 @@ function WeekDetail({
       const updates = adjustedEntries.map((e) => ({
         id: e.id,
         minutes: e.adjustedMinutes,
+        // Carried so auto-submit can resolve which weeks this round touched.
+        date: e.date,
       }));
       await api.batchUpdateEntries(state.employee.id, updates);
       posthogClient?.capture("timesheet_rounded", {
@@ -628,7 +640,7 @@ function WeekDetail({
             disabled={!canRound}
             className="w-full rounded-lg bg-primary py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {week.status === "submitted"
+            {week.status === "submitted" && !autoSubmit
               ? "Already submitted"
               : groupsToRound.length === 0
                 ? "All entries rounded"
@@ -651,8 +663,9 @@ function ProjectGroupSection({
   projectColor?: string | undefined;
   onOverride: (value: number) => void;
 }) {
+  const { state } = useApp();
   const needsRounding = ceilTo15(group.totalMinutes) !== group.totalMinutes;
-  const isLocked = group.entries.every((e) => e.status === "SUBMITTED" || e.status === "APPROVED");
+  const isLocked = group.entries.every((e) => isEntryLocked(e, state.displayPrefs.autoSubmit));
 
   return (
     <div

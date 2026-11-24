@@ -29,6 +29,7 @@ export type SettingsPage =
   | "appearance"
   | "timer"
   | "list"
+  | "timesheet"
   | "clickup";
 
 interface SettingsViewProps {
@@ -44,6 +45,7 @@ const PAGE_TITLES: Record<SettingsPage, string> = {
   appearance: "Appearance",
   timer: "Timer",
   list: "Entry list",
+  timesheet: "Timesheet",
   clickup: "ClickUp",
 };
 
@@ -88,6 +90,7 @@ export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) 
         {page === "appearance" && <AppearanceSettings />}
         {page === "timer" && <TimerSettings />}
         {page === "list" && <ListSettings />}
+        {page === "timesheet" && <TimesheetSettings />}
         {page === "clickup" && <ClickUpSettings />}
       </div>
     </div>
@@ -114,6 +117,12 @@ const MENU_ITEMS: { page: SettingsPage; label: string; hint: string; icon?: stri
     label: "Vacation days",
     hint: "Set up how your vacation day balance is tracked",
     icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+  },
+  {
+    page: "timesheet",
+    label: "Timesheet",
+    hint: "Submit to AgileDay automatically as you track",
+    icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4",
   },
   {
     page: "clickup",
@@ -394,6 +403,52 @@ function AppearanceSettings() {
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+function TimesheetSettings() {
+  const { state, dispatch } = useApp();
+  const { displayPrefs } = state;
+
+  async function toggleAutoSubmit() {
+    const next = { ...displayPrefs, autoSubmit: !displayPrefs.autoSubmit };
+    dispatch({ type: "SET_DISPLAY_PREFS", payload: next });
+    await saveDisplayPrefs(next).catch(() => {});
+  }
+
+  return (
+    <div className="space-y-4 px-4 py-4">
+      <div className="rounded-xl border border-border bg-bg-card p-4">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium text-text">Submit automatically</div>
+          <button
+            role="switch"
+            aria-checked={displayPrefs.autoSubmit}
+            onClick={() => {
+              void toggleAutoSubmit();
+            }}
+            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+              displayPrefs.autoSubmit ? "bg-primary" : "bg-border"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
+                displayPrefs.autoSubmit ? "translate-x-4" : ""
+              }`}
+            />
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-text-muted">
+          Mark the whole week as submitted in AgileDay every time the app saves an entry, so you
+          never have to submit a timesheet by hand.
+        </p>
+      </div>
+
+      <p className="px-1 text-[11px] text-text-muted">
+        Entries stay editable here while this is on — the app re-submits the week after every
+        change. Weeks your manager has already approved are left alone.
+      </p>
     </div>
   );
 }

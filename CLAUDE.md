@@ -95,10 +95,11 @@ Secrets: `TAURI_SIGNING_PRIVATE_KEY` (Tauri-generated key for update signing).
 ## Key decisions
 
 - **Both project and task are required** before starting timer. Description is optional.
+- **Auto-submit is opt-in** (`displayPrefs.autoSubmit`, Settings → Timesheet). When on, every AgileDay write is bracketed by timecard status changes — the affected week is set back to SAVED, the normal write runs untouched, then the week is submitted again — so entry consolidation is unchanged and no duplicates appear. Submitted entries stay editable in the app while it is on (`isEntryLocked`); APPROVED always locks. Status changes are best-effort and never fail a time entry write.
 - **Entry consolidation on AgileDay** — same description + project + date = one entry. Timer stop checks for existing entry, PATCHes if 1 match, consolidates if multiple matches (create + delete old).
 - **Individual sessions in app UI** — each timer stop adds a visible session locally, grouped by description. AgileDay gets the aggregated total.
 - **Saving to AgileDay is immediate** — stop timer → POST/PATCH. Failed saves marked `syncStatus: "unsaved"`.
-- **Submitted entries are locked** — can't edit in the app, only via AgileDay web. Play button still works (starts new today entry).
+- **Submitted entries are locked** — can't edit in the app, only via AgileDay web. Play button still works (starts new today entry). Auto-submit is the exception: while it is on, SUBMITTED stays editable (APPROVED never does).
 - **Projects filtered by allocation** — default shows only projects user is allocated to. Search bar searches all active projects.
 - **Continue button always starts as today** — date changes only via AgileDay.
 - **Window close hides, doesn't quit** — quit only via tray menu. App shows in Dock/Cmd+Tab when window is visible.

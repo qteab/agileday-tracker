@@ -21,7 +21,8 @@ export interface ApiProvider {
     entry: Omit<TimeEntry, "id" | "syncStatus">
   ): Promise<TimeEntry>;
   updateTimeEntry(employeeId: string, id: string, updates: Partial<TimeEntry>): Promise<TimeEntry>;
-  deleteTimeEntry(ids: string[]): Promise<void>;
+  /** `dates` lets auto-submit resolve which weeks the delete touched. */
+  deleteTimeEntry(ids: string[], dates?: string[]): Promise<void>;
   batchUpdateEntries(
     employeeId: string,
     updates: Array<{ id: string } & Partial<TimeEntry>>

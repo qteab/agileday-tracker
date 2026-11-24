@@ -40,6 +40,8 @@ export interface DisplayPrefs {
   listCollapsibleGroups: boolean;
   /** Which day-list headings stick to the top while scrolling. */
   listStickyHeadings: ListStickyHeadings;
+  /** Mark the week's AgileDay timecard submitted after every write the app makes. */
+  autoSubmit: boolean;
 }
 
 export const DEFAULT_DISPLAY_PREFS: DisplayPrefs = {
@@ -52,6 +54,7 @@ export const DEFAULT_DISPLAY_PREFS: DisplayPrefs = {
   listGroupByWeek: true,
   listCollapsibleGroups: false,
   listStickyHeadings: "days",
+  autoSubmit: false,
 };
 
 export function clampInactivityMinutes(minutes: number): number {
@@ -82,11 +85,10 @@ interface LegacyDisplayPrefs {
   listGroupByWeek?: boolean;
   listCollapsibleGroups?: boolean;
   listStickyHeadings?: ListStickyHeadings;
+  autoSubmit?: boolean;
 }
 
-export async function loadDisplayPrefs(): Promise<DisplayPrefs> {
-  const store = await getStore();
-  const saved = await store.get<LegacyDisplayPrefs>(DISPLAY_KEY);
+export function normalizeDisplayPrefs(saved: LegacyDisplayPrefs | null): DisplayPrefs {
   if (!saved) return { ...DEFAULT_DISPLAY_PREFS };
   const theme: ThemeMode = saved.theme ?? DEFAULT_DISPLAY_PREFS.theme;
   const inactivityEnabled = saved.inactivityEnabled ?? DEFAULT_DISPLAY_PREFS.inactivityEnabled;
@@ -106,6 +108,7 @@ export async function loadDisplayPrefs(): Promise<DisplayPrefs> {
   const listCollapsibleGroups =
     saved.listCollapsibleGroups ?? DEFAULT_DISPLAY_PREFS.listCollapsibleGroups;
   const listStickyHeadings = saved.listStickyHeadings ?? DEFAULT_DISPLAY_PREFS.listStickyHeadings;
+  const autoSubmit = saved.autoSubmit ?? DEFAULT_DISPLAY_PREFS.autoSubmit;
   return {
     menuBarMode,
     showTrayIcon,
@@ -116,7 +119,13 @@ export async function loadDisplayPrefs(): Promise<DisplayPrefs> {
     listGroupByWeek,
     listCollapsibleGroups,
     listStickyHeadings,
+    autoSubmit,
   };
+}
+
+export async function loadDisplayPrefs(): Promise<DisplayPrefs> {
+  const store = await getStore();
+  return normalizeDisplayPrefs((await store.get<LegacyDisplayPrefs>(DISPLAY_KEY)) ?? null);
 }
 
 export async function saveDisplayPrefs(prefs: DisplayPrefs): Promise<void> {
