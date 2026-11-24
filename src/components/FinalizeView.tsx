@@ -24,11 +24,7 @@ const WORKDAY_MINUTES = 480;
 
 function formatDayLabel(dateStr: string): string {
   const d = new Date(dateStr + "T12:00:00");
-  return d.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
 function formatHours(minutes: number): string {
@@ -123,11 +119,7 @@ function StatusBadge({ status }: { status: WeekStatus }) {
   const config = {
     active: { label: "Active", bg: "bg-amber-100", text: "text-amber-700" },
     rounded: { label: "Rounded", bg: "bg-green-100", text: "text-green-700" },
-    submitted: {
-      label: "Submitted",
-      bg: "bg-primary/10",
-      text: "text-primary",
-    },
+    submitted: { label: "Submitted", bg: "bg-primary/10", text: "text-primary" },
   }[status];
 
   return (
@@ -385,9 +377,7 @@ function SubmitButton({ week }: { week: WeekSummary }) {
     setError("");
     try {
       await api.submitTimesheet(state.employee.id, week.weekStart, week.month);
-      posthogClient?.capture("timesheet_submitted", {
-        entry_count: week.entryCount,
-      });
+      posthogClient?.capture("timesheet_submitted", { entry_count: week.entryCount });
       await reloadEntries(api, state.employee.id, dispatch);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit timesheet");

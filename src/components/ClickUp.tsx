@@ -147,10 +147,7 @@ export function ClickUpDialog({
     setTask(null);
     const parsed = parseTaskRef(input);
     if (!parsed) {
-      setLookup({
-        busy: false,
-        error: input.trim() ? "Not a ClickUp task link or id" : null,
-      });
+      setLookup({ busy: false, error: input.trim() ? "Not a ClickUp task link or id" : null });
       return;
     }
     setLookup({ busy: true, error: null });
@@ -242,10 +239,7 @@ interface ClickUpCardProps {
 
 /** "09:05" in local time. */
 function clockTime(ms: number): string {
-  return new Date(ms).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 /** One ClickUp task's share of an AgileDay entry, with its own timer. */
@@ -321,10 +315,7 @@ export function ClickUpCard({
         .filter((e) => !e.id.startsWith("local-"));
       if (clickupClient)
         await Promise.all(ids.map((e) => clickupClient.deleteTimeEntry(e.teamId, e.id)));
-      dispatch({
-        type: "REMOVE_CLICKUP_ENTRIES",
-        payload: ids.map((e) => e.id),
-      });
+      dispatch({ type: "REMOVE_CLICKUP_ENTRIES", payload: ids.map((e) => e.id) });
       await detach();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete");
@@ -685,11 +676,7 @@ export function ClickUpCard({
                 setConfirmDelete(false);
               },
             },
-            {
-              label: "Delete",
-              variant: "danger",
-              onClick: () => void handleDelete(),
-            },
+            { label: "Delete", variant: "danger", onClick: () => void handleDelete() },
           ]}
         />
       )}
@@ -767,11 +754,7 @@ export function ClickUpBanner() {
   if (!showRunning && pending.length === 0) return null;
 
   const runningTask = clickupRunning
-    ? {
-        id: clickupRunning.taskId,
-        name: clickupRunning.taskName,
-        teamId: clickupRunning.teamId,
-      }
+    ? { id: clickupRunning.taskId, name: clickupRunning.taskName, teamId: clickupRunning.teamId }
     : null;
 
   return (

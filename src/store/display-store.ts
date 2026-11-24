@@ -69,10 +69,7 @@ let storeInstance: Awaited<ReturnType<typeof load>> | null = null;
 
 async function getStore() {
   if (!storeInstance) {
-    storeInstance = await load(DISPLAY_STORE_FILE, {
-      autoSave: true,
-      defaults: {},
-    });
+    storeInstance = await load(DISPLAY_STORE_FILE, { autoSave: true, defaults: {} });
   }
   return storeInstance;
 }

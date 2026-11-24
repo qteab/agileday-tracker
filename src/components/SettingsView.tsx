@@ -99,12 +99,7 @@ export function SettingsView({ onBack, initialPage = null }: SettingsViewProps) 
 
 /** Keep hints general — they describe the page, not the settings on it. */
 /** `icon` is an outline path; items without one show their brand logo. */
-const MENU_ITEMS: {
-  page: SettingsPage;
-  label: string;
-  hint: string;
-  icon?: string;
-}[] = [
+const MENU_ITEMS: { page: SettingsPage; label: string; hint: string; icon?: string }[] = [
   {
     page: "list",
     label: "Entry list",
@@ -273,29 +268,14 @@ function MenuBarSettings() {
   }
 
   async function toggleTrayIcon() {
-    await persist({
-      ...displayPrefs,
-      showTrayIcon: !displayPrefs.showTrayIcon,
-    });
+    await persist({ ...displayPrefs, showTrayIcon: !displayPrefs.showTrayIcon });
   }
 
   const withIcon = displayPrefs.showTrayIcon;
   const options: { value: MenuBarMode; label: string; hint: string }[] = [
-    {
-      value: "off",
-      label: "Off",
-      hint: withIcon ? "Icon only" : "Play/pause only",
-    },
-    {
-      value: "compact",
-      label: "Compact",
-      hint: withIcon ? "Icon + time" : "Time only",
-    },
-    {
-      value: "full",
-      label: "Full",
-      hint: withIcon ? "Icon + time + task" : "Time + task",
-    },
+    { value: "off", label: "Off", hint: withIcon ? "Icon only" : "Play/pause only" },
+    { value: "compact", label: "Compact", hint: withIcon ? "Icon + time" : "Time only" },
+    { value: "full", label: "Full", hint: withIcon ? "Icon + time + task" : "Time + task" },
   ];
 
   return (
@@ -484,10 +464,7 @@ function TimerSettings() {
   }
 
   async function toggleInactivity() {
-    await persist({
-      ...displayPrefs,
-      inactivityEnabled: !displayPrefs.inactivityEnabled,
-    });
+    await persist({ ...displayPrefs, inactivityEnabled: !displayPrefs.inactivityEnabled });
   }
 
   async function commitMinutes() {
@@ -563,10 +540,7 @@ function ListSettings() {
   }
 
   async function toggleGroupByWeek() {
-    await persist({
-      ...displayPrefs,
-      listGroupByWeek: !displayPrefs.listGroupByWeek,
-    });
+    await persist({ ...displayPrefs, listGroupByWeek: !displayPrefs.listGroupByWeek });
   }
 
   async function setStickyHeadings(mode: ListStickyHeadings) {
@@ -581,21 +555,13 @@ function ListSettings() {
     });
   }
 
-  const stickyOptions: {
-    value: ListStickyHeadings;
-    label: string;
-    hint: string;
-  }[] = [
+  const stickyOptions: { value: ListStickyHeadings; label: string; hint: string }[] = [
     { value: "off", label: "Never", hint: "Scroll away" },
     { value: "days", label: "Days", hint: "Day pinned" },
     { value: "both", label: "Days + weeks", hint: "Both pinned" },
   ];
 
-  const collapseOptions: {
-    value: ListAutoCollapse;
-    label: string;
-    hint: string;
-  }[] = [
+  const collapseOptions: { value: ListAutoCollapse; label: string; hint: string }[] = [
     { value: "off", label: "Never", hint: "All expanded" },
     { value: "days", label: "Past days", hint: "Today expanded" },
     { value: "weeks", label: "Past weeks", hint: "This week expanded" },
@@ -937,10 +903,7 @@ function VacationSettings() {
         setSaved(false);
       }, 2000);
     } catch {
-      dispatch({
-        type: "SET_ERROR",
-        payload: "Failed to save vacation config",
-      });
+      dispatch({ type: "SET_ERROR", payload: "Failed to save vacation config" });
     } finally {
       setSaving(false);
     }
@@ -986,11 +949,7 @@ function VacationSettings() {
             = 1 day).
           </p>
           <Dropdown
-            options={absenceProjects.map((p) => ({
-              id: p.id,
-              label: p.name,
-              color: p.color,
-            }))}
+            options={absenceProjects.map((p) => ({ id: p.id, label: p.name, color: p.color }))}
             selectedId={projectId || null}
             onSelect={setProjectId}
             placeholder="Select a project…"
@@ -1041,9 +1000,7 @@ function ClickUpSettings() {
       // ClickUp time from today on is offered for AgileDay; older time is
       // assumed to be logged already.
       dispatch({ type: "SET_CLICKUP_ACCOUNT", payload: account });
-      posthogClient?.capture("clickup_connected", {
-        workspace_count: account.teams.length,
-      });
+      posthogClient?.capture("clickup_connected", { workspace_count: account.teams.length });
       setToken("");
       setAdding(false);
     } catch (err) {
@@ -1072,10 +1029,7 @@ function ClickUpSettings() {
               </div>
               <button
                 onClick={() => {
-                  dispatch({
-                    type: "REMOVE_CLICKUP_ACCOUNT",
-                    payload: { token: a.token },
-                  });
+                  dispatch({ type: "REMOVE_CLICKUP_ACCOUNT", payload: { token: a.token } });
                 }}
                 className="rounded-lg bg-danger/10 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/20"
               >

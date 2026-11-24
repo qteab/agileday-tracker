@@ -102,10 +102,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           () => {
             setAuthState(null);
             setApi(null);
-            dispatch({
-              type: "SET_ERROR",
-              payload: "Session expired — please sign in again",
-            });
+            dispatch({ type: "SET_ERROR", payload: "Session expired — please sign in again" });
             clearAuth().catch(() => {});
           },
           undefined,
@@ -350,10 +347,7 @@ function useWindowDockSnap() {
     const SNAP_THRESHOLD_LOGICAL_PIXELS = 40;
     const MOVE_DEBOUNCE_MS = 250;
     let cancelled = false;
-    const handles: {
-      debounce?: ReturnType<typeof setTimeout>;
-      unlisten?: () => void;
-    } = {};
+    const handles: { debounce?: ReturnType<typeof setTimeout>; unlisten?: () => void } = {};
 
     async function pushLayoutToRust(layout: WindowLayout) {
       await invoke("set_window_layout", {
@@ -447,10 +441,7 @@ function useClickUpDataLoad(
       return;
     }
     // Fields, not `let`s: the async load below writes them after the effect returns.
-    const run: {
-      cancelled: boolean;
-      retryTimer?: ReturnType<typeof setTimeout>;
-    } = {
+    const run: { cancelled: boolean; retryTimer?: ReturnType<typeof setTimeout> } = {
       cancelled: false,
     };
     // A function so TS doesn't keep `run.cancelled` narrowed to false across awaits.
@@ -482,10 +473,7 @@ function useClickUpDataLoad(
       if (isCancelled()) return;
       const loaded = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
       if (loaded.length > 0) {
-        dispatch({
-          type: "SET_CLICKUP_ENTRIES",
-          payload: loaded.flatMap(([entries]) => entries),
-        });
+        dispatch({ type: "SET_CLICKUP_ENTRIES", payload: loaded.flatMap(([entries]) => entries) });
         dispatch({
           type: "SET_CLICKUP_RUNNING",
           payload: loaded.find(([, running]) => running)?.[1] ?? null,
@@ -517,10 +505,7 @@ function useClickUpDataLoad(
       });
     })().catch((err: unknown) => {
       if (!isCancelled())
-        dispatch({
-          type: "SET_ERROR",
-          payload: `Couldn't load ClickUp time: ${reasonOf(err)}`,
-        });
+        dispatch({ type: "SET_ERROR", payload: `Couldn't load ClickUp time: ${reasonOf(err)}` });
     });
     return () => {
       run.cancelled = true;
@@ -674,10 +659,7 @@ function useInactivitySync(dispatch: React.Dispatch<AppAction>) {
     const unlisten = listen<{ idle_seconds: number; is_away: boolean }>("inactivity", (event) => {
       dispatch({
         type: "SET_INACTIVITY",
-        payload: {
-          idleSeconds: event.payload.idle_seconds,
-          isAway: event.payload.is_away,
-        },
+        payload: { idleSeconds: event.payload.idle_seconds, isAway: event.payload.is_away },
       });
     });
     return () => {
@@ -788,10 +770,7 @@ function useConnectedDataLoad(
         if (isCancelled()) return;
         const mergedProjects = mergeProjectSources(projects, absenceProjects, myProjects);
         dispatch({ type: "SET_PROJECTS", payload: mergedProjects });
-        dispatch({
-          type: "SET_MY_PROJECT_IDS",
-          payload: myProjects.map((project) => project.id),
-        });
+        dispatch({ type: "SET_MY_PROJECT_IDS", payload: myProjects.map((project) => project.id) });
         const openingMap: Record<string, string> = {};
         for (const project of myProjects) {
           if (project.openingId) openingMap[project.id] = project.openingId;
